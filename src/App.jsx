@@ -76,6 +76,8 @@ function AppRoutes() {
         <Route path="/screenings/result" element={<ScreeningResultPage />} />
         <Route path="/screenings/:id/xai" element={<ExplainableAiPage />} />
         <Route path="/screenings/xai" element={<ExplainableAiPage />} />
+        <Route path="/screenings/:id/gradcam" element={<ExplainableAiPage />} />
+        <Route path="/screenings/gradcam" element={<ExplainableAiPage />} />
         <Route path="/screenings/:id/report" element={<PatientReportPage />} />
         <Route path="/screenings/report" element={<PatientReportPage />} />
         <Route path="/history" element={<ScreeningHistoryPage />} />

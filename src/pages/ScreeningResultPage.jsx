@@ -850,7 +850,7 @@ export const ScreeningResultPage = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            to={`/screenings/${screening.id}/gradcam`}
+            to={`/screenings/${screening.id}/xai`}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition"
           >
             <Sparkles className="w-4 h-4 text-purple-600" />
