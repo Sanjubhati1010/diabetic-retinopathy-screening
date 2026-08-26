@@ -1,6 +1,15 @@
 import React from 'react';
 import { useLanguage } from '../../context/LanguageContext';
-import { ShieldCheck, AlertCircle, AlertTriangle, AlertOctagon, HelpCircle } from 'lucide-react';
+import {
+  ShieldCheck,
+  AlertCircle,
+  AlertTriangle,
+  AlertOctagon,
+  HelpCircle,
+  Clock,
+  CheckCircle,
+  UserCheck,
+} from 'lucide-react';
 
 export const SeverityBadge = ({ severity, showIcon = true, size = 'md' }) => {
   const { t } = useLanguage();
