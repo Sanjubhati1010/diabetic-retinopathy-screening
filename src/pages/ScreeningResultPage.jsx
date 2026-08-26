@@ -45,6 +45,7 @@ import {
   evaluateConfidence,
   evaluateRiskAndReferral,
   aggregateTwoEyeScreening,
+  getFullResultUrl,
 } from '../services/api';
 
 export const ScreeningResultPage = () => {
@@ -177,8 +178,8 @@ export const ScreeningResultPage = () => {
       hasAnalysis: true,
       inferenceTime: analysis.inference_time,
       safetyBlocked: isBlocked,
-      gradcamUrl: analysis.gradcam_url || null,
-      heatmapUrl: analysis.heatmap_url || null,
+      gradcamUrl: analysis.gradcam_url ? getFullResultUrl(analysis.gradcam_url) : null,
+      heatmapUrl: analysis.heatmap_url ? getFullResultUrl(analysis.heatmap_url) : null,
     };
   };
 
@@ -207,12 +208,15 @@ export const ScreeningResultPage = () => {
   const activeMetrics = selectedExplainEye === 'OD' ? odMetrics : osMetrics;
   const activeImage = selectedExplainEye === 'OD' ? screening.imageOD : screening.imageOS;
   const activeSeverity = selectedExplainEye === 'OD' ? odSeverity : osSeverity;
-  const activeGradcam = selectedExplainEye === 'OD'
+  const rawGradcam = selectedExplainEye === 'OD'
     ? screening.gradCamOD || odMetrics.gradcamUrl || screening.gradCamUrl
     : screening.gradCamOS || osMetrics.gradcamUrl || screening.gradCamUrl;
-  const activeHeatmap = selectedExplainEye === 'OD'
-    ? odMetrics.heatmapUrl || screening.heatmapOD || activeGradcam
-    : osMetrics.heatmapUrl || screening.heatmapOS || activeGradcam;
+  const rawHeatmap = selectedExplainEye === 'OD'
+    ? odMetrics.heatmapUrl || screening.heatmapOD || rawGradcam
+    : osMetrics.heatmapUrl || screening.heatmapOS || rawGradcam;
+
+  const activeGradcam = rawGradcam ? getFullResultUrl(rawGradcam) : null;
+  const activeHeatmap = rawHeatmap ? getFullResultUrl(rawHeatmap) : null;
 
   // Triage recommendations based on ICDR Severity
   const getTriageProtocol = (severity) => {

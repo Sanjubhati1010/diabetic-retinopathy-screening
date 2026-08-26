@@ -32,7 +32,7 @@ import {
   Info,
   Inbox,
 } from 'lucide-react';
-import { submitDoctorReview, getScreeningReviewHistory } from '../services/api';
+import { submitDoctorReview, getScreeningReviewHistory, getFullResultUrl } from '../services/api';
 
 const DR_OPTIONS = [
   { value: 0, label: 'DR 0 — No Retinopathy', name: 'No DR' },
@@ -398,13 +398,13 @@ const DoctorDashboardContent = () => {
             }
             heatmapImage={
               selectedEye === 'OD'
-                ? selectedScreening.gradCamOD || selectedScreening.gradCamUrl
-                : selectedScreening.gradCamOS || selectedScreening.gradCamUrl
+                ? getFullResultUrl(selectedScreening.gradCamOD || selectedScreening.gradCamUrl)
+                : getFullResultUrl(selectedScreening.gradCamOS || selectedScreening.gradCamUrl)
             }
             heatmapUrl={
               selectedEye === 'OD'
-                ? selectedScreening.heatmapOD || selectedScreening.gradCamOD || selectedScreening.gradCamUrl
-                : selectedScreening.heatmapOS || selectedScreening.gradCamOS || selectedScreening.gradCamUrl
+                ? getFullResultUrl(selectedScreening.heatmapOD || selectedScreening.gradCamOD || selectedScreening.gradCamUrl)
+                : getFullResultUrl(selectedScreening.heatmapOS || selectedScreening.gradCamOS || selectedScreening.gradCamUrl)
             }
             confidence={selectedScreening.confidence}
             severity={selectedScreening.overallSeverity}

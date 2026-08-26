@@ -14,6 +14,7 @@ import {
   Image as ImageIcon,
   Flame,
 } from 'lucide-react';
+import { getFullResultUrl } from '../../services/api';
 
 export const GradCamViewer = ({
   originalImage,
@@ -49,10 +50,14 @@ export const GradCamViewer = ({
     setViewMode('overlay');
   };
 
-  // Pure Heatmap URL (JET heatmap without base image blend)
-  const pureHeatmap = heatmapUrl || heatmapImage;
-  // Blended Overlay URL (pre-blended 60/40 result from backend)
-  const blendedOverlay = heatmapImage || heatmapUrl;
+  // Pure Heatmap URL (JET heatmap without base image blend) normalized with getFullResultUrl
+  const rawHeatmap = heatmapUrl || heatmapImage;
+  const rawOverlay = heatmapImage || heatmapUrl;
+
+  const pureHeatmap = rawHeatmap ? (rawHeatmap.startsWith('blob:') || rawHeatmap.startsWith('data:') ? rawHeatmap : getFullResultUrl(rawHeatmap)) : null;
+  const blendedOverlay = rawOverlay ? (rawOverlay.startsWith('blob:') || rawOverlay.startsWith('data:') ? rawOverlay : getFullResultUrl(rawOverlay)) : null;
+  const displayOriginal = originalImage ? (originalImage.startsWith('blob:') || originalImage.startsWith('data:') || originalImage.startsWith('/samples/') ? originalImage : getFullResultUrl(originalImage)) : null;
+
   const hasValidHeatmap = Boolean((pureHeatmap || blendedOverlay) && !imageError && !safetyBlocked);
 
   return (
@@ -170,7 +175,7 @@ export const GradCamViewer = ({
               {/* Split Left: Original Fundus */}
               <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
                 <img
-                  src={originalImage}
+                  src={displayOriginal}
                   alt="Original Retinal Fundus Scan"
                   className="max-h-[320px] sm:max-h-[380px] w-auto max-w-full object-contain block"
                 />
@@ -184,7 +189,7 @@ export const GradCamViewer = ({
                 {hasValidHeatmap ? (
                   <>
                     <img
-                      src={originalImage}
+                      src={displayOriginal}
                       alt="Base Fundus Scan"
                       className="max-h-[320px] sm:max-h-[380px] w-auto max-w-full object-contain block"
                     />
@@ -226,7 +231,7 @@ export const GradCamViewer = ({
             /* Mode 1: Pure Original Fundus Scan (Natural Aspect Ratio) */
             <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
               <img
-                src={originalImage}
+                src={displayOriginal}
                 alt="Retinal Fundus Image"
                 className="max-h-[420px] sm:max-h-[480px] w-auto max-w-full object-contain block"
               />
@@ -278,7 +283,7 @@ export const GradCamViewer = ({
             <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
               {/* Base Fundus Image establishes the natural dimension frame */}
               <img
-                src={originalImage}
+                src={displayOriginal}
                 alt="Retinal Fundus Image"
                 className="max-h-[420px] sm:max-h-[480px] w-auto max-w-full object-contain block"
               />
