@@ -24,7 +24,7 @@ from app.schemas import (
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
-from app.review_service import process_doctor_review, get_audit_history
+from app.review_service import process_doctor_review, get_audit_history, get_screening_review
 
 # Setup structured logging
 logging.basicConfig(
@@ -429,3 +429,19 @@ async def get_screening_history(screening_id: str):
         screening_id=screening_id,
         events=events,
     )
+
+
+@app.get(
+    "/api/screenings/{screening_id}/review",
+    response_model=Optional[DoctorReviewResponse],
+    tags=["Doctor Review"],
+    summary="Get Canonical Screening Review Status",
+)
+async def get_canonical_screening_review(screening_id: str):
+    """
+    Retrieves the canonical review state for a screening record.
+    """
+    review_data = get_screening_review(screening_id)
+    if not review_data:
+        return None
+    return DoctorReviewResponse(**review_data)

@@ -239,8 +239,24 @@ def test_phase6_doctor_review_suite():
     print(f" - Fetched {len(data_hist['events'])} historical audit events via GET.")
     print(" [OK] Audit history endpoint passed.")
 
+    # ---------------------------------------------------------
+    # TEST 12: FastAPI Endpoint - GET /api/screenings/{id}/review (Canonical Status)
+    # ---------------------------------------------------------
+    print("\n[TEST 12] Testing FastAPI Endpoint: GET /api/screenings/{id}/review (Canonical State)...")
+    res_canonical = client.get("/api/screenings/SCR-E2E-002/review")
+    assert res_canonical.status_code == 200
+    data_canonical = res_canonical.json()
+    assert data_canonical["screening_id"] == "SCR-E2E-002"
+    assert data_canonical["review_status"] == "DOCTOR REVIEWED / MODIFIED"
+    assert data_canonical["doctor_reviewed_result"] == "Severe"
+    assert data_canonical["original_ai_result"] == "Moderate"
+    print(" - Canonical Review Status:", data_canonical["review_status"])
+    print(" - Canonical Doctor Result:", data_canonical["doctor_reviewed_result"])
+    print(" - Preserved Original AI:", data_canonical["original_ai_result"])
+    print(" [OK] Canonical review status endpoint verified.")
+
     print("\n==================================================")
-    print("ALL 11 PHASE 6 HUMAN-IN-THE-LOOP DOCTOR REVIEW TESTS PASSED!")
+    print("ALL 12 HUMAN-IN-THE-LOOP DOCTOR REVIEW & CANONICAL STATE TESTS PASSED!")
     print("==================================================")
 
 if __name__ == "__main__":

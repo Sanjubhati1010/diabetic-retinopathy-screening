@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { MetricCard } from '../components/common/MetricCard';
-import { SeverityBadge, UrgencyBadge } from '../components/common/SeverityBadge';
+import { SeverityBadge, UrgencyBadge, DoctorReviewStatusBadge } from '../components/common/SeverityBadge';
 import { AlertBanner } from '../components/common/ErrorAlert';
 import {
   PlusCircle,
@@ -166,15 +166,10 @@ export const DashboardPage = () => {
                       <UrgencyBadge urgency={s.referralUrgency} />
                     </td>
                     <td className="py-3.5 px-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                          s.doctorStatus === 'verified'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {s.doctorStatus === 'verified' ? 'Verified' : 'Pending'}
-                      </span>
+                      <DoctorReviewStatusBadge
+                        status={s.reviewStatus || (s.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : s.doctorStatus === 'recapture_requested' ? 'IMAGE RE-CAPTURE REQUESTED' : 'PENDING DOCTOR REVIEW')}
+                        size="sm"
+                      />
                     </td>
                     <td className="py-3.5 px-3 text-right space-x-1.5">
                       <Link

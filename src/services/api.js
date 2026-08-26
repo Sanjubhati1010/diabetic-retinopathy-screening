@@ -741,6 +741,37 @@ export async function submitDoctorReview(screeningId, reviewData, role = 'doctor
 }
 
 /**
+ * Phase 6: Fetch Canonical Screening Review Status
+ */
+export async function getScreeningReview(screeningId) {
+  const endpoint = `${API_BASE_URL}/api/screenings/${encodeURIComponent(screeningId)}/review`;
+
+  try {
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        localStorage.setItem(`madocs_review_${screeningId}`, JSON.stringify(data));
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend review fetch unreachable, using localStorage:', err);
+  }
+
+  const local = localStorage.getItem(`madocs_review_${screeningId}`);
+  if (local) {
+    try {
+      return JSON.parse(local);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Phase 6: Fetch Chronological Audit History for a Screening
  */
 export async function getScreeningReviewHistory(screeningId) {

@@ -32,8 +32,11 @@ import {
   Loader2,
   FileText,
   HelpCircle,
+  AlertTriangle,
+  UploadCloud,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
+import { getScreeningReview, formatConfidence } from '../services/api';
 
 const PatientReportContent = () => {
   const { id } = useParams();
@@ -44,11 +47,10 @@ const PatientReportContent = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [shareSuccess, setShareSuccess] = useState(false);
-
-  // Load and resolve screening
   const [screening, setScreening] = useState(null);
+  const [liveReview, setLiveReview] = useState(null);
 
-  const fetchReportData = () => {
+  const fetchReportData = async () => {
     setLoading(true);
     setError(null);
 
@@ -81,6 +83,13 @@ const PatientReportContent = () => {
       }
 
       setScreening(targetScreening || null);
+
+      if (targetScreening?.id) {
+        const canonicalReview = await getScreeningReview(targetScreening.id);
+        if (canonicalReview) {
+          setLiveReview(canonicalReview);
+        }
+      }
     } catch (err) {
       console.error('Failed to load screening report data:', err);
       setError('Unable to load the screening report.');
@@ -178,19 +187,27 @@ const PatientReportContent = () => {
   // Resolve patient details safely
   const patient = getPatientById(screening.patientId);
 
-  // Load cached review state if available
+  // Load cached or live review state
   const storedReviewJson = localStorage.getItem(`madocs_review_${screening.id}`);
-  const storedReview = storedReviewJson ? JSON.parse(storedReviewJson) : null;
-  const reviewStatus =
+  const storedReview = liveReview || (storedReviewJson ? JSON.parse(storedReviewJson) : null);
+  
+  const rawStatus =
     storedReview?.review_status ||
-    (screening.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW');
+    screening.reviewStatus ||
+    (screening.doctorStatus === 'verified'
+      ? 'AI RESULT ACCEPTED'
+      : screening.doctorStatus === 'recapture_requested'
+      ? 'IMAGE RE-CAPTURE REQUESTED'
+      : 'PENDING DOCTOR REVIEW');
 
-  // Format confidence helper
-  const formatConf = (conf) => {
-    if (conf === null || conf === undefined) return 'Not available';
-    const val = conf <= 1.0 ? conf * 100 : conf;
-    return `${val.toFixed(1)}%`;
-  };
+  const isRecaptureRequested =
+    rawStatus === 'IMAGE RE-CAPTURE REQUESTED' || rawStatus === 'IMAGE_RECAPTURE_REQUESTED';
+  const isAccepted =
+    rawStatus === 'AI RESULT ACCEPTED' || rawStatus === 'AI_RESULT_ACCEPTED';
+  const isModified =
+    rawStatus === 'DOCTOR REVIEWED / MODIFIED' || rawStatus === 'DOCTOR_REVIEWED_MODIFIED';
+
+  const reviewStatus = rawStatus;
 
   // State 4: SUCCESS STATE (Full Clinical Report View)
   return (
@@ -229,8 +246,43 @@ const PatientReportContent = () => {
       {/* Demo Data Notice (Hidden during print) */}
       <div className="no-print flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
         <Shield className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>DEMO DATA — NOT REAL MEDICAL RESULTS • Report template verified for tele-ophthalmology integration.</span>
+        <span>DEMO DATA — NOT REAL MEDICAL RESULTS • Report verified for clinical decision support.</span>
       </div>
+
+      {/* Prominent Image Re-capture Required Banner if Re-capture requested */}
+      {isRecaptureRequested && (
+        <div className="p-5 rounded-3xl bg-rose-50 border-2 border-rose-300 shadow-md space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-rose-900">
+              <div className="p-2 rounded-xl bg-rose-100 text-rose-700">
+                <AlertOctagon className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold uppercase tracking-wide">
+                  IMAGE RE-CAPTURE REQUIRED
+                </h3>
+                <p className="text-xs font-semibold text-rose-800">
+                  Doctor Review Status: <strong>Re-capture Requested</strong>
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-rose-200 text-rose-900 border border-rose-400">
+              ACTION REQUIRED
+            </span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-white/90 border border-rose-200 text-xs space-y-1.5">
+            <p className="text-slate-800 font-medium">
+              <strong className="text-rose-950">Doctor Review Guidance:</strong>{' '}
+              {storedReview?.review_comment || 'Image quality is insufficient / blurry in macula. Re-capture required.'}
+            </p>
+            <div className="flex items-center gap-2 pt-1 text-teal-800 font-bold">
+              <UploadCloud className="w-4 h-4 text-teal-600 shrink-0" />
+              <span>NEXT STEP: Please capture and upload a new fundus image.</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Printable Clinical Medical Report Document */}
       <div className="bg-white rounded-3xl p-8 sm:p-10 border border-slate-200 shadow-xl space-y-8 print:p-0 print:border-none print:shadow-none">
@@ -306,51 +358,69 @@ const PatientReportContent = () => {
           </div>
         </div>
 
-        {/* AI Screening Classification & Grad-CAM Findings */}
+        {/* AI Screening Classification & Doctor Review Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between pb-2 border-b border-slate-200">
             <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
-              Explainable AI Diagnostic Assessment & Doctor Review
+              {isRecaptureRequested ? 'Historical Screening Record & Doctor Review' : 'Explainable AI Diagnostic Assessment & Doctor Review'}
             </h3>
             <div className="flex flex-wrap items-center gap-2">
               <DoctorReviewStatusBadge status={reviewStatus} size="sm" />
-              <RiskBadge risk={screening.riskCategory || 'MODERATE'} size="sm" />
-              <ReferralBadge priority={screening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED'} size="sm" />
-              <SafetyBadge status={screening.safetyStatus || 'READY_FOR_AI'} size="sm" />
+              <RiskBadge risk={isRecaptureRequested ? 'UNABLE TO ASSESS' : (screening.riskCategory || 'MODERATE')} size="sm" />
+              <ReferralBadge priority={isRecaptureRequested ? 'IMAGE RE-CAPTURE REQUIRED' : (screening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED')} size="sm" />
+              <SafetyBadge status={isRecaptureRequested ? 'IMAGE_QUALITY_INSUFFICIENT' : (screening.safetyStatus || 'READY_FOR_AI')} size="sm" />
             </div>
           </div>
 
-          {/* Dual Result Comparison: Original AI vs Doctor Reviewed */}
+          {/* Dual Result Comparison: AI Result vs Doctor Reviewed */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
-            <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                Original AI Screening Result (Preserved)
-              </span>
+            {/* Left Column: AI Result */}
+            <div className={`p-4 rounded-xl border space-y-2 ${isRecaptureRequested ? 'bg-amber-50/70 border-amber-200 text-amber-900' : 'bg-white border-slate-200'}`}>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-900">
-                  {storedReview?.original_ai_result || screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate DR')}
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                  {isRecaptureRequested ? 'PREVIOUS AI SCREENING RESULT (HISTORICAL)' : 'AI SCREENING RESULT'}
                 </span>
-                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                  Confidence: {formatConf(screening.confidence || storedReview?.original_confidence || 0.85)}
+                <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                  Confidence: {formatConfidence(screening.confidence || storedReview?.original_confidence || 0.85)}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500">Immutable automated inference baseline</p>
+
+              <div className="text-sm font-extrabold text-slate-950">
+                {storedReview?.original_ai_result || screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate DR')}
+              </div>
+
+              {isRecaptureRequested ? (
+                <p className="text-[10px] text-amber-800 font-medium leading-relaxed bg-amber-100/60 p-2 rounded-lg border border-amber-300/60">
+                  This previous AI result is historical and does not represent the current active screening result because image re-capture has been requested.
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-500">Automated deep learning model prediction</p>
+              )}
             </div>
 
-            <div className="p-3.5 rounded-xl bg-teal-50/70 border border-teal-200 space-y-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700">
-                Doctor Reviewed Screening Result
-              </span>
+            {/* Right Column: Doctor Reviewed Status */}
+            <div className={`p-4 rounded-xl border space-y-2 ${isRecaptureRequested ? 'bg-rose-50/70 border-rose-200' : 'bg-teal-50/70 border-teal-200'}`}>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-teal-950">
-                  {storedReview?.doctor_reviewed_result || (screening.doctorStatus === 'verified' ? (screening.className || t(screening.overallSeverity)) : 'Pending Doctor Review')}
+                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${isRecaptureRequested ? 'text-rose-700' : 'text-teal-700'}`}>
+                  DOCTOR-REVIEWED STATUS
                 </span>
-                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-300">
-                  Dr. A. Swaminathan, MS
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isRecaptureRequested ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-emerald-100/70 text-emerald-800 border-emerald-300'}`}>
+                  {storedReview?.reviewer_name || 'Dr. A. Swaminathan, MS'}
                 </span>
               </div>
-              <p className="text-[10px] text-teal-700 font-medium">
-                {storedReview?.review_comment || 'Verified by tele-ophthalmology specialist'}
+
+              <div className={`text-sm font-extrabold ${isRecaptureRequested ? 'text-rose-950' : 'text-teal-950'}`}>
+                {isRecaptureRequested
+                  ? 'Re-capture Requested'
+                  : isAccepted
+                  ? 'Reviewed / Accepted'
+                  : isModified
+                  ? `Reviewed / Modified (${storedReview?.doctor_reviewed_result || 'Mild'})`
+                  : 'Pending Specialist Review'}
+              </div>
+
+              <p className={`text-[10px] font-medium ${isRecaptureRequested ? 'text-rose-800' : 'text-teal-800'}`}>
+                {storedReview?.review_comment || (isAccepted ? 'Doctor verified and accepted the AI-assisted screening result.' : 'Awaiting clinical verification by tele-ophthalmology specialist.')}
               </p>
             </div>
           </div>
@@ -365,24 +435,28 @@ const PatientReportContent = () => {
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
-                  <span className="text-slate-400 block text-[10px]">DR Prediction:</span>
+                  <span className="text-slate-400 block text-[10px]">AI Prediction:</span>
                   <span className="font-bold text-slate-800">{screening.className || 'Moderate DR'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Confidence:</span>
-                  <span className="font-bold text-slate-800">{formatConf(screening.confidence || 0.85)}</span>
+                  <span className="font-bold text-slate-800">{formatConfidence(screening.confidence || 0.85)}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Image Quality:</span>
-                  <span className="font-bold text-emerald-700">Good (Sharpness: 103.8)</span>
+                  <span className={`font-bold ${isRecaptureRequested ? 'text-amber-700' : 'text-emerald-700'}`}>
+                    {isRecaptureRequested ? 'Needs Re-capture' : 'Good (Sharpness: 103.8)'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Safety Status:</span>
-                  <span className="font-bold text-emerald-700">READY FOR AI</span>
+                  <span className={`font-bold ${isRecaptureRequested ? 'text-amber-700' : 'text-emerald-700'}`}>
+                    {isRecaptureRequested ? 'RE-CAPTURE REQUIRED' : 'READY FOR AI'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Risk Category:</span>
-                  <span className="font-bold text-amber-700">MODERATE</span>
+                  <span className="font-bold text-amber-700">{isRecaptureRequested ? 'REVIEW REQUIRED' : 'MODERATE'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Explainability:</span>
@@ -399,12 +473,12 @@ const PatientReportContent = () => {
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
-                  <span className="text-slate-400 block text-[10px]">DR Prediction:</span>
+                  <span className="text-slate-400 block text-[10px]">AI Prediction:</span>
                   <span className="font-bold text-slate-800">{screening.className || 'Mild DR'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Confidence:</span>
-                  <span className="font-bold text-slate-800">{formatConf(screening.confidence || 0.82)}</span>
+                  <span className="font-bold text-slate-800">{formatConfidence(screening.confidence || 0.82)}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Image Quality:</span>
@@ -473,30 +547,30 @@ const PatientReportContent = () => {
         </div>
 
         {/* Doctor Clinical Impression & Remarks Box */}
-        <div className="p-6 rounded-2xl bg-teal-50/50 border border-teal-200 space-y-3">
+        <div className={`p-6 rounded-2xl border space-y-3 ${isRecaptureRequested ? 'bg-rose-50/50 border-rose-200' : 'bg-teal-50/50 border-teal-200'}`}>
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-teal-950 uppercase tracking-wider flex items-center gap-2">
-              <Stethoscope className="w-4 h-4 text-teal-600" />
-              <span>{t('doctorRemarks')}</span>
+            <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isRecaptureRequested ? 'text-rose-950' : 'text-teal-950'}`}>
+              <Stethoscope className={`w-4 h-4 ${isRecaptureRequested ? 'text-rose-600' : 'text-teal-600'}`} />
+              <span>{isRecaptureRequested ? 'Specialist Re-capture Request Guidance' : t('doctorRemarks')}</span>
             </h4>
-            <span className="text-[11px] font-bold text-teal-800 bg-teal-100 px-2 py-0.5 rounded">
-              Tele-Ophthalmologist Digital Verification
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${isRecaptureRequested ? 'text-rose-800 bg-rose-100' : 'text-teal-800 bg-teal-100'}`}>
+              Tele-Ophthalmologist Review Record
             </span>
           </div>
 
           <p className="text-xs text-slate-700 leading-relaxed italic">
-            "{storedReview?.review_comment || t('doctorRemarksText')}"
+            "{storedReview?.review_comment || (isAccepted ? 'Verified and accepted AI-assisted screening findings.' : t('doctorRemarksText'))}"
           </p>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-teal-200/60 text-xs">
+          <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t text-xs ${isRecaptureRequested ? 'border-rose-200/60' : 'border-teal-200/60'}`}>
             <div>
               <p className="font-bold text-slate-900">{storedReview?.reviewer_name || t('doctorName')}</p>
               <p className="text-[11px] text-slate-500">{t('doctorHospital')}</p>
             </div>
             <div className="text-right">
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Digitally Signed & Validated</span>
+              <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg ${isRecaptureRequested ? 'text-rose-700 bg-rose-100' : 'text-emerald-700 bg-emerald-100'}`}>
+                <CheckCircle2 className={`w-3.5 h-3.5 ${isRecaptureRequested ? 'text-rose-600' : 'text-emerald-600'}`} />
+                <span>{isRecaptureRequested ? 'Digitally Signed Re-capture Request' : 'Digitally Signed & Validated'}</span>
               </span>
             </div>
           </div>
@@ -509,7 +583,9 @@ const PatientReportContent = () => {
             <span>{t('patientAdvisory')}</span>
           </h4>
           <p className="text-amber-900 whitespace-pre-line leading-relaxed text-[11px]">
-            {t('patientAdvisoryText')}
+            {isRecaptureRequested
+              ? 'कृपया ध्यान दें: डॉक्टर ने आपकी आंखों की जांच के लिए दोबारा स्पष्ट फोटो लेने का अनुरोध किया है। कृपया स्वास्थ्य कार्यकर्ता की सहायता से दोबारा फोटो खिंचवाएं।\n\nNote: The doctor has requested a clearer retinal photograph. Please get a re-capture done with the health worker.'
+              : t('patientAdvisoryText')}
           </p>
         </div>
 

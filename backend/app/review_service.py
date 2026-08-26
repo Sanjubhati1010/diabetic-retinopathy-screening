@@ -24,6 +24,9 @@ DR_CLASS_MAP = {
 # In-memory auditable event store for screenings (keyed by screening_id)
 AUDIT_TRAIL_STORE: Dict[str, List[Dict[str, Any]]] = {}
 
+# Canonical screening review state store (keyed by screening_id)
+SCREENING_REVIEWS_STORE: Dict[str, Dict[str, Any]] = {}
+
 
 def get_current_iso_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -142,7 +145,7 @@ def process_doctor_review(
 
     audit_record = ReviewAuditRecord(**audit_record_dict)
 
-    return DoctorReviewResponse(
+    response = DoctorReviewResponse(
         screening_id=screening_id,
         review_status=review_status,
         original_ai_result=original_ai_result,
@@ -155,6 +158,16 @@ def process_doctor_review(
         audit_record=audit_record,
         message=message,
     )
+
+    # Persist latest canonical review state
+    SCREENING_REVIEWS_STORE[screening_id] = response.dict()
+
+    return response
+
+
+def get_screening_review(screening_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieves current canonical review status and metadata for a screening."""
+    return SCREENING_REVIEWS_STORE.get(screening_id)
 
 
 def get_audit_history(screening_id: str) -> List[ReviewAuditRecord]:

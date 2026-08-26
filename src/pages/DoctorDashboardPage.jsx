@@ -44,7 +44,7 @@ const DR_OPTIONS = [
 
 const DoctorDashboardContent = () => {
   const { t } = useLanguage();
-  const { screenings = [], getPatientById } = useApp();
+  const { screenings = [], getPatientById, updateScreeningReview } = useApp();
 
   const [selectedScreeningId, setSelectedScreeningId] = useState(
     screenings.find((s) => s.doctorStatus === 'pending')?.id || screenings[0]?.id || 'SCR-2026-001'
@@ -90,11 +90,15 @@ const DoctorDashboardContent = () => {
       setReviewState(null);
     }
 
-    getScreeningReviewHistory(selectedScreening.id).then((data) => {
-      if (data && data.events) {
-        setAuditHistory(data.events);
-      }
-    });
+    getScreeningReviewHistory(selectedScreening.id)
+      .then((res) => {
+        if (res && res.events) {
+          setAuditHistory(res.events);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load audit events:', err);
+      });
   }, [selectedScreening.id]);
 
   const showToast = (msg) => {
@@ -120,6 +124,9 @@ const DoctorDashboardContent = () => {
         'doctor'
       );
       setReviewState(result);
+      if (updateScreeningReview) {
+        updateScreeningReview(selectedScreening.id, result);
+      }
       const history = await getScreeningReviewHistory(selectedScreening.id);
       setAuditHistory(history.events || []);
       setActiveModal(null);
@@ -159,6 +166,9 @@ const DoctorDashboardContent = () => {
         'doctor'
       );
       setReviewState(result);
+      if (updateScreeningReview) {
+        updateScreeningReview(selectedScreening.id, result);
+      }
       const history = await getScreeningReviewHistory(selectedScreening.id);
       setAuditHistory(history.events || []);
       setActiveModal(null);
@@ -189,6 +199,9 @@ const DoctorDashboardContent = () => {
         'doctor'
       );
       setReviewState(result);
+      if (updateScreeningReview) {
+        updateScreeningReview(selectedScreening.id, result);
+      }
       const history = await getScreeningReviewHistory(selectedScreening.id);
       setAuditHistory(history.events || []);
       setActiveModal(null);
@@ -200,12 +213,12 @@ const DoctorDashboardContent = () => {
     }
   };
 
-  const currentStatus = reviewState?.review_status || (selectedScreening.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW');
+  const currentStatus = reviewState?.review_status || selectedScreening.reviewStatus || (selectedScreening.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : selectedScreening.doctorStatus === 'recapture_requested' ? 'IMAGE RE-CAPTURE REQUESTED' : 'PENDING DOCTOR REVIEW');
   const originalAiDisplay = reviewState?.original_ai_result || selectedScreening.className || t(selectedScreening.overallSeverity) || 'Moderate';
-  const doctorReviewedDisplay = reviewState?.doctor_reviewed_result || (selectedScreening.doctorStatus === 'verified' ? originalAiDisplay : 'Pending Specialist Review');
+  const doctorReviewedDisplay = reviewState?.doctor_reviewed_result || selectedScreening.doctorReviewedResult || (selectedScreening.doctorStatus === 'verified' ? originalAiDisplay : 'Pending Specialist Review');
 
-  const pendingCount = screenings.filter((s) => s.doctorStatus === 'pending').length;
-  const verifiedCount = screenings.filter((s) => s.doctorStatus === 'verified' || reviewState).length;
+  const pendingCount = screenings.filter((s) => s.doctorStatus === 'pending' && s.reviewStatus !== 'AI RESULT ACCEPTED' && s.reviewStatus !== 'DOCTOR REVIEWED / MODIFIED' && s.reviewStatus !== 'IMAGE RE-CAPTURE REQUESTED').length;
+  const verifiedCount = screenings.filter((s) => s.doctorStatus === 'verified' || s.reviewStatus === 'AI RESULT ACCEPTED' || s.reviewStatus === 'DOCTOR REVIEWED / MODIFIED').length;
 
   return (
     <div className="space-y-6 font-sans">
@@ -307,7 +320,7 @@ const DoctorDashboardContent = () => {
                     <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-slate-200/60 text-[10px]">
                       <span className="text-slate-400 font-mono">{s.id}</span>
                       <DoctorReviewStatusBadge
-                        status={s.id === selectedScreening.id && reviewState ? reviewState.review_status : s.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW'}
+                        status={s.id === selectedScreening.id && reviewState ? reviewState.review_status : (s.reviewStatus || (s.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : s.doctorStatus === 'recapture_requested' ? 'IMAGE RE-CAPTURE REQUESTED' : 'PENDING DOCTOR REVIEW'))}
                         size="sm"
                       />
                     </div>

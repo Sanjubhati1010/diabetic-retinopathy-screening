@@ -203,6 +203,70 @@ export const AppProvider = ({ children }) => {
     return null;
   };
 
+  const updateScreeningReview = (screeningId, reviewResponse) => {
+    if (!screeningId || !reviewResponse) return;
+
+    setScreenings((prev) => {
+      let found = false;
+      const updated = prev.map((s) => {
+        if (s.id === screeningId) {
+          found = true;
+          const status = reviewResponse.review_status;
+          const isVerified = status === 'AI RESULT ACCEPTED' || status === 'DOCTOR REVIEWED / MODIFIED';
+          const isRecapture = status === 'IMAGE RE-CAPTURE REQUESTED';
+          return {
+            ...s,
+            reviewStatus: status,
+            doctorStatus: isRecapture ? 'recapture_requested' : isVerified ? 'verified' : 'pending',
+            doctorReviewedResult: reviewResponse.doctor_reviewed_result,
+            doctorRemarks: reviewResponse.review_comment,
+            doctorReviewDate: reviewResponse.review_timestamp || new Date().toISOString(),
+            reviewerName: reviewResponse.reviewer_name || 'Dr. A. Swaminathan, MS',
+          };
+        }
+        return s;
+      });
+
+      // If not in existing array, prepend a new item
+      let finalScreenings = updated;
+      if (!found) {
+        const status = reviewResponse.review_status;
+        const isVerified = status === 'AI RESULT ACCEPTED' || status === 'DOCTOR REVIEWED / MODIFIED';
+        const isRecapture = status === 'IMAGE RE-CAPTURE REQUESTED';
+        const newRecord = {
+          id: screeningId,
+          patientId: 'PAT-2026-081',
+          patientName: 'Patient',
+          village: 'Rampur',
+          screeningDate: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+          className: reviewResponse.original_ai_result || 'Moderate DR',
+          confidence: reviewResponse.original_confidence || 0.85,
+          overallSeverity: 'dr2',
+          riskCategory: 'MODERATE',
+          referralPriority: isRecapture ? 'IMAGE RE-CAPTURE REQUIRED' : 'EYE SPECIALIST REVIEW RECOMMENDED',
+          screeningStatus: isRecapture ? 'IMAGE RE-CAPTURE REQUESTED' : 'RELIABLE AI SCREENING',
+          safetyStatus: 'READY_FOR_AI',
+          reviewStatus: status,
+          doctorStatus: isRecapture ? 'recapture_requested' : isVerified ? 'verified' : 'pending',
+          doctorReviewedResult: reviewResponse.doctor_reviewed_result,
+          doctorRemarks: reviewResponse.review_comment,
+          doctorReviewDate: reviewResponse.review_timestamp || new Date().toISOString(),
+          reviewerName: reviewResponse.reviewer_name || 'Dr. A. Swaminathan, MS',
+          imageOD: SAMPLE_FUNDUS_IMAGES.sample_od,
+          imageOS: SAMPLE_FUNDUS_IMAGES.sample_os,
+        };
+        finalScreenings = [newRecord, ...prev];
+      }
+
+      try {
+        localStorage.setItem('dr_screenings', JSON.stringify(finalScreenings));
+      } catch (e) {
+        console.warn('Unable to persist screenings to localStorage:', e);
+      }
+      return finalScreenings;
+    });
+  };
+
   const doctorVerifyScreening = (screeningId, { confirmedSeverity, doctorRemarks, signatureApproved }) => {
     setScreenings((prev) =>
       prev.map((s) => {
@@ -240,6 +304,7 @@ export const AppProvider = ({ children }) => {
         addScreening,
         getScreeningById,
         doctorVerifyScreening,
+        updateScreeningReview,
         activeScreening,
         setActiveScreening,
         isOnline,
