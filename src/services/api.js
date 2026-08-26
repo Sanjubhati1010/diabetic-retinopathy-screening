@@ -631,6 +631,18 @@ export async function queryAssistant(message, language = 'en', screeningContext 
     };
   }
 
+  // What is Lesion Analysis / Difference with Grad-CAM (Phase 9)
+  if (/lesion|घाव|असामान्य|difference.*gradcam/i.test(msgClean)) {
+    return {
+      reply: isHi
+        ? 'रेटिना के असामान्य हिस्सों (घावों) का विशिष्ट विश्लेषण समर्पित मॉडल द्वारा किया जाता है (वर्तमान में अनुपलब्ध)। दूसरी ओर, Grad-CAM यह दिखाता है कि एआई मॉडल ने निर्णय लेते समय किन हिस्सों पर ध्यान दिया (मॉडल ध्यान)। ये पुष्ट चिकित्सीय घाव नहीं हैं।'
+        : 'Lesion analysis is dedicated detection of specific pathological entities (e.g. microaneurysms, hard exudates), which is currently not connected in MADOCS. Grad-CAM, in contrast, visualizes model computational attention regions that influenced the DR classification, and does not independently detect lesions.',
+      language: isHi ? 'hi' : 'en',
+      suggested_actions: ['What does confidence mean?', 'What is Grad-CAM?'],
+      context_used: false,
+    };
+  }
+
   // Why Rejected
   if (/reject|quality|blur|asweekrit|kharaab/i.test(msgClean)) {
     return {
@@ -824,5 +836,40 @@ export async function getScreeningReviewHistory(screeningId) {
     ],
   };
 }
+
+/**
+ * Phase 9: Retrieve Lesion Intelligence & Evidence for a screening.
+ * Always transparent and faithful to available models.
+ */
+export async function getLesionAnalysis(screeningId, eye = 'OD') {
+  try {
+    const res = await fetch(`${API_BASE_URL}/screenings/${screeningId}/lesions?eye=${eye}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend lesion API unavailable, using standard contract fallback:', err);
+  }
+
+  return {
+    screening_id: screeningId,
+    eye,
+    available: false,
+    model_name: 'None (Ready for future validated lesion model integration)',
+    supported_categories: [
+      'Microaneurysms',
+      'Hemorrhages',
+      'Hard Exudates',
+      'Cotton-Wool Spots',
+    ],
+    detected_lesions: [],
+    lesion_masks: [],
+    confidence_scores: {},
+    status_message: 'Lesion-specific analysis is not currently available. Grad-CAM model attention is active.',
+    status_message_hi: 'रेटिना के असामान्य हिस्सों (घावों) का विशिष्ट विश्लेषण वर्तमान में उपलब्ध नहीं है। Grad-CAM मॉडल ध्यान सक्रिय है।',
+    explainability_note: 'Grad-CAM highlights regions that contributed to the AI classification. It does not independently confirm retinal lesions.',
+  };
+}
+
 
 

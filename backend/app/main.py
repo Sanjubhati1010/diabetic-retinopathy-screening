@@ -21,10 +21,12 @@ from app.schemas import (
     DoctorReviewRequest,
     DoctorReviewResponse,
     ReviewHistoryResponse,
+    LesionEvidenceResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
 from app.review_service import process_doctor_review, get_audit_history, get_screening_review
+from app.lesion_service import lesion_service
 
 # Setup structured logging
 logging.basicConfig(
@@ -445,3 +447,36 @@ async def get_canonical_screening_review(screening_id: str):
     if not review_data:
         return None
     return DoctorReviewResponse(**review_data)
+
+
+# Phase 9: Lesion Intelligence Layer Endpoints
+@app.get(
+    "/api/screenings/{screening_id}/lesions",
+    response_model=LesionEvidenceResponse,
+    tags=["Lesion Intelligence"],
+    summary="Get Lesion Intelligence & Evidence for Screening",
+)
+async def get_lesion_evidence(screening_id: str, eye: str = "OD"):
+    """
+    Phase 9 Lesion Intelligence Layer:
+    - Provides dedicated lesion evidence abstraction
+    - Distinct from DR Classification and Grad-CAM Attention
+    - Honest non-fabricated state when no dedicated lesion model is connected
+    """
+    analysis = lesion_service.get_lesion_analysis(screening_id=screening_id, eye=eye)
+    return LesionEvidenceResponse(**analysis)
+
+
+@app.post(
+    "/api/lesions/analyze",
+    response_model=LesionEvidenceResponse,
+    tags=["Lesion Intelligence"],
+    summary="Analyze Retinal Image for Lesions",
+)
+async def analyze_lesions(screening_id: str = "SCR-DIRECT", eye: str = "OD"):
+    """
+    Direct lesion analysis endpoint for future validated model inference.
+    """
+    analysis = lesion_service.get_lesion_analysis(screening_id=screening_id, eye=eye)
+    return LesionEvidenceResponse(**analysis)
+

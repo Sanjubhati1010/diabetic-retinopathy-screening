@@ -162,8 +162,32 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 4. "What does confidence mean?" (Phase 8)
-    if any(k in msg_clean for k in ["confidence mean", "confidence ka matlab", "what is confidence", "bharosa star", "model confidence", "कॉन्फिडेंस", "भरोसा"]):
+    # 4. "Difference between AI confidence and lesion confidence?" (Phase 9)
+    if any(k in msg_clean for k in ["difference between ai confidence and lesion confidence", "confidence me antar", "घाव कॉन्फिडेंस में क्या अंतर", "कॉन्फिडेंस में क्या अंतर", "ai confidence vs lesion confidence", "confidence difference"]):
+        if is_hi:
+            reply = (
+                "एआई वर्गीकरण कॉन्फिडेंस और घाव कॉन्फिडेंस में अंतर:\n\n"
+                "1. एआई वर्गीकरण कॉन्फिडेंस: पूरे रेटिना स्कैन के आधार पर निर्धारित डीआर ग्रेड (उदा. Moderate NPDR) की समग्र सांख्यिकीय निश्चितता (उदा. 85%)।\n"
+                "2. घाव कॉन्फिडेंस: किसी विशिष्ट घाव (उदा. माइक्रोएन्यूरिज्म) के व्यक्तिगत अस्तित्व की संभावना (उदा. 78%)।\n\n"
+                "सुरक्षा नियम: MADOCS इन दोनों को कभी आपस में नहीं मिलाता।"
+            )
+        else:
+            reply = (
+                "Difference between AI Classification Confidence and Lesion Confidence:\n\n"
+                "1. AI Classification Confidence: Statistical certainty across global image feature vectors for the whole DR grade (e.g. 85.0% for Moderate NPDR).\n"
+                "2. Lesion Confidence: Individual probability score for a specific detected lesion entity (e.g. 78% for a localized microaneurysm).\n\n"
+                "Clinical Safety Rule: MADOCS strictly separates these two and never merges them into a single opaque number."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What does confidence mean?", "What is lesion analysis?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 5. "What does confidence mean?" (Phase 8)
+    if any(k in msg_clean for k in ["confidence mean", "confidence ka matlab", "what is confidence", "bharosa star", "model confidence", "कॉन्फिडेंस का क्या अर्थ", "भरोसा स्तर"]):
         if is_hi:
             reply = (
                 "मॉडल कॉन्फिडेंस (Model Confidence) यह दर्शाता है कि एआई मॉडल अपने सांख्यिकीय पैटर्न पहचान में कितना आश्वस्त है।\n\n"
@@ -184,6 +208,50 @@ def generate_assistant_reply(
             "reply": reply,
             "language": "hi" if is_hi else "en",
             "suggested_actions": ["Why did AI give this result?", "Why is doctor review recommended?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 6. "Why is lesion analysis unavailable?" (Phase 9)
+    if any(k in msg_clean for k in ["why is lesion analysis unavailable", "lesion analysis unavailable kyun", "घाव विश्लेषण क्यों उपलब्ध नहीं", "घाव विश्लेषण अनुपलब्ध क्यों", "घाव विश्लेषण अनुपलब्ध", "lesion unavailable"]):
+        if is_hi:
+            reply = (
+                "घाव विश्लेषण (Lesion Analysis) इसलिए अनुपलब्ध है क्योंकि MADOCS में वर्तमान में केवल 5-क्लास डीआर क्लासिफायर (EfficientNet-B0) और Grad-CAM उपलब्ध है।\n\n"
+                "• चिकित्सीय सुरक्षा के नियम के तहत हम कोई भी काल्पनिक या अनसत्यापित घाव डेटा नहीं दिखाते।\n"
+                "• भविष्य में जब पूरी तरह से मान्य घाव मॉडल एकीकृत होगा, तब यह स्वतः सक्रिय हो जाएगा।"
+            )
+        else:
+            reply = (
+                "Lesion analysis is marked unavailable because MADOCS currently operates a validated 5-class DR classifier (dr_model.pth) and Grad-CAM saliency mapping.\n\n"
+                "• Strict Clinical Safety: We refuse to fabricate fake lesion detections or invent counts when a dedicated lesion detector is not loaded.\n"
+                "• The architecture is designed to seamlessly integrate a validated lesion model in future updates."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What is lesion analysis?", "What does the Grad-CAM overlay mean?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 7. "What is Lesion Analysis?" (Phase 9)
+    if any(k in msg_clean for k in ["what is lesion analysis", "lesion analysis kya", "घाव विश्लेषण", "असामान्य हिस्सों की जांच", "lesion analysis"]):
+        if is_hi:
+            reply = (
+                "घाव विश्लेषण (Lesion Intelligence) रेटिना में विशिष्ट पैथोलॉजिकल विकृतियों (जैसे माइक्रोएन्यूरिज्म, रक्तस्राव, हार्ड एक्सयूडेट्स) का पता लगाने और उनका मानचित्रण करने की तकनीक है।\n\n"
+                "• स्थिति: MADOCS में वर्तमान में केवल 5-स्तरीय डीआर वर्गीकरण और Grad-CAM सक्रिय है; समर्पित घाव डिटेक्टर मॉडल स्टैंडबाय पर है।\n"
+                "• सुरक्षा: सिस्टम कोई भी नकली घाव पहचान या कृत्रिम आंकड़े नहीं दिखाता।"
+            )
+        else:
+            reply = (
+                "Lesion analysis refers to the dedicated detection and segmentation of specific retinal microvascular abnormalities (such as microaneurysms, dot/blot hemorrhages, hard exudates, and cotton-wool spots).\n\n"
+                "• Status in MADOCS: Currently, whole-image EfficientNet-B0 DR classification and Grad-CAM are active. A dedicated lesion segmentation model is not yet connected.\n"
+                "• Clinical Safety: MADOCS never generates fake lesion counts or fabricated detections."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What is the difference between Grad-CAM and lesion detection?", "Why is lesion analysis unavailable?"],
             "context_used": False,
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
@@ -240,8 +308,124 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 7. "What is Grad-CAM?" / "What does Grad-CAM show?"
-    if any(k in msg_clean for k in ["gradcam", "grad-cam", "heatmap", "overlay", "visualization", "rang", "what does grad-cam show", "हीटमैप", "दिखाता है"]):
+    # 7. "What is Lesion Analysis?" (Phase 9)
+    if any(k in msg_clean for k in ["what is lesion analysis", "lesion analysis kya", "घाव विश्लेषण", "असामान्य हिस्सों", "lesion analysis"]):
+        if is_hi:
+            reply = (
+                "घाव विश्लेषण (Lesion Intelligence) रेटिना में विशिष्ट पैथोलॉजिकल विकृतियों (जैसे माइक्रोएन्यूरिज्म, रक्तस्राव, हार्ड एक्सयूडेट्स) का पता लगाने और उनका मानचित्रण करने की तकनीक है।\n\n"
+                "• स्थिति: MADOCS में वर्तमान में केवल 5-स्तरीय डीआर वर्गीकरण और Grad-CAM सक्रिय है; समर्पित घाव डिटेक्टर मॉडल स्टैंडबाय पर है।\n"
+                "• सुरक्षा: सिस्टम कोई भी नकली घाव पहचान या कृत्रिम आंकड़े नहीं दिखाता।"
+            )
+        else:
+            reply = (
+                "Lesion analysis refers to the dedicated detection and segmentation of specific retinal microvascular abnormalities (such as microaneurysms, dot/blot hemorrhages, hard exudates, and cotton-wool spots).\n\n"
+                "• Status in MADOCS: Currently, whole-image EfficientNet-B0 DR classification and Grad-CAM are active. A dedicated lesion segmentation model is not yet connected.\n"
+                "• Clinical Safety: MADOCS never generates fake lesion counts or fabricated detections."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What is the difference between Grad-CAM and lesion detection?", "Why is lesion analysis unavailable?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 8. "Difference between Grad-CAM and lesion detection?" (Phase 9)
+    if any(k in msg_clean for k in ["difference between grad-cam and lesion", "difference between gradcam and lesion", "grad-cam aur lesion me antar", "घाव पहचान में क्या अंतर", "gradcam vs lesion", "अंतर क्या है"]):
+        if is_hi:
+            reply = (
+                "Grad-CAM और घाव पहचान में मूलभूत अंतर:\n\n"
+                "1. Grad-CAM (मॉडल ध्यान): यह दिखाता है कि एआई ने पूरे रेटिना में किन क्षेत्रों को देखकर अपना डीआर ग्रेड निर्णय लिया (कंप्यूटेशनल अटेंशन)। यह घाव डिटेक्टर नहीं है।\n"
+                "2. घाव पहचान (Lesion Detection): यह सीधे विशिष्ट घावों (जैसे माइक्रोएन्यूरिज्म) की गिनती और बाउंडिंग बॉक्स/मास्क तैयार करता है।\n\n"
+                "महत्वपूर्ण: Grad-CAM के रंगीन क्षेत्रों को पुष्ट नैदानिक घाव नहीं माना जाना चाहिए।"
+            )
+        else:
+            reply = (
+                "Key differences between Grad-CAM and Lesion Detection:\n\n"
+                "1. Grad-CAM (Model Attention): Visualizes which image regions contributed mathematically to the EfficientNet-B0 classification. It explains model behavior, not pathological diagnosis.\n"
+                "2. Lesion Detection: Explicitly segments and counts individual clinical entities (e.g. microaneurysms, hemorrhages).\n\n"
+                "Important: Grad-CAM attention regions must never be interpreted as confirmed clinical lesions."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What does the Grad-CAM overlay mean?", "What is the difference between AI confidence and lesion confidence?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 9. "Why is lesion analysis unavailable?" (Phase 9)
+    if any(k in msg_clean for k in ["why is lesion analysis unavailable", "lesion analysis unavailable kyun", "घाव विश्लेषण क्यों उपलब्ध नहीं", "घाव विश्लेषण अनुपलब्ध", "lesion unavailable"]):
+        if is_hi:
+            reply = (
+                "घाव विश्लेषण (Lesion Analysis) इसलिए अनुपलब्ध है क्योंकि MADOCS में वर्तमान में केवल 5-क्लास डीआर क्लासिफायर (EfficientNet-B0) और Grad-CAM उपलब्ध है।\n\n"
+                "• चिकित्सीय सुरक्षा के नियम के तहत हम कोई भी काल्पनिक या अनसत्यापित घाव डेटा नहीं दिखाते।\n"
+                "• भविष्य में जब पूरी तरह से मान्य घाव मॉडल एकीकृत होगा, तब यह स्वतः सक्रिय हो जाएगा।"
+            )
+        else:
+            reply = (
+                "Lesion analysis is marked unavailable because MADOCS currently operates a validated 5-class DR classifier (dr_model.pth) and Grad-CAM saliency mapping.\n\n"
+                "• Strict Clinical Safety: We refuse to fabricate fake lesion detections or invent counts when a dedicated lesion detector is not loaded.\n"
+                "• The architecture is designed to seamlessly integrate a validated lesion model in future updates."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What is lesion analysis?", "What does the Grad-CAM overlay mean?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 10. "What does the Grad-CAM overlay mean?" (Phase 9)
+    if any(k in msg_clean for k in ["what does the grad-cam overlay mean", "overlay mean", "overlay ka matlab", "ओवरले का क्या मतलब", "grad-cam ओवरले", "what does grad-cam show", "grad-cam kya dikhata"]):
+        if is_hi:
+            reply = (
+                "Grad-CAM ओवरले का अर्थ:\n\n"
+                "• यह फंडस फोटो के ऊपर 40% डिफ़ॉल्ट पारदर्शिता पर एक रंगीन हीटमैप प्रदर्शित करता है।\n"
+                "• लाल और पीले रंग के क्षेत्र यह दर्शाते हैं कि एआई मॉडल ने डीआर ग्रेड का अनुमान लगाते समय किन रेटिना संरचनाओं पर सबसे अधिक ध्यान दिया।\n"
+                "• यह मूल रेटिना रक्त वाहिकाओं को स्पष्ट रखता है ताकि नेत्र विशेषज्ञ इसका निष्पक्ष मूल्यांकन कर सकें।"
+            )
+        else:
+            reply = (
+                "The Grad-CAM overlay meaning:\n\n"
+                "• It superimposes a 40% default opacity saliency heatmap directly onto the original fundus photograph.\n"
+                "• Warm zones (red/yellow) indicate highest computational weight in the neural network's decision.\n"
+                "• The overlay is calibrated so natural retinal vessels and optic disc remain clearly visible for clinical review."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What is the difference between Grad-CAM and lesion detection?", "What is the difference between AI confidence and lesion confidence?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 11. "Difference between AI confidence and lesion confidence?" (Phase 9)
+    if any(k in msg_clean for k in ["difference between ai confidence and lesion confidence", "confidence me antar", "घाव कॉन्फिडेंस में क्या अंतर", "कॉन्फिडेंस में क्या अंतर", "ai confidence vs lesion confidence"]):
+        if is_hi:
+            reply = (
+                "एआई वर्गीकरण कॉन्फिडेंस और घाव कॉन्फिडेंस में अंतर:\n\n"
+                "1. एआई वर्गीकरण कॉन्फिडेंस: पूरे रेटिना स्कैन के आधार पर निर्धारित डीआर ग्रेड (उदा. Moderate NPDR) की समग्र सांख्यिकीय निश्चितता (उदा. 85%)।\n"
+                "2. घाव कॉन्फिडेंस: किसी विशिष्ट घाव (उदा. माइक्रोएन्यूरिज्म) के व्यक्तिगत अस्तित्व की संभावना (उदा. 78%)।\n\n"
+                "सुरक्षा नियम: MADOCS इन दोनों को कभी आपस में नहीं मिलाता।"
+            )
+        else:
+            reply = (
+                "Difference between AI Classification Confidence and Lesion Confidence:\n\n"
+                "1. AI Classification Confidence: Statistical certainty across global image feature vectors for the whole DR grade (e.g. 85.0% for Moderate NPDR).\n"
+                "2. Lesion Confidence: Individual probability score for a specific detected lesion entity (e.g. 78% for a localized microaneurysm).\n\n"
+                "Clinical Safety Rule: MADOCS strictly separates these two and never merges them into a single opaque number."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What does confidence mean?", "What is lesion analysis?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 12. "What is Grad-CAM?" (General)
+    if any(k in msg_clean for k in ["gradcam", "grad-cam", "heatmap", "overlay", "visualization", "rang", "हीटमैप", "दिखाता है"]):
         if is_hi:
             reply = (
                 "Grad-CAM (Gradient-weighted Class Activation Mapping) एआई का व्याख्यात्मक विज़ुअलाइज़ेशन है:\n\n"

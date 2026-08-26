@@ -172,3 +172,27 @@ class DoctorReviewResponse(BaseModel):
 class ReviewHistoryResponse(BaseModel):
     screening_id: str = Field(..., description="Screening identifier")
     events: List[ReviewAuditRecord] = Field(default_factory=list, description="Chronological audit history events")
+
+
+# Phase 9: Lesion Intelligence & Dual-Evidence Schemas
+class LesionEvidenceResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    eye: str = Field(default="OD", description="Eye analyzed (OD/OS)")
+    available: bool = Field(default=False, description="Whether lesion-specific analysis is available")
+    model_name: str = Field(..., description="Lesion model identifier or status")
+    supported_categories: List[str] = Field(default_factory=list, description="Supported lesion categories")
+    detected_lesions: List[Dict[str, Any]] = Field(default_factory=list, description="Detected lesion entities")
+    lesion_masks: List[Dict[str, Any]] = Field(default_factory=list, description="Pixel/segmentation masks")
+    confidence_scores: Dict[str, float] = Field(default_factory=dict, description="Lesion-specific confidences")
+    status_message: str = Field(..., description="Clinical status message")
+    status_message_hi: str = Field(..., description="Hindi clinical status message")
+    explainability_note: str = Field(..., description="Grad-CAM explainability clarification note")
+
+
+class DualEvidenceSummary(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    dr_classification: Dict[str, Any] = Field(..., description="DR classification evidence")
+    lesion_evidence: LesionEvidenceResponse = Field(..., description="Lesion intelligence evidence")
+    gradcam_attention: Dict[str, Any] = Field(..., description="Grad-CAM attention evidence")
+    doctor_review: Optional[Dict[str, Any]] = Field(default=None, description="Doctor review status")
+

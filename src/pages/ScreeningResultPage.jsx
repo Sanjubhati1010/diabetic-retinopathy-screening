@@ -17,6 +17,7 @@ import { VoiceGuidanceControl } from '../components/common/VoiceGuidanceControl'
 import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
 import { DecisionTrace } from '../components/evidence/DecisionTrace';
 import { GradCamEvidenceSummary } from '../components/evidence/GradCamEvidenceSummary';
+import { DualEvidenceViewer } from '../components/evidence/DualEvidenceViewer';
 import {
   FileCheck,
   Eye,
@@ -692,6 +693,13 @@ export const ScreeningResultPage = () => {
 
       {/* Phase 8: AI Decision Trace */}
       <DecisionTrace screening={screening} selectedEye={selectedExplainEye} />
+
+      {/* Phase 9: Dual-Evidence Analysis */}
+      <DualEvidenceViewer
+        screening={screening}
+        selectedEye={selectedExplainEye}
+        onEyeChange={setSelectedExplainEye}
+      />
 
       {/* Phase 3 & 8: Dedicated Explainability Section ("Why This Prediction?") */}
       <div ref={explainRef} id="why-this-prediction" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-card space-y-6">

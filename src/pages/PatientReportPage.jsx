@@ -459,12 +459,16 @@ const PatientReportContent = () => {
                   </span>
                 </div>
                 <div>
+                  <span className="text-slate-400 block text-[10px]">Lesion Evidence:</span>
+                  <span className="font-bold text-amber-700">Unavailable (Standby)</span>
+                </div>
+                <div>
                   <span className="text-slate-400 block text-[10px]">Risk Category:</span>
                   <span className="font-bold text-amber-700">{isRecaptureRequested ? 'REVIEW REQUIRED' : 'MODERATE'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Explainability:</span>
-                  <span className="font-bold text-teal-700">Grad-CAM Available</span>
+                  <span className="font-bold text-teal-700">Grad-CAM (40%)</span>
                 </div>
               </div>
             </div>
@@ -493,12 +497,16 @@ const PatientReportContent = () => {
                   <span className="font-bold text-emerald-700">READY FOR AI</span>
                 </div>
                 <div>
+                  <span className="text-slate-400 block text-[10px]">Lesion Evidence:</span>
+                  <span className="font-bold text-amber-700">Unavailable (Standby)</span>
+                </div>
+                <div>
                   <span className="text-slate-400 block text-[10px]">Risk Category:</span>
                   <span className="font-bold text-amber-700">MODERATE</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Explainability:</span>
-                  <span className="font-bold text-teal-700">Grad-CAM Available</span>
+                  <span className="font-bold text-teal-700">Grad-CAM (40%)</span>
                 </div>
               </div>
             </div>
@@ -549,16 +557,31 @@ const PatientReportContent = () => {
             </div>
           </div>
 
-          {/* Phase 8: Explainability Note */}
-          <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-200 text-xs text-purple-950 space-y-1">
-            <div className="flex items-center gap-1.5 font-bold text-[11px] text-purple-900">
-              <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-              <span>{t('explainabilityNoteTitle') || 'Explainability Note'} (Grad-CAM)</span>
+          {/* Phase 8 & 9: Dual Evidence Notes (Grad-CAM & Lesion Intelligence) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Note 1: Grad-CAM Model Attention */}
+            <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-200 text-xs text-purple-950 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-[11px] text-purple-900">
+                <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                <span>{t('explainabilityNoteTitle') || 'Explainability Note'} (Grad-CAM)</span>
+              </div>
+              <p className="text-[10.5px] leading-relaxed text-slate-700">
+                {t('explainabilityNoteText') ||
+                  'Grad-CAM highlights image regions that contributed to the AI model prediction. These regions are not independent lesion diagnoses.'}
+              </p>
             </div>
-            <p className="text-[10.5px] leading-relaxed text-slate-700">
-              {t('explainabilityNoteText') ||
-                'Grad-CAM highlights image regions that contributed to the AI model prediction. These regions are not independent lesion diagnoses.'}
-            </p>
+
+            {/* Note 2: Lesion Intelligence Availability */}
+            <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-950 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-[11px] text-amber-900">
+                <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>{t('lesionEvidenceTitle') || 'Lesion Evidence'} (Phase 9)</span>
+              </div>
+              <p className="text-[10.5px] leading-relaxed text-slate-700">
+                {t('reportLesionNote') ||
+                  'Lesion-specific analysis was not available for this screening.'}
+              </p>
+            </div>
           </div>
         </div>
 
