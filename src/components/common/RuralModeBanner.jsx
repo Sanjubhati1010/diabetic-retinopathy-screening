@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useApp } from '../../context/AppContext';
+import { voiceService } from '../../services/voiceService';
 import {
   Compass,
   Wifi,
@@ -10,6 +11,8 @@ import {
   Zap,
   Check,
   Smartphone,
+  Square,
+  Play,
 } from 'lucide-react';
 
 export const RuralModeBanner = () => {
@@ -22,6 +25,47 @@ export const RuralModeBanner = () => {
     voiceGuidanceEnabled,
     toggleVoiceGuidance,
   } = useApp();
+
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  useEffect(() => {
+    const unsub = voiceService.subscribe((state) => {
+      setIsSpeaking(state.isSpeaking);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleVoiceToggle = () => {
+    if (!voiceGuidanceEnabled) {
+      toggleVoiceGuidance();
+      // Directly speak on user gesture
+      const text =
+        language === 'hi'
+          ? (voiceService.hasHindiVoice()
+              ? 'आवाज़ मार्गदर्शन चालू है। कृपया स्क्रीनिंग शुरू करने के लिए मरीज चुनें।'
+              : 'Voice guidance chalu hai. Kripya screening shuru karne ke liye mareez chunein.')
+          : 'Voice guidance is enabled. Please select a patient to begin screening.';
+      voiceService.speak(text, language);
+    } else {
+      voiceService.stop();
+      toggleVoiceGuidance();
+    }
+  };
+
+  const handleQuickPlay = (e) => {
+    e.stopPropagation();
+    if (isSpeaking) {
+      voiceService.stop();
+    } else {
+      const text =
+        language === 'hi'
+          ? (voiceService.hasHindiVoice()
+              ? 'प्राथमिक स्वास्थ्य केंद्र ग्रामीण स्क्रीनिंग मोड सक्रिय है।'
+              : 'Primary health center rural screening mode active hai.')
+          : 'Primary health center rural screening mode is active.';
+      voiceService.speak(text, language);
+    }
+  };
 
   return (
     <div className="no-print bg-slate-900 text-white px-3 sm:px-6 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2.5 text-xs">
@@ -72,21 +116,44 @@ export const RuralModeBanner = () => {
           {lowBandwidthMode && <Check className="w-3 h-3 text-white ml-0.5" />}
         </button>
 
-        {/* 3. Voice Guidance Toggle */}
-        <button
-          type="button"
-          onClick={toggleVoiceGuidance}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold text-[11px] transition border ${
-            voiceGuidanceEnabled
-              ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-              : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-          }`}
-          title="Audible step-by-step spoken workflow instructions"
-        >
-          {voiceGuidanceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-          <span>{t('voiceGuidance')}</span>
-          {voiceGuidanceEnabled && <span className="w-1.5 h-1.5 rounded-full bg-purple-300 animate-pulse"></span>}
-        </button>
+        {/* 3. Voice Guidance Toggle & Speaking State */}
+        <div className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleVoiceToggle}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold text-[11px] transition border ${
+              voiceGuidanceEnabled
+                ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+            }`}
+            title="Toggle audible spoken instructions"
+          >
+            {isSpeaking ? (
+              <Volume2 className="w-3.5 h-3.5 text-white animate-bounce" />
+            ) : voiceGuidanceEnabled ? (
+              <Volume2 className="w-3.5 h-3.5" />
+            ) : (
+              <VolumeX className="w-3.5 h-3.5" />
+            )}
+            <span>
+              {isSpeaking ? '🔊 Speaking...' : t('voiceGuidance')}
+            </span>
+            {voiceGuidanceEnabled && !isSpeaking && (
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-300"></span>
+            )}
+          </button>
+
+          {voiceGuidanceEnabled && (
+            <button
+              type="button"
+              onClick={handleQuickPlay}
+              className="p-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white transition"
+              title={isSpeaking ? 'Stop Audio' : 'Play Audio'}
+            >
+              {isSpeaking ? <Square className="w-3 h-3 fill-white" /> : <Play className="w-3 h-3 fill-white" />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

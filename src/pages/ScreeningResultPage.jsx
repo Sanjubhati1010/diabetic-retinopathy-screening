@@ -13,6 +13,7 @@ import {
 import { BiomarkerTags } from '../components/visualizer/BiomarkerTags';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { Modal } from '../components/common/Modal';
+import { VoiceGuidanceControl } from '../components/common/VoiceGuidanceControl';
 import {
   FileCheck,
   Eye,
@@ -514,6 +515,9 @@ export const ScreeningResultPage = () => {
           {t('responsibleAiDisclaimer')}
         </p>
       </div>
+
+      {/* Spoken Voice Guidance Control */}
+      <VoiceGuidanceControl stepKey="step6" />
 
       {/* Primary Classification Showcase */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-card">

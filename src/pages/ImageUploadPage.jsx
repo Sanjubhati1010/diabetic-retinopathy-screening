@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
 import { ensureImageFile, validateImageQuality } from '../services/api';
+import { VoiceGuidanceControl } from '../components/common/VoiceGuidanceControl';
 
 export const ImageUploadPage = () => {
   const { t } = useLanguage();
@@ -590,6 +591,9 @@ export const ImageUploadPage = () => {
             </button>
           </div>
         </div>
+
+        {/* Spoken Voice Guidance Control */}
+        <VoiceGuidanceControl stepKey="step2" />
 
         {/* Dual Eye Upload Grid (OD & OS) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -12,6 +12,7 @@ import {
   DoctorReviewStatusBadge,
 } from '../components/common/SeverityBadge';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
+import { VoiceGuidanceControl } from '../components/common/VoiceGuidanceControl';
 import {
   Printer,
   Share2,
@@ -248,6 +249,9 @@ const PatientReportContent = () => {
         <Shield className="w-4 h-4 text-amber-600 shrink-0" />
         <span>DEMO DATA — NOT REAL MEDICAL RESULTS • Report verified for clinical decision support.</span>
       </div>
+
+      {/* Spoken Voice Guidance Control */}
+      <VoiceGuidanceControl stepKey={isRecaptureRequested ? 'recapture' : 'report'} className="no-print" />
 
       {/* Prominent Image Re-capture Required Banner if Re-capture requested */}
       {isRecaptureRequested && (

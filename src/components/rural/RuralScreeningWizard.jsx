@@ -38,6 +38,8 @@ import {
 import { detectImageMeta, createOptimizedPreview } from '../../services/imageOptimizationService';
 import { GradCamViewer } from '../visualizer/GradCamViewer';
 import { SAMPLE_FUNDUS_IMAGES } from '../../data/mockData';
+import { VoiceGuidanceControl } from '../common/VoiceGuidanceControl';
+import { voiceService } from '../../services/voiceService';
 
 export const RuralScreeningWizard = ({ onExitWizard }) => {
   const { t, language } = useLanguage();
@@ -308,30 +310,54 @@ export const RuralScreeningWizard = ({ onExitWizard }) => {
     }
   };
 
+  const handleStepChange = (targetStep) => {
+    if (targetStep <= currentStep || (savedScreening && targetStep <= 8)) {
+      setCurrentStep(targetStep);
+      if (voiceGuidanceEnabled) {
+        voiceService.speakStep(targetStep, language);
+      }
+    }
+  };
+
   const handleNext = () => {
+    let next = currentStep;
     if (currentStep === 1) {
       if (patientMode === 'new' && newPatient.name.trim()) {
         const added = addPatient(newPatient);
         setSelectedPatientId(added.id);
       }
+      next = 2;
       setCurrentStep(2);
     } else if (currentStep === 2) {
+      next = 3;
       setCurrentStep(3);
     } else if (currentStep === 3) {
+      next = 4;
       setCurrentStep(4);
       runQualityCheck();
     } else if (currentStep === 4) {
+      next = 5;
       setCurrentStep(5);
     } else if (currentStep === 5) {
       runAiScreening();
+      return;
     } else if (currentStep < 8) {
-      setCurrentStep((prev) => prev + 1);
+      next = currentStep + 1;
+      setCurrentStep(next);
+    }
+
+    if (voiceGuidanceEnabled && next !== currentStep) {
+      voiceService.speakStep(next, language);
     }
   };
 
   const handlePrev = () => {
     if (currentStep > 1) {
-      setCurrentStep((prev) => prev - 1);
+      const prev = currentStep - 1;
+      setCurrentStep(prev);
+      if (voiceGuidanceEnabled) {
+        voiceService.speakStep(prev, language);
+      }
     }
   };
 
@@ -373,22 +399,7 @@ export const RuralScreeningWizard = ({ onExitWizard }) => {
           </div>
 
           <div className="flex items-center gap-2">
-            {voiceGuidanceEnabled && (
-              <button
-                type="button"
-                onClick={() => {
-                  /* Re-trigger voice for active step */
-                  speakPrompt(
-                    `Step ${currentStep}: ${t(`wizardStep${currentStep}`)}`,
-                    language
-                  );
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold hover:bg-purple-100 transition shadow-xs"
-              >
-                <Volume2 className="w-4 h-4 text-purple-600" />
-                <span>{t('voicePlay')}</span>
-              </button>
-            )}
+            <VoiceGuidanceControl stepKey={`step${currentStep}`} compact={true} />
             <button
               type="button"
               onClick={onExitWizard}
@@ -406,12 +417,7 @@ export const RuralScreeningWizard = ({ onExitWizard }) => {
               <button
                 key={s}
                 type="button"
-                onClick={() => {
-                  // Only allow jumping back to completed steps
-                  if (s <= currentStep || (savedScreening && s <= 8)) {
-                    setCurrentStep(s);
-                  }
-                }}
+                onClick={() => handleStepChange(s)}
                 disabled={s > currentStep && !savedScreening}
                 className={`py-2 px-1 rounded-xl text-center text-xs font-bold transition border flex flex-col items-center gap-0.5 ${
                   s === currentStep
@@ -449,6 +455,8 @@ export const RuralScreeningWizard = ({ onExitWizard }) => {
 
       {/* Main Step Body Card */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-card p-6 sm:p-8 space-y-6">
+        {/* Step-level Spoken Guidance Banner */}
+        <VoiceGuidanceControl stepKey={`step${currentStep}`} className="mb-2" />
         {/* ================= STEP 1: PATIENT INFO ================= */}
         {currentStep === 1 && (
           <div className="space-y-6">
