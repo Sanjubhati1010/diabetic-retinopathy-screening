@@ -10,6 +10,7 @@ import {
   ReferralBadge,
   DoctorReviewStatusBadge,
 } from '../components/common/SeverityBadge';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { MetricCard } from '../components/common/MetricCard';
 import {
@@ -29,6 +30,7 @@ import {
   History,
   X,
   Info,
+  Inbox,
 } from 'lucide-react';
 import { submitDoctorReview, getScreeningReviewHistory } from '../services/api';
 
@@ -40,17 +42,17 @@ const DR_OPTIONS = [
   { value: 4, label: 'DR 4 — Proliferative DR', name: 'Proliferative DR' },
 ];
 
-export const DoctorDashboardPage = () => {
+const DoctorDashboardContent = () => {
   const { t } = useLanguage();
-  const { screenings, getPatientById } = useApp();
+  const { screenings = [], getPatientById } = useApp();
 
   const [selectedScreeningId, setSelectedScreeningId] = useState(
     screenings.find((s) => s.doctorStatus === 'pending')?.id || screenings[0]?.id || 'SCR-2026-001'
   );
 
   const selectedScreening = screenings.find((s) => s.id === selectedScreeningId) || screenings[0] || {};
-  const patient = getPatientById(selectedScreening.patientId) || {
-    name: selectedScreening.patientName || 'Patient',
+  const patient = getPatientById(selectedScreening?.patientId) || {
+    name: selectedScreening?.patientName || 'Patient',
     age: 52,
     gender: 'Female',
     diabetesDuration: 8,
@@ -274,37 +276,45 @@ export const DoctorDashboardPage = () => {
           </div>
 
           <div className="space-y-2.5 max-h-[660px] overflow-y-auto pr-1">
-            {screenings.map((s) => {
-              const isSelected = s.id === selectedScreening.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setSelectedScreeningId(s.id)}
-                  className={`w-full text-left p-3.5 rounded-2xl border transition-all ${
-                    isSelected
-                      ? 'bg-teal-50/80 border-teal-500 shadow-sm ring-2 ring-teal-500/20'
-                      : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-bold text-slate-900">{s.patientName}</p>
-                    <UrgencyBadge urgency={s.referralUrgency} />
-                  </div>
-                  <div className="flex items-center justify-between mt-2 text-[11px] text-slate-500">
-                    <span>{s.village}</span>
-                    <SeverityBadge severity={s.overallSeverity} size="sm" />
-                  </div>
-                  <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-slate-200/60 text-[10px]">
-                    <span className="text-slate-400 font-mono">{s.id}</span>
-                    <DoctorReviewStatusBadge
-                      status={s.id === selectedScreening.id && reviewState ? reviewState.review_status : s.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW'}
-                      size="sm"
-                    />
-                  </div>
-                </button>
-              );
-            })}
+            {screenings.length === 0 ? (
+              <div className="p-6 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200 space-y-2">
+                <Inbox className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-xs font-bold text-slate-700">No screenings are currently waiting for review.</p>
+                <p className="text-[10px] text-slate-400">All screenings from rural camps have been processed.</p>
+              </div>
+            ) : (
+              screenings.map((s) => {
+                const isSelected = s.id === selectedScreening.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSelectedScreeningId(s.id)}
+                    className={`w-full text-left p-3.5 rounded-2xl border transition-all ${
+                      isSelected
+                        ? 'bg-teal-50/80 border-teal-500 shadow-sm ring-2 ring-teal-500/20'
+                        : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-bold text-slate-900">{s.patientName}</p>
+                      <UrgencyBadge urgency={s.referralUrgency} />
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-[11px] text-slate-500">
+                      <span>{s.village}</span>
+                      <SeverityBadge severity={s.overallSeverity} size="sm" />
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-slate-200/60 text-[10px]">
+                      <span className="text-slate-400 font-mono">{s.id}</span>
+                      <DoctorReviewStatusBadge
+                        status={s.id === selectedScreening.id && reviewState ? reviewState.review_status : s.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW'}
+                        size="sm"
+                      />
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -644,5 +654,13 @@ export const DoctorDashboardPage = () => {
         </div>
       )}
     </div>
+  );
+};
+
+export const DoctorDashboardPage = () => {
+  return (
+    <ErrorBoundary>
+      <DoctorDashboardContent />
+    </ErrorBoundary>
   );
 };

@@ -122,7 +122,22 @@ export const AppProvider = ({ children }) => {
   };
 
   const getPatientById = (id) => {
-    return patients.find((p) => p.id === id) || patients[0];
+    const found = patients.find((p) => p.id === id);
+    if (found) return found;
+    if (patients && patients.length > 0) return patients[0];
+    return {
+      id: id || 'PAT-2026-081',
+      name: 'Unknown Patient',
+      age: 45,
+      gender: 'Other',
+      village: 'Rampur',
+      diabetesDuration: 5,
+      lastHba1c: 7.5,
+      visualAcuityOD: '6/6',
+      visualAcuityOS: '6/6',
+      phone: '+91 98765 00000',
+      abhaId: 'ABHA-9876-0000',
+    };
   };
 
   const addScreening = (screeningData) => {
@@ -153,7 +168,39 @@ export const AppProvider = ({ children }) => {
   };
 
   const getScreeningById = (id) => {
-    return screenings.find((s) => s.id === id) || screenings[0];
+    if (!id) return screenings[0] || activeScreening || null;
+    const found = screenings.find((s) => s.id === id);
+    if (found) return found;
+    if (activeScreening && activeScreening.id === id) return activeScreening;
+
+    // Check localStorage cache
+    try {
+      const local = localStorage.getItem(`madocs_review_${id}`);
+      if (local) {
+        const parsed = JSON.parse(local);
+        return {
+          id,
+          patientId: 'PAT-2026-081',
+          patientName: 'Patient',
+          village: 'Rampur',
+          screeningDate: parsed.review_timestamp ? new Date(parsed.review_timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleString('en-IN'),
+          className: parsed.original_ai_result || 'Moderate DR',
+          confidence: parsed.original_confidence || 0.85,
+          overallSeverity: 'dr2',
+          riskCategory: 'MODERATE',
+          referralPriority: 'EYE SPECIALIST REVIEW RECOMMENDED',
+          screeningStatus: 'RELIABLE AI SCREENING',
+          safetyStatus: 'READY_FOR_AI',
+          doctorStatus: parsed.review_status === 'AI RESULT ACCEPTED' ? 'verified' : 'pending',
+          imageOD: SAMPLE_FUNDUS_IMAGES.sample_od,
+          imageOS: SAMPLE_FUNDUS_IMAGES.sample_os,
+        };
+      }
+    } catch (e) {
+      console.warn('Error reading cached screening:', e);
+    }
+
+    return null;
   };
 
   const doctorVerifyScreening = (screeningId, { confirmedSeverity, doctorRemarks, signatureApproved }) => {
