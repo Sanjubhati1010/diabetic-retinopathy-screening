@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
-import { SeverityBadge, UrgencyBadge } from '../components/common/SeverityBadge';
+import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge } from '../components/common/SeverityBadge';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { MetricCard } from '../components/common/MetricCard';
 import {
@@ -176,7 +176,9 @@ export const DoctorDashboardPage = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <SafetyBadge status={selectedScreening.safetyStatus || 'READY_FOR_AI'} size="sm" />
+              <ScreeningStatusBadge status={selectedScreening.screeningStatus || 'RELIABLE AI SCREENING'} size="sm" />
               <SeverityBadge severity={selectedScreening.overallSeverity} />
             </div>
           </div>

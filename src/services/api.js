@@ -64,6 +64,12 @@ export function getUrgencyFromClass(classIndex) {
 }
 
 /**
+ * Centralized Clinical Confidence Threshold for AI Decision Support
+ * Predictions with confidence below 60% are flagged as LOW CONFIDENCE.
+ */
+export const CONFIDENCE_THRESHOLD = 0.60;
+
+/**
  * Formats decimal confidence (0.0 - 1.0) into a percentage string (e.g. 0.6365 -> 63.65%)
  */
 export function formatConfidence(conf) {
@@ -73,6 +79,28 @@ export function formatConfidence(conf) {
   // If already percentage (e.g. > 1.0)
   const val = conf <= 1 ? conf * 100 : conf;
   return `${val.toFixed(2)}%`;
+}
+
+/**
+ * Evaluates model confidence against the clinical threshold
+ */
+export function evaluateConfidence(conf, threshold = CONFIDENCE_THRESHOLD) {
+  if (conf === null || conf === undefined || isNaN(conf)) {
+    return {
+      isLowConfidence: true,
+      screeningStatus: 'UNABLE TO ASSESS',
+      nextStep: 'AI confidence unavailable. Please recapture fundus image or request specialist review.',
+    };
+  }
+  const numericConf = conf > 1.0 ? conf / 100.0 : Number(conf);
+  const isLow = numericConf < threshold;
+  return {
+    isLowConfidence: isLow,
+    screeningStatus: isLow ? 'LOW CONFIDENCE' : 'RELIABLE AI SCREENING',
+    nextStep: isLow
+      ? 'AI confidence is low. Please capture a clearer image or request specialist review.'
+      : 'Continue to explanation / specialist review.',
+  };
 }
 
 /**

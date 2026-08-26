@@ -77,6 +77,102 @@ export const SeverityBadge = ({ severity, showIcon = true, size = 'md' }) => {
   );
 };
 
+export const SafetyBadge = ({ status = 'READY_FOR_AI', size = 'md' }) => {
+  const { t } = useLanguage();
+  const normalized = (status || '').toUpperCase().trim();
+
+  let config = {
+    label: t('safetyReady') || 'READY FOR AI',
+    bgColor: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    dotColor: 'bg-emerald-500',
+    icon: ShieldCheck,
+  };
+
+  if (normalized.includes('INVALID')) {
+    config = {
+      label: t('safetyInvalid') || 'IMAGE INVALID',
+      bgColor: 'bg-rose-50 text-rose-800 border-rose-200',
+      dotColor: 'bg-rose-500',
+      icon: AlertOctagon,
+    };
+  } else if (normalized.includes('INSUFFICIENT') || normalized.includes('QUALITY')) {
+    config = {
+      label: t('safetyQualityLow') || 'QUALITY INSUFFICIENT',
+      bgColor: 'bg-amber-50 text-amber-800 border-amber-200',
+      dotColor: 'bg-amber-500',
+      icon: AlertTriangle,
+    };
+  } else if (normalized.includes('BLOCKED')) {
+    config = {
+      label: t('safetyBlocked') || 'AI ANALYSIS BLOCKED',
+      bgColor: 'bg-slate-100 text-slate-800 border-slate-300',
+      dotColor: 'bg-slate-500',
+      icon: AlertCircle,
+    };
+  }
+
+  const Icon = config.icon;
+  const sizeClasses = {
+    sm: 'px-2 py-0.5 text-[10px] font-bold',
+    md: 'px-2.5 py-1 text-xs font-bold',
+    lg: 'px-3.5 py-1.5 text-sm font-extrabold',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border shadow-sm ${config.bgColor} ${
+        sizeClasses[size] || sizeClasses.md
+      }`}
+    >
+      <Icon className={size === 'lg' ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+      <span>{config.label}</span>
+    </span>
+  );
+};
+
+export const ScreeningStatusBadge = ({ status = 'RELIABLE AI SCREENING', size = 'md' }) => {
+  const { t } = useLanguage();
+  const normalized = (status || '').toUpperCase().trim();
+
+  let config = {
+    label: t('statusReliable') || 'Reliable AI Screening',
+    bgColor: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+    icon: ShieldCheck,
+  };
+
+  if (normalized.includes('LOW')) {
+    config = {
+      label: t('statusLowConfidence') || 'Low Confidence',
+      bgColor: 'bg-amber-50 text-amber-800 border-amber-300',
+      icon: AlertTriangle,
+    };
+  } else if (normalized.includes('UNABLE') || normalized.includes('ASSESS') || normalized.includes('RECAPTURE')) {
+    config = {
+      label: t('statusUnableToAssess') || 'Unable to Assess',
+      bgColor: 'bg-rose-50 text-rose-800 border-rose-300',
+      icon: AlertOctagon,
+    };
+  }
+
+  const Icon = config.icon;
+  const sizeClasses = {
+    sm: 'px-2.5 py-0.5 text-xs font-bold',
+    md: 'px-3 py-1 text-xs font-bold',
+    lg: 'px-4 py-1.5 text-sm font-extrabold',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border shadow-sm ${config.bgColor} ${
+        sizeClasses[size] || sizeClasses.md
+      }`}
+    >
+      <Icon className={size === 'lg' ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+      <span>{config.label}</span>
+    </span>
+  );
+};
+
 export const UrgencyBadge = ({ urgency }) => {
   const { t } = useLanguage();
 

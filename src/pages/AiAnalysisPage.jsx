@@ -244,6 +244,17 @@ export const AiAnalysisPage = () => {
       overallSeverity: overallSeverity,
       confidence: primaryRes?.confidence ?? 0,
       probabilities: primaryRes?.probabilities || null,
+      safetyStatusOD: odRes?.safety_status || (odErrorState ? 'IMAGE_INVALID' : 'READY_FOR_AI'),
+      safetyStatusOS: osRes?.safety_status || (osErrorState ? 'IMAGE_INVALID' : 'READY_FOR_AI'),
+      screeningStatusOD: odRes?.screening_status || (odErrorState ? 'UNABLE TO ASSESS' : 'RELIABLE AI SCREENING'),
+      screeningStatusOS: osRes?.screening_status || (osErrorState ? 'UNABLE TO ASSESS' : 'RELIABLE AI SCREENING'),
+      isLowConfidenceOD: odRes?.is_low_confidence || false,
+      isLowConfidenceOS: osRes?.is_low_confidence || false,
+      safetyStatus: primaryRes?.safety_status || 'READY_FOR_AI',
+      screeningStatus: primaryRes?.screening_status || 'RELIABLE AI SCREENING',
+      isLowConfidence: primaryRes?.is_low_confidence || false,
+      nextStep: primaryRes?.next_step || 'Continue to explanation / specialist review.',
+      confidenceThreshold: primaryRes?.confidence_threshold || 0.60,
       gradCamUrl: getFullResultUrl(primaryRes?.gradcam_url),
       gradCamOD: odRes ? getFullResultUrl(odRes.gradcam_url) : null,
       gradCamOS: osRes ? getFullResultUrl(osRes.gradcam_url) : null,
@@ -255,7 +266,7 @@ export const AiAnalysisPage = () => {
       imageOD: activeScreening.imageOD || SAMPLE_FUNDUS_IMAGES.sample_od,
       imageOS: activeScreening.imageOS || SAMPLE_FUNDUS_IMAGES.sample_os,
       isRealPrediction: true,
-      doctorRemarks: `Bilateral Analysis: OD=${odRes ? `${odRes.class_name} (${formatConfidence(odRes.confidence)})` : (odErrorState ? 'Rejected: Non-Retinal Image' : 'Not Analyzed')}, OS=${osRes ? `${osRes.class_name} (${formatConfidence(osRes.confidence)})` : (osErrorState ? 'Rejected: Non-Retinal Image' : 'Not Analyzed')}. Overall Severity: ${overallSeverity.toUpperCase()}.`,
+      doctorRemarks: `Bilateral Analysis: OD=${odRes ? `${odRes.class_name} (${formatConfidence(odRes.confidence)}) [${odRes.screening_status}]` : (odErrorState ? 'Rejected: Safety Gate Blocked' : 'Not Analyzed')}, OS=${osRes ? `${osRes.class_name} (${formatConfidence(osRes.confidence)}) [${osRes.screening_status}]` : (osErrorState ? 'Rejected: Safety Gate Blocked' : 'Not Analyzed')}. Overall: ${overallSeverity.toUpperCase()}.`,
     });
 
     navigate(`/screenings/${newScr.id}/result`);

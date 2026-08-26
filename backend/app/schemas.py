@@ -14,6 +14,12 @@ class PredictionResponse(BaseModel):
     class_name: str = Field(..., example="Moderate", description="Human-readable ICDR classification name")
     confidence: float = Field(..., ge=0.0, le=1.0, example=0.942, description="Probability score for predicted class")
     probabilities: Dict[str, float] = Field(..., description="Probabilities across all 5 Diabetic Retinopathy classes")
+    safety_status: str = Field(default="READY_FOR_AI", example="READY_FOR_AI", description="Safety Gate status: 'READY_FOR_AI', 'IMAGE_INVALID', 'IMAGE_QUALITY_INSUFFICIENT', 'AI_ANALYSIS_BLOCKED'")
+    screening_status: str = Field(default="RELIABLE AI SCREENING", example="RELIABLE AI SCREENING", description="Final screening status: 'RELIABLE AI SCREENING', 'LOW CONFIDENCE', 'UNABLE TO ASSESS'")
+    confidence_threshold: float = Field(default=0.60, example=0.60, description="Configured clinical confidence threshold")
+    is_low_confidence: bool = Field(default=False, example=False, description="Whether predicted confidence is below the threshold")
+    safety_message: str = Field(default="AI Safety Gate cleared.", description="Clinical explanation of safety decision")
+    next_step: str = Field(default="Continue to explanation / specialist review.", description="Actionable next step for healthcare worker")
     inference_time: float = Field(..., example=0.045, description="Model inference duration in seconds")
 
 
@@ -22,6 +28,10 @@ class ExplainResponse(BaseModel):
     class_name: str = Field(..., example="Moderate", description="Classification name")
     gradcam_url: str = Field(..., example="/results/e9c12a8f_gradcam.jpg", description="URL path to the generated Grad-CAM heatmap visualization")
     explanation: str = Field(..., description="Explainability clinical interpretation guide")
+    safety_status: str = Field(default="READY_FOR_AI", example="READY_FOR_AI", description="Safety Gate status")
+    screening_status: str = Field(default="RELIABLE AI SCREENING", example="RELIABLE AI SCREENING", description="Final screening status")
+    is_low_confidence: bool = Field(default=False, example=False, description="Whether predicted confidence is below the threshold")
+    next_step: str = Field(default="Continue to explanation / specialist review.", description="Actionable next step")
     inference_time: float = Field(..., example=0.082, description="Grad-CAM computation duration in seconds")
 
 
@@ -31,6 +41,12 @@ class ScreeningAnalysisResponse(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0, example=0.942, description="Probability score for predicted class")
     probabilities: Dict[str, float] = Field(..., description="Probabilities across all 5 classes")
     gradcam_url: str = Field(..., example="/results/e9c12a8f_gradcam.jpg", description="URL path to the generated Grad-CAM heatmap visualization")
+    safety_status: str = Field(default="READY_FOR_AI", example="READY_FOR_AI", description="Safety Gate status: 'READY_FOR_AI', 'IMAGE_INVALID', 'IMAGE_QUALITY_INSUFFICIENT', 'AI_ANALYSIS_BLOCKED'")
+    screening_status: str = Field(default="RELIABLE AI SCREENING", example="RELIABLE AI SCREENING", description="Final screening status: 'RELIABLE AI SCREENING', 'LOW CONFIDENCE', 'UNABLE TO ASSESS'")
+    confidence_threshold: float = Field(default=0.60, example=0.60, description="Configured clinical confidence threshold")
+    is_low_confidence: bool = Field(default=False, example=False, description="Whether predicted confidence is below the threshold")
+    safety_message: str = Field(default="AI Safety Gate cleared.", description="Clinical explanation of safety decision")
+    next_step: str = Field(default="Continue to explanation / specialist review.", description="Actionable next step for healthcare worker")
     explanation: str = Field(
         default="Highlighted regions indicate image areas that contributed to the model's prediction. This visualization supports professional review and does not constitute a medical diagnosis.",
         description="Explainability guidance"

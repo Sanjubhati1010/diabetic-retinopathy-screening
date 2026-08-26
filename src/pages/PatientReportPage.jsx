@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
-import { SeverityBadge, UrgencyBadge } from '../components/common/SeverityBadge';
+import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge } from '../components/common/SeverityBadge';
 import {
   Printer,
   Share2,
@@ -169,9 +169,11 @@ export const PatientReportPage = () => {
             <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
               Explainable AI Diagnostic Assessment
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {screening.isRealPrediction || screening.confidence !== null ? (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <SafetyBadge status={screening.safetyStatus || 'READY_FOR_AI'} size="sm" />
+                  <ScreeningStatusBadge status={screening.screeningStatus || 'RELIABLE AI SCREENING'} size="sm" />
                   <SeverityBadge severity={screening.overallSeverity} size="sm" />
                   <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                     Confidence: {(screening.confidence <= 1 ? screening.confidence * 100 : screening.confidence).toFixed(2)}%

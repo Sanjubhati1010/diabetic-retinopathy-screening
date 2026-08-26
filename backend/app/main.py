@@ -227,13 +227,13 @@ async def predict_retinopathy(file: UploadFile = File(...)):
         logger.warning(f"Prediction requested while model not loaded: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Trained model is not available."
+            detail="AI screening is temporarily unavailable. Please try again."
         )
     except Exception as e:
         logger.error(f"Inference execution failed: {e}", exc_info=False)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during model inference."
+            detail="AI screening is temporarily unavailable. Please try again."
         )
 
 
@@ -248,10 +248,11 @@ async def predict_retinopathy(file: UploadFile = File(...)):
     tags=["Explainability"],
     summary="Generate Grad-CAM Visual Explainability Heatmap",
 )
-async def explain_retinopathy(file: UploadFile = File(...)):
+async def explain_prediction(
+    file: UploadFile = File(...),
+):
     """
-    Computes activation gradients over the final convolutional layer of EfficientNet-B0
-    and saves the Grad-CAM heatmap visualization.
+    Computes a Grad-CAM localization heatmap for the input fundus scan.
     """
     image_bytes = await validate_and_read_image(file)
 
@@ -260,22 +261,22 @@ async def explain_retinopathy(file: UploadFile = File(...)):
         return ExplainResponse(**result)
     except ValueError as e:
         error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
-        logger.warning(f"Validation rejected image: {error_msg}")
+        logger.warning(f"Validation rejected image during explain: {error_msg}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
     except RuntimeError as e:
-        logger.warning(f"Grad-CAM requested while model not loaded: {e}")
+        logger.warning(f"Explain requested while model not loaded: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Trained model is not available."
+            detail="AI screening is temporarily unavailable. Please try again."
         )
     except Exception as e:
         logger.error(f"Grad-CAM generation failed: {e}", exc_info=False)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while generating the Grad-CAM visualization."
+            detail="AI screening is temporarily unavailable. Please try again."
         )
 
 
@@ -285,18 +286,21 @@ async def explain_retinopathy(file: UploadFile = File(...)):
     responses={
         400: {"model": ErrorResponse, "description": "Invalid image or format error"},
         503: {"model": ErrorResponse, "description": "Trained model is not available"},
-        500: {"model": ErrorResponse, "description": "Screening analysis failure"},
+        500: {"model": ErrorResponse, "description": "Analysis pipeline failure"},
     },
-    tags=["Screening Pipeline"],
-    summary="Full End-to-End Retinal Screening Analysis (Prediction + Grad-CAM)",
+    tags=["Screening"],
+    summary="Complete Retinal Screening: AI Prediction + Explainable Grad-CAM",
 )
-async def analyze_screening(file: UploadFile = File(...)):
+async def analyze_screening(
+    file: UploadFile = File(...),
+):
     """
-    Performs complete end-to-end retinal image analysis:
-    - Preprocessing & Retinal Quality Gate
-    - Classification & Probabilities
-    - Grad-CAM Heatmap Generation
-    - Clinical Interpretation Guidelines
+    Combined Phase 2 Screening Pipeline:
+    - Pre-inference validation & quality assessment
+    - AI Safety Gate check
+    - EfficientNet-B0 inference & confidence check
+    - Grad-CAM heatmap visualization
+    - Clinical disclaimer & triage guidance
     """
     image_bytes = await validate_and_read_image(file)
 
@@ -305,22 +309,20 @@ async def analyze_screening(file: UploadFile = File(...)):
         return ScreeningAnalysisResponse(**result)
     except ValueError as e:
         error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
-        logger.warning(f"Validation rejected image: {error_msg}")
+        logger.warning(f"Validation rejected image in screening analysis: {error_msg}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
     except RuntimeError as e:
-        logger.warning(f"Screening analysis requested while model not loaded: {e}")
+        logger.warning(f"Analysis requested while model not loaded: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Trained model is not available."
+            detail="AI screening is temporarily unavailable. Please try again."
         )
     except Exception as e:
-        logger.error(f"Screening analysis failed: {e}", exc_info=False)
+        logger.error(f"Screening analysis pipeline failed: {e}", exc_info=False)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during screening analysis."
+            detail="AI screening is temporarily unavailable. Please try again."
         )
-
-

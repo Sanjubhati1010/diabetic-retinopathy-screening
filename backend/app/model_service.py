@@ -36,8 +36,12 @@ CLINICAL_DISCLAIMER = (
 )
 
 
+# Configurable clinical confidence threshold (default: 0.60 or 60%)
+DEFAULT_CONFIDENCE_THRESHOLD = float(os.getenv("DR_CONFIDENCE_THRESHOLD", "0.60"))
+
+
 class DRModelService:
-    def __init__(self, model_path: Optional[str] = None, results_dir: Optional[str] = None):
+    def __init__(self, model_path: Optional[str] = None, results_dir: Optional[str] = None, confidence_threshold: Optional[float] = None):
         self.base_dir = Path(__file__).resolve().parent.parent
         self.model_path = Path(model_path) if model_path else self.base_dir / "models" / "dr_model.pth"
         self.results_dir = Path(results_dir) if results_dir else self.base_dir / "results"
@@ -46,6 +50,7 @@ class DRModelService:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.class_names = CLASS_NAMES
         self.num_classes = len(self.class_names)
+        self.confidence_threshold = confidence_threshold if confidence_threshold is not None else DEFAULT_CONFIDENCE_THRESHOLD
         
         # Standard clinical preprocessing pipeline
         self.transform = transforms.Compose([
@@ -313,6 +318,58 @@ class DRModelService:
             "message": message,
         }
 
+    def evaluate_safety_gate(self, pil_image: Image.Image) -> Dict:
+        """
+        Phase 2 AI Safety Gate: Evaluates retinal validation and image quality.
+        Determines whether the image is eligible for model inference.
+        
+        Possible states:
+        - READY_FOR_AI
+        - IMAGE_INVALID
+        - IMAGE_QUALITY_INSUFFICIENT
+        - AI_ANALYSIS_BLOCKED
+        """
+        validation_res = self.validate_image_quality(pil_image)
+        
+        if not validation_res["is_valid_file"] or not validation_res["is_retinal"]:
+            return {
+                "safety_status": "IMAGE_INVALID",
+                "can_proceed_to_ai": False,
+                "safety_message": "AI cannot reliably assess this image. Please capture another image or request specialist review.",
+                "screening_status": "UNABLE TO ASSESS",
+                "next_step": "Recapture fundus image or request specialist clinical examination.",
+                "validation_res": validation_res
+            }
+        
+        if not validation_res["can_proceed"] or validation_res["quality_grade"] == "insufficient":
+            return {
+                "safety_status": "IMAGE_QUALITY_INSUFFICIENT",
+                "can_proceed_to_ai": False,
+                "safety_message": "AI cannot reliably assess this image. Please capture another image or request specialist review.",
+                "screening_status": "UNABLE TO ASSESS",
+                "next_step": "Recapture fundus image with proper illumination and focus or request specialist review.",
+                "validation_res": validation_res
+            }
+            
+        if not self.is_loaded:
+            return {
+                "safety_status": "AI_ANALYSIS_BLOCKED",
+                "can_proceed_to_ai": False,
+                "safety_message": "AI screening is temporarily unavailable. Please try again.",
+                "screening_status": "UNABLE TO ASSESS",
+                "next_step": "Please retry after model initialization or refer for direct ophthalmologist exam.",
+                "validation_res": validation_res
+            }
+            
+        return {
+            "safety_status": "READY_FOR_AI",
+            "can_proceed_to_ai": True,
+            "safety_message": "Image cleared AI Safety Gate for deep neural network inference.",
+            "screening_status": "READY_FOR_AI",
+            "next_step": "Proceed to model prediction and confidence evaluation.",
+            "validation_res": validation_res
+        }
+
     def validate_retinal_fundus(self, pil_image: Image.Image) -> Tuple[bool, str]:
         """
         Quality and domain validation gate invoking Phase 1 multi-criteria assessment.
@@ -324,27 +381,30 @@ class DRModelService:
             return False, primary_reason
         return True, res["message"]
 
-    def preprocess_image(self, image_bytes: bytes) -> Tuple[torch.Tensor, Image.Image]:
-        """Validates and preprocesses image bytes into a PyTorch tensor and PIL Image."""
+    def preprocess_image(self, image_bytes: bytes) -> Tuple[torch.Tensor, Image.Image, Dict]:
+        """Validates, applies AI Safety Gate, and preprocesses image bytes into a PyTorch tensor and PIL Image."""
         try:
             pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         except Exception as e:
             raise ValueError(f"Please upload a valid image file. ({e})")
 
-        # Retinal fundus quality & domain validation gate
-        is_valid, reason = self.validate_retinal_fundus(pil_image)
-        if not is_valid:
-            raise ValueError(reason)
+        safety_decision = self.evaluate_safety_gate(pil_image)
+        if not safety_decision["can_proceed_to_ai"]:
+            # If invalid retinal image, raise the exact validation rejection
+            if safety_decision["safety_status"] == "IMAGE_INVALID":
+                raise ValueError("Invalid retinal image. Please upload a valid fundus image.")
+            else:
+                raise ValueError(safety_decision["safety_message"])
 
         tensor = self.transform(pil_image).unsqueeze(0).to(self.device)
-        return tensor, pil_image
+        return tensor, pil_image, safety_decision
 
     def predict(self, image_bytes: bytes) -> Dict:
-        """Runs PyTorch inference on retinal fundus image."""
+        """Runs PyTorch inference on retinal fundus image with Safety Gate & Confidence Check."""
         self.ensure_model_available()
         start_time = time.perf_counter()
 
-        tensor, _ = self.preprocess_image(image_bytes)
+        tensor, _, safety_decision = self.preprocess_image(image_bytes)
 
         with torch.no_grad():
             logits = self.model(tensor)
@@ -360,11 +420,28 @@ class DRModelService:
             for i in range(self.num_classes)
         }
 
+        # Confidence Decision Layer
+        is_low_conf = confidence < self.confidence_threshold
+        if is_low_conf:
+            screening_status = "LOW CONFIDENCE"
+            safety_message = "AI confidence is low. Please capture a clearer image or request specialist review."
+            next_step = "Recapture image or request specialist review."
+        else:
+            screening_status = "RELIABLE AI SCREENING"
+            safety_message = "Model confidence indicates strong classification agreement."
+            next_step = "Continue to explanation / specialist review."
+
         return {
             "predicted_class": predicted_class,
             "class_name": self.class_names[predicted_class],
             "confidence": round(confidence, 4),
             "probabilities": prob_dict,
+            "safety_status": safety_decision["safety_status"],
+            "screening_status": screening_status,
+            "confidence_threshold": self.confidence_threshold,
+            "is_low_confidence": is_low_conf,
+            "safety_message": safety_message,
+            "next_step": next_step,
             "inference_time": inference_time,
         }
 
@@ -376,7 +453,7 @@ class DRModelService:
         self.ensure_model_available()
         start_time = time.perf_counter()
 
-        tensor, pil_image = self.preprocess_image(image_bytes)
+        tensor, pil_image, safety_decision = self.preprocess_image(image_bytes)
         target_layer = self.model.conv_head
 
         # Container for activations and gradients
@@ -399,6 +476,9 @@ class DRModelService:
 
             if target_class is None:
                 target_class = int(torch.argmax(probs).item())
+
+            confidence = float(probs[target_class].item())
+            is_low_conf = confidence < self.confidence_threshold
 
             # Target score for backpropagation
             score = logits[0, target_class]
@@ -444,6 +524,10 @@ class DRModelService:
                 "class_name": self.class_names[target_class],
                 "gradcam_url": f"/results/{unique_filename}",
                 "explanation": EXPLANATION_TEXT,
+                "safety_status": safety_decision["safety_status"],
+                "screening_status": "LOW CONFIDENCE" if is_low_conf else "RELIABLE AI SCREENING",
+                "is_low_confidence": is_low_conf,
+                "next_step": "Recapture image or request specialist review." if is_low_conf else "Continue to explanation / specialist review.",
                 "inference_time": inference_time,
             }
         finally:
@@ -467,6 +551,12 @@ class DRModelService:
             "confidence": pred_res["confidence"],
             "probabilities": pred_res["probabilities"],
             "gradcam_url": cam_res["gradcam_url"],
+            "safety_status": pred_res.get("safety_status", "READY_FOR_AI"),
+            "screening_status": pred_res.get("screening_status", "RELIABLE AI SCREENING"),
+            "confidence_threshold": self.confidence_threshold,
+            "is_low_confidence": pred_res.get("is_low_confidence", False),
+            "safety_message": pred_res.get("safety_message", "AI Safety Gate cleared."),
+            "next_step": pred_res.get("next_step", "Continue to explanation / specialist review."),
             "explanation": EXPLANATION_TEXT,
             "disclaimer": CLINICAL_DISCLAIMER,
             "inference_time": total_time,
