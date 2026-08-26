@@ -1,0 +1,248 @@
+import React, { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useLanguage } from '../context/LanguageContext';
+import { useApp } from '../context/AppContext';
+import { GradCamViewer } from '../components/visualizer/GradCamViewer';
+import {
+  Sparkles,
+  Info,
+  CheckCircle2,
+  ChevronLeft,
+  FileText,
+  AlertTriangle,
+  Eye,
+} from 'lucide-react';
+import { SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
+import {
+  getFullResultUrl,
+  formatConfidence,
+  getSeverityKeyFromClass,
+} from '../services/api';
+
+export const ExplainableAiPage = () => {
+  const { id } = useParams();
+  const { t } = useLanguage();
+  const { getScreeningById, screenings, activeScreening } = useApp();
+  const navigate = useNavigate();
+
+  // Find the target screening
+  const latestRealScreening = screenings.find(
+    (s) => s.isRealPrediction || s.gradCamUrl || s.confidence !== null
+  );
+
+  let screening = id
+    ? getScreeningById(id)
+    : latestRealScreening ||
+      (activeScreening.aiResult || activeScreening.rightEyeAnalysis || activeScreening.leftEyeAnalysis
+        ? {
+            id: activeScreening.id || 'SCR-CURRENT',
+            patientId: activeScreening.patientId || 'PAT-2026-081',
+            patientName: activeScreening.patientName || 'Ramesh Kumar Verma',
+            imageOD: activeScreening.imageOD || SAMPLE_FUNDUS_IMAGES.sample_od,
+            imageOS: activeScreening.imageOS || SAMPLE_FUNDUS_IMAGES.sample_os,
+            rightEyeAnalysis: activeScreening.rightEyeAnalysis || activeScreening.aiResultOD,
+            leftEyeAnalysis: activeScreening.leftEyeAnalysis || activeScreening.aiResultOS,
+            overallSeverity: activeScreening.overallSeverity || 'dr2',
+            className: activeScreening.className || activeScreening.rightEyeAnalysis?.class_name,
+            confidence: activeScreening.confidence || activeScreening.rightEyeAnalysis?.confidence,
+            gradCamOD: activeScreening.rightEyeAnalysis?.gradcam_url
+              ? getFullResultUrl(activeScreening.rightEyeAnalysis.gradcam_url)
+              : null,
+            gradCamOS: activeScreening.leftEyeAnalysis?.gradcam_url
+              ? getFullResultUrl(activeScreening.leftEyeAnalysis.gradcam_url)
+              : null,
+            isRealPrediction: true,
+          }
+        : screenings[0]);
+
+  if (!screening.isRealPrediction && !screening.gradCamUrl && latestRealScreening) {
+    screening = latestRealScreening;
+  }
+
+  const [selectedEye, setSelectedEye] = useState(
+    activeScreening.selectedEyeForAnalysis || 'OD'
+  );
+
+  // Bilateral analysis separation
+  const rightEyeAnalysis =
+    screening.rightEyeAnalysis ||
+    screening.aiResultOD ||
+    (screening.selectedEyeForAnalysis === 'OD' ? screening.aiResult : null);
+
+  const leftEyeAnalysis =
+    screening.leftEyeAnalysis ||
+    screening.aiResultOS ||
+    (screening.selectedEyeForAnalysis === 'OS' ? screening.aiResult : null);
+
+  const isOD = selectedEye === 'OD';
+  const currentAnalysis = isOD ? rightEyeAnalysis : leftEyeAnalysis;
+
+  const currentOriginal = isOD
+    ? screening.imageOD || activeScreening.imageOD || SAMPLE_FUNDUS_IMAGES.sample_od
+    : screening.imageOS || activeScreening.imageOS || SAMPLE_FUNDUS_IMAGES.sample_os;
+
+  const rawGradCamPath = isOD
+    ? rightEyeAnalysis?.gradcam_url || screening.gradCamOD || (screening.selectedEyeForAnalysis === 'OD' ? screening.gradCamUrl : null)
+    : leftEyeAnalysis?.gradcam_url || screening.gradCamOS || (screening.selectedEyeForAnalysis === 'OS' ? screening.gradCamUrl : null);
+
+  const gradcamImageUrl = getFullResultUrl(rawGradCamPath);
+  const isEyeAnalyzed = Boolean(currentAnalysis && gradcamImageUrl);
+  const isReal = Boolean(rightEyeAnalysis || leftEyeAnalysis || screening.isRealPrediction);
+
+  const currentSeverity = isOD
+    ? screening.drSeverityOD || (rightEyeAnalysis ? getSeverityKeyFromClass(rightEyeAnalysis.predicted_class) : 'drUncertain')
+    : screening.drSeverityOS || (leftEyeAnalysis ? getSeverityKeyFromClass(leftEyeAnalysis.predicted_class) : 'drUncertain');
+
+  const currentConfidence = currentAnalysis?.confidence ?? (isEyeAnalyzed ? screening.confidence : null);
+  const currentClassName = currentAnalysis?.class_name || (isEyeAnalyzed ? screening.className : 'Not Analyzed');
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Demo Data Notice */}
+      <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+        <span>
+          DEMO DATA — NOT REAL MEDICAL RESULTS • AI-assisted screening only. This result is not a medical diagnosis and must be reviewed by a qualified healthcare professional.
+        </span>
+      </div>
+
+      {/* Top Navigation & Info */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(`/screenings/${screening.id}/result`)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition mr-1"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-brand-600" />
+              <span>{t('xaiTitle')}</span>
+            </h1>
+          </div>
+          <p className="text-xs text-slate-500 pl-8">
+            {isEyeAnalyzed
+              ? `Visual explainability for ${screening.patientName} (${selectedEye}: ${currentClassName}) • Confidence: ${formatConfidence(currentConfidence)}`
+              : isReal
+              ? `Visual explainability for ${screening.patientName} • ${selectedEye}: Not analyzed yet`
+              : t('xaiSubtitle')}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 pl-8 sm:pl-0">
+          {isEyeAnalyzed ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{selectedEye} Grad-CAM Active</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+              <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+              <span>{selectedEye} Not analyzed yet</span>
+            </span>
+          )}
+          <Link
+            to={`/screenings/${screening.id}/report`}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-glow transition"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Generate Report</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Main Explainable AI Workspace Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Interactive Grad-CAM Canvas & Opacity Control (8 Cols) */}
+        <div className="lg:col-span-8 space-y-4">
+          <GradCamViewer
+            originalImage={currentOriginal}
+            heatmapImage={gradcamImageUrl}
+            confidence={currentConfidence}
+            severity={currentSeverity}
+            selectedEye={selectedEye}
+            onEyeChange={setSelectedEye}
+            showControls={true}
+          />
+        </div>
+
+        {/* Right Column: Clinical Interpretation & Attention Mapping (4 Cols) */}
+        <div className="lg:col-span-4 space-y-4">
+          {/* Healthcare Worker Interpretation Box */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-card space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+              <Info className="w-4 h-4 text-brand-600" />
+              <span>{t('xaiExplanation')} ({selectedEye})</span>
+            </h3>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {currentAnalysis?.explanation ||
+                (isEyeAnalyzed
+                  ? "Highlighted regions indicate image areas that contributed to the model's prediction. This visualization supports professional review and does not constitute a medical diagnosis."
+                  : `Eye ${selectedEye} has not been analyzed by the AI model yet. Upload and analyze a retinal scan for this eye to generate its Grad-CAM visualizer.`)}
+            </p>
+
+            <div className="p-3 rounded-2xl bg-brand-50 border border-brand-200 text-xs text-brand-900 space-y-1">
+              <p className="font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-brand-600" />
+                <span>{selectedEye} Grad-CAM Status</span>
+              </p>
+              <p className="text-[11px] text-brand-700 leading-normal">
+                {isEyeAnalyzed
+                  ? `EfficientNet-B0 final convolutional layer gradients are mapped onto this visualizer for ${selectedEye} (${currentClassName}) verification.`
+                  : `Grad-CAM for ${selectedEye} will appear once its retinal scan is processed.`}
+              </p>
+            </div>
+          </div>
+
+          {/* Anatomical Regions Evaluated */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-card space-y-3">
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              {selectedEye} Anatomical Landmarks Inspection
+            </h4>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="font-semibold text-slate-700">Perifoveal Macula</span>
+                <span
+                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                    isEyeAnalyzed
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {isEyeAnalyzed ? 'Gradients Computed' : 'Pending Scan'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="font-semibold text-slate-700">Vascular Arcades</span>
+                <span
+                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                    isEyeAnalyzed
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {isEyeAnalyzed ? 'Gradients Computed' : 'Pending Scan'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="font-semibold text-slate-700">Optic Disc Perimeter</span>
+                <span
+                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                    isEyeAnalyzed
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {isEyeAnalyzed ? 'Gradients Computed' : 'Pending Scan'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

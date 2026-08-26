@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node dependencies & build
+node_modules
+dist
+dist-ssr
+*.local
+
+# Python virtualenv & caches
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/__pycache__/
+backend/app/__pycache__/
+
+# Backend transient runtime uploads & generated results (preserving folder structure)
+backend/results/*.jpg
+backend/results/*.png
+backend/uploads/*.jpg
+backend/uploads/*.png
+backend/uploads/*.jpeg
+!backend/results/.gitkeep
+!backend/uploads/.gitkeep
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
