@@ -134,19 +134,37 @@ export const translations = {
     undilated: "Non-Mydriatic (Undilated)",
     dilated: "Tropicamide Dilated",
     
-    // Retinal Image Upload
+    // Retinal Image Upload & Phase 1 Validation
     uploadTitle: "Retinal Fundus Image Upload",
     uploadSubtitle: "Capture or upload high-clarity macula and optic disc centered fundus scans",
     rightEyeOD: "Right Eye (OD - Oculus Dexter)",
     leftEyeOS: "Left Eye (OS - Oculus Sinister)",
     dragDropText: "Drag & drop fundus image or click to browse",
-    supportedFormats: "Supported: JPEG, PNG, DICOM (Max 15MB)",
-    btnUseSampleFundus: "Load Sample Test Scan",
+    supportedFormats: "Supported: JPEG, PNG (Max 15MB)",
+    btnUseSampleFundus: "Load Sample Test Scans",
     qualityCheck: "Image Quality Verification",
     checkIllumination: "Illumination & Contrast Adequate",
     checkFocus: "Retinal Vessels In Sharp Focus",
     checkArtifacts: "No Eyelash / Cataract Obstruction",
-    btnProceedToAi: "Proceed to AI Pipeline Interface",
+    btnProceedToAi: "Proceed to AI Analysis",
+    
+    // Phase 1 Screening Statuses & Quality Indicators
+    statusPending: "Image Pending",
+    statusValidating: "Validating Image...",
+    statusValid: "Image Valid",
+    statusQualityWarning: "Image Quality Warning",
+    statusRecapture: "Image Re-capture Required",
+    statusReady: "Ready for Screening",
+    qualityMetricsTitle: "Clinical Quality Assessment",
+    sharpnessLabel: "Focus / Sharpness",
+    brightnessLabel: "Illumination Score",
+    coverageLabel: "Visible Retinal Area",
+    resolutionLabel: "Resolution",
+    btnProceedBothEyes: "Proceed with Both Eyes (OD & OS)",
+    btnProceedODEye: "Proceed with Right Eye (OD Only)",
+    btnProceedOSEye: "Proceed with Left Eye (OS Only)",
+    btnReupload: "Upload New Image",
+    recaptureNote: "Please capture or upload a clearer fundus photograph.",
     
     // AI Analysis Pipeline
     analysisTitle: "AI Pipeline Ready for Backend Integration",
@@ -425,19 +443,37 @@ export const translations = {
     undilated: "बिना पुतली फैलाए (Non-Mydriatic)",
     dilated: "ड्रॉप्स से पुतली फैलाकर (Dilated)",
     
-    // Retinal Image Upload
+    // Retinal Image Upload & Phase 1 Validation
     uploadTitle: "रेटिना (फंडस) फोटो अपलोड",
     uploadSubtitle: "मैकुला और ऑप्टिक डिस्क पर केंद्रित स्पष्ट रेटिना चित्र अपलोड करें",
     rightEyeOD: "दाहिनी आंख (OD - Oculus Dexter)",
     leftEyeOS: "बाईं आंख (OS - Oculus Sinister)",
     dragDropText: "फोटो यहां खींच कर लाएं या चयन करने हेतु क्लिक करें",
-    supportedFormats: "स्वीकार्य: JPEG, PNG, DICOM (अधिकतम 15MB)",
+    supportedFormats: "स्वीकार्य: JPEG, PNG (अधिकतम 15MB)",
     btnUseSampleFundus: "नमूना टेस्ट स्कैन लोड करें",
     qualityCheck: "फोटो गुणवत्ता जांच",
     checkIllumination: "रोशनी और चमक पर्याप्त है",
     checkFocus: "रक्त वाहिकाएं स्पष्ट फोकस में हैं",
     checkArtifacts: "पलक या मोतियाबिंद की कोई रुकावट नहीं",
-    btnProceedToAi: "एआई पाइपलाइन इंटरफेस पर आगे बढ़ें",
+    btnProceedToAi: "एआई विश्लेषण पर आगे बढ़ें",
+    
+    // Phase 1 Screening Statuses & Quality Indicators
+    statusPending: "छवि प्रतीक्षारत",
+    statusValidating: "छवि सत्यापन जारी...",
+    statusValid: "छवि मान्य",
+    statusQualityWarning: "छवि गुणवत्ता चेतावनी",
+    statusRecapture: "पुनः छवि कैप्चर आवश्यक",
+    statusReady: "स्क्रीनिंग हेतु तैयार",
+    qualityMetricsTitle: "नैदानिक गुणवत्ता मूल्यांकन",
+    sharpnessLabel: "फोकस / तीक्ष्णता",
+    brightnessLabel: "प्रकाश व्यवस्था",
+    coverageLabel: "दृश्यमान रेटिना क्षेत्र",
+    resolutionLabel: "रिज़ॉल्यूशन",
+    btnProceedBothEyes: "दोनों आँखों की जाँच करें (दाहिनी एवं बायीं)",
+    btnProceedODEye: "दाहिनी आँख की जाँच करें (केवल OD)",
+    btnProceedOSEye: "बायीं आँख की जाँच करें (केवल OS)",
+    btnReupload: "नई छवि अपलोड करें",
+    recaptureNote: "कृपया एक स्पष्ट रेटिनल फंडस छवि पुनः कैप्चर या अपलोड करें।",
     
     // AI Analysis Pipeline
     analysisTitle: "एआई पाइपलाइन बैकएंड इंटीग्रेशन हेतु तैयार",

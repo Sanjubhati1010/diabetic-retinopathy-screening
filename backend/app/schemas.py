@@ -42,5 +42,23 @@ class ScreeningAnalysisResponse(BaseModel):
     inference_time: float = Field(..., example=0.095, description="Total pipeline execution duration in seconds")
 
 
+class ImageQualityMetrics(BaseModel):
+    resolution: str = Field(..., example="512x512", description="Image resolution width x height")
+    sharpness_score: float = Field(..., example=120.5, description="Laplacian variance sharpness metric")
+    brightness_score: float = Field(..., example=85.2, description="Mean illuminated pixel brightness")
+    retinal_coverage: float = Field(..., example=0.82, description="Estimated percentage of visible retinal area")
+
+
+class ImageValidationResponse(BaseModel):
+    is_valid_file: bool = Field(..., example=True, description="Whether the file is a valid image")
+    is_retinal: bool = Field(..., example=True, description="Whether the image is verified as a retinal fundus scan")
+    quality_grade: str = Field(..., example="good", description="Quality grade: 'good', 'warning', or 'insufficient'")
+    screening_status: str = Field(..., example="Ready for Screening", description="Screening status: 'Ready for Screening', 'Image Quality Warning', or 'Image Re-capture Required'")
+    can_proceed: bool = Field(..., example=True, description="Whether the image meets clinical criteria for model inference")
+    reasons: list[str] = Field(default_factory=list, description="User-friendly clinical explanations for quality or validation issues")
+    metrics: ImageQualityMetrics = Field(..., description="Computed image quality and domain metrics")
+    message: str = Field(..., example="Image validated successfully and ready for screening.", description="Overall summary message")
+
+
 class ErrorResponse(BaseModel):
     detail: str = Field(..., example="Trained model is not available.", description="Error message details")

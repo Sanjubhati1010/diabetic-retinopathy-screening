@@ -83,31 +83,46 @@ export const AiAnalysisPage = () => {
     }, 450);
 
     try {
-      // 1. Analyze Right Eye (OD) independently
+      // Determine which eyes are scheduled for analysis
+      const shouldAnalyzeOD =
+        activeScreening.screeningTargetMode === 'OD' ||
+        activeScreening.screeningTargetMode === 'BOTH' ||
+        (!activeScreening.screeningTargetMode && imageSourceOD);
+
+      const shouldAnalyzeOS =
+        activeScreening.screeningTargetMode === 'OS' ||
+        activeScreening.screeningTargetMode === 'BOTH' ||
+        (!activeScreening.screeningTargetMode && imageSourceOS);
+
+      // 1. Analyze Right Eye (OD) if selected
       let odRes = null;
       let odErr = null;
-      try {
-        odRes = await analyzeRetinalImage(imageSourceOD, 'od_retinal_scan.png');
-      } catch (err) {
-        console.error('OD Analysis failed:', err);
-        odErr = err;
+      if (shouldAnalyzeOD && imageSourceOD) {
+        try {
+          odRes = await analyzeRetinalImage(imageSourceOD, 'od_retinal_scan.png');
+        } catch (err) {
+          console.error('OD Analysis failed:', err);
+          odErr = err;
+        }
       }
 
-      // 2. Analyze Left Eye (OS) independently
+      // 2. Analyze Left Eye (OS) if selected
       let osRes = null;
       let osErr = null;
-      try {
-        osRes = await analyzeRetinalImage(imageSourceOS, 'os_retinal_scan.png');
-      } catch (err) {
-        console.error('OS Analysis failed:', err);
-        osErr = err;
+      if (shouldAnalyzeOS && imageSourceOS) {
+        try {
+          osRes = await analyzeRetinalImage(imageSourceOS, 'os_retinal_scan.png');
+        } catch (err) {
+          console.error('OS Analysis failed:', err);
+          osErr = err;
+        }
       }
 
       clearInterval(progressTimer);
       setOdErrorState(odErr);
       setOsErrorState(osErr);
 
-      // If both eyes failed, raise critical validation/network error
+      // If all scheduled eyes failed, raise clear error
       if (!odRes && !osRes) {
         const primaryError = odErr || osErr;
         const isValidationError =
@@ -115,10 +130,10 @@ export const AiAnalysisPage = () => {
           (primaryError?.message && primaryError.message.toLowerCase().includes('invalid retinal'));
 
         const message = isValidationError
-          ? 'Please upload a valid retinal fundus photograph.'
+          ? 'Invalid retinal image. Please upload a valid fundus image.'
           : primaryError?.isConnectionError || primaryError?.status === 0
           ? 'Unable to connect to AI screening service.'
-          : primaryError?.message || 'AI analysis failed for both eyes. Please try again.';
+          : primaryError?.message || 'AI analysis failed. Please try again.';
 
         setIsProcessing(false);
         setError({

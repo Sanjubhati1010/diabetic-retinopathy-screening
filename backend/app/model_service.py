@@ -128,36 +128,95 @@ class DRModelService:
             if not self.is_loaded or self.model is None:
                 raise RuntimeError("Trained model is not available or failed strict checkpoint loading.")
 
-    def validate_retinal_fundus(self, pil_image: Image.Image) -> Tuple[bool, str]:
+    def validate_image_quality(self, pil_image: Image.Image) -> Dict:
         """
-        Quality and domain validation gate to confirm the input image is a retinal fundus photograph
-        before submitting to deep neural network classification.
+        Phase 1 Comprehensive Multi-Criteria Quality & Retinal Domain Validation Gate.
         
         Evaluates:
-        1. Dimension and minimum contrast threshold.
-        2. Spectral red-dominance (melanin + hemoglobin vascular signature).
-        3. Blue light absorption profile (depleted blue reflectance in retina).
-        4. HSV retinal hue clustering (red, orange, amber spectrum).
+        1. Resolution: Minimum dimensions (>= 224x224).
+        2. Contrast: Non-solid, non-corrupt byte structure.
+        3. Sharpness / Focus: Laplacian variance blur estimation.
+        4. Illumination: Underexposed (too dark) vs. overexposed (too bright/glare).
+        5. Retinal Coverage: Sufficient visible non-background retinal disc/macula area.
+        6. Retinal Spectral Domain: Hemoglobin red spectral dominance & depleted blue absorption.
+        7. HSV Hue Clustering: Natural retinal red/amber/orange cluster distribution.
         """
         img_rgb = np.array(pil_image.convert("RGB"))
-        h, w, c = img_rgb.shape
+        h, w, _ = img_rgb.shape
+        resolution_str = f"{w}x{h}"
 
-        if h < 64 or w < 64:
-            return False, "Image resolution is too low for clinical evaluation."
+        reasons = []
+        is_retinal = True
+        quality_grade = "good"
+        screening_status = "Ready for Screening"
+        can_proceed = True
 
-        # 1. Check for blank / solid / corrupt images
+        # 1. Minimum Resolution Check (< 224x224)
+        if h < 224 or w < 224:
+            return {
+                "is_valid_file": True,
+                "is_retinal": False,
+                "quality_grade": "insufficient",
+                "screening_status": "Image Re-capture Required",
+                "can_proceed": False,
+                "reasons": [
+                    "Image resolution is too low. Minimum resolution is 224x224 pixels.",
+                    "Image quality is insufficient. Please capture or upload a clearer fundus image."
+                ],
+                "metrics": {
+                    "resolution": resolution_str,
+                    "sharpness_score": 0.0,
+                    "brightness_score": 0.0,
+                    "retinal_coverage": 0.0,
+                },
+                "message": "Image resolution is too low. Please upload a higher resolution fundus photograph."
+            }
+
+        # 2. Insufficient contrast / solid color / extreme darkness check
         std_rgb = float(np.std(img_rgb))
+        mean_overall = float(np.mean(img_rgb))
         if std_rgb < 8.0:
-            return False, "Invalid retinal image: insufficient contrast or solid color."
+            if mean_overall < 22.0:
+                contrast_reasons = [
+                    "Image quality is insufficient. Please capture or upload a clearer fundus image.",
+                    "Image is too dark."
+                ]
+                msg = "Image is too dark. Please capture or upload a clearer fundus image."
+            else:
+                contrast_reasons = ["Invalid retinal image: insufficient contrast or solid color."]
+                msg = "Invalid retinal image. Please upload a valid fundus image."
 
-        # 2. Extract illuminated / non-black pixels (ignoring fundus camera dark circular borders)
+            return {
+                "is_valid_file": True,
+                "is_retinal": False,
+                "quality_grade": "insufficient",
+                "screening_status": "Image Re-capture Required",
+                "can_proceed": False,
+                "reasons": contrast_reasons,
+                "metrics": {
+                    "resolution": resolution_str,
+                    "sharpness_score": 0.0,
+                    "brightness_score": mean_overall,
+                    "retinal_coverage": 0.0,
+                },
+                "message": msg
+            }
+
+        # 3. Extract illuminated / non-black retinal region (ignoring camera circular border)
         gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
-        mask_illuminated = gray > 15
-        illuminated_pixels = img_rgb[mask_illuminated]
+        mask_illuminated = gray > 18
+        illuminated_count = int(np.sum(mask_illuminated))
+        total_pixels = h * w
+        retinal_coverage = round(float(illuminated_count / total_pixels), 3)
 
-        if len(illuminated_pixels) < (0.15 * h * w):
+        if illuminated_count > (0.05 * total_pixels):
+            illuminated_pixels = img_rgb[mask_illuminated]
+            illuminated_gray = gray[mask_illuminated]
+        else:
             illuminated_pixels = img_rgb.reshape(-1, 3)
+            illuminated_gray = gray.reshape(-1)
 
+        mean_brightness = round(float(np.mean(illuminated_gray)), 2)
         r = illuminated_pixels[:, 0].astype(float)
         g = illuminated_pixels[:, 1].astype(float)
         b = illuminated_pixels[:, 2].astype(float)
@@ -166,51 +225,116 @@ class DRModelService:
         mean_g = float(np.mean(g))
         mean_b = float(np.mean(b))
 
-        # 3. Spectral Red Dominance Check:
-        if mean_r < 25.0:
-            return False, "Invalid retinal image: underexposed or completely dark."
+        # 4. Sharpness & Focus Assessment (Laplacian Variance on gray & green channels)
+        # Fundus pathology is clearest on the green channel (vascular absorption)
+        green_channel = img_rgb[:, :, 1]
+        laplacian_var = round(float(cv2.Laplacian(green_channel, cv2.CV_64F).var()), 2)
 
-        if mean_r <= mean_g:
-            return False, "Invalid retinal image. Please upload a valid fundus photograph."
-
-        if mean_r <= mean_b * 1.15:
-            return False, "Invalid retinal image. Please upload a valid fundus photograph."
-
-        # Blue-to-Red ratio check (retina absorbs blue light)
+        # 5. Domain Retinal Spectrum & Color Signature Check
+        is_spectral_red = (mean_r > mean_g) and (mean_r > mean_b * 1.08)
         blue_red_ratio = mean_b / (mean_r + 1e-5)
-        if blue_red_ratio > 0.65:
-            return False, "Invalid retinal image. Please upload a valid fundus photograph."
 
-        # 4. HSV Retinal Hue Clustering:
+        # HSV Hue Clustering (reds: 0-34 & 155-180)
         hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
-        if np.sum(mask_illuminated) > (0.15 * h * w):
-            hsv_illuminated = hsv[mask_illuminated]
-        else:
-            hsv_illuminated = hsv.reshape(-1, 3)
-
+        hsv_illuminated = hsv[mask_illuminated] if illuminated_count > 100 else hsv.reshape(-1, 3)
         hues = hsv_illuminated[:, 0]
         sats = hsv_illuminated[:, 1]
+        is_retinal_hue = ((hues <= 34) | (hues >= 155)) & (sats >= 15)
+        retinal_hue_ratio = round(float(np.mean(is_retinal_hue)), 3)
 
-        # Retinal red-orange-amber hues with moderate saturation
-        is_retinal_hue = ((hues <= 34) | (hues >= 160)) & (sats >= 20)
-        retinal_hue_ratio = float(np.mean(is_retinal_hue))
+        # Check: Very Bright / Overexposed / Washed-out
+        overexposed_pixels = np.sum(illuminated_gray > 235) / (len(illuminated_gray) + 1e-5)
+        is_overexposed = mean_brightness > 190.0 or overexposed_pixels > 0.20
+        if is_overexposed:
+            reasons.append("Image is too bright / overexposed.")
 
-        if retinal_hue_ratio < 0.40:
-            return False, "Invalid retinal image. Please upload a valid fundus photograph."
+        # Determine if image is a true retinal fundus photograph
+        if not is_spectral_red or (blue_red_ratio > 0.72 and not is_overexposed) or (retinal_hue_ratio < 0.30 and not is_overexposed):
+            is_retinal = False
+            reasons.append("Invalid retinal image. Please upload a valid fundus image.")
 
-        return True, "Valid retinal fundus photograph verified."
+        # 6. Quality Checks (Illumination, Blur, Coverage)
+        # Check: Very Dark / Underexposed
+        if mean_brightness < 22.0 or mean_r < 25.0:
+            reasons.append("Image is too dark.")
+
+        # Check: Insufficient visible retinal area
+        if retinal_coverage < 0.16 and not is_overexposed:
+            reasons.append("Retinal area is not clearly visible.")
+
+        # Check: Excessive Blur / Poor Focus
+        # A Laplacian variance below 18.0 indicates significant defocus or motion blur
+        if laplacian_var < 18.0 and not is_overexposed:
+            reasons.append("Image appears blurry.")
+        elif laplacian_var < 30.0 and len(reasons) == 0:
+            # Mild blur -> warning only, not fatal
+            quality_grade = "warning"
+            screening_status = "Image Quality Warning"
+            reasons.append("Image focus is slightly soft. Please ensure proper camera stabilization.")
+
+        # 7. Final Classification & Status Aggregation
+        metrics = {
+            "resolution": resolution_str,
+            "sharpness_score": laplacian_var,
+            "brightness_score": mean_brightness,
+            "retinal_coverage": retinal_coverage,
+        }
+
+        if not is_retinal:
+            quality_grade = "insufficient"
+            screening_status = "Image Re-capture Required"
+            can_proceed = False
+            message = "Invalid retinal image. Please upload a valid fundus image."
+        elif any(r in reasons for r in ["Image is too dark.", "Image is too bright / overexposed.", "Retinal area is not clearly visible.", "Image appears blurry."]):
+            quality_grade = "insufficient"
+            screening_status = "Image Re-capture Required"
+            can_proceed = False
+            reasons.insert(0, "Image quality is insufficient. Please capture or upload a clearer fundus image.")
+            message = "Image quality is insufficient. Please capture or upload a clearer fundus image."
+        elif quality_grade == "warning":
+            can_proceed = True
+            screening_status = "Image Quality Warning"
+            message = "Image quality warning detected. Screening can proceed, but a clearer image is recommended."
+        else:
+            quality_grade = "good"
+            screening_status = "Ready for Screening"
+            can_proceed = True
+            reasons = []
+            message = "Image validated successfully and ready for screening."
+
+        return {
+            "is_valid_file": True,
+            "is_retinal": is_retinal,
+            "quality_grade": quality_grade,
+            "screening_status": screening_status,
+            "can_proceed": can_proceed,
+            "reasons": reasons,
+            "metrics": metrics,
+            "message": message,
+        }
+
+    def validate_retinal_fundus(self, pil_image: Image.Image) -> Tuple[bool, str]:
+        """
+        Quality and domain validation gate invoking Phase 1 multi-criteria assessment.
+        Returns (is_valid, reason_message).
+        """
+        res = self.validate_image_quality(pil_image)
+        if not res["can_proceed"]:
+            primary_reason = res["reasons"][0] if res["reasons"] else res["message"]
+            return False, primary_reason
+        return True, res["message"]
 
     def preprocess_image(self, image_bytes: bytes) -> Tuple[torch.Tensor, Image.Image]:
         """Validates and preprocesses image bytes into a PyTorch tensor and PIL Image."""
         try:
             pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         except Exception as e:
-            raise ValueError(f"Invalid image format or corrupted file: {e}")
+            raise ValueError(f"Please upload a valid image file. ({e})")
 
         # Retinal fundus quality & domain validation gate
         is_valid, reason = self.validate_retinal_fundus(pil_image)
         if not is_valid:
-            raise ValueError(f"Invalid retinal image. Please upload a valid fundus photograph. ({reason})")
+            raise ValueError(reason)
 
         tensor = self.transform(pil_image).unsqueeze(0).to(self.device)
         return tensor, pil_image

@@ -15,6 +15,7 @@ from app.schemas import (
     PredictionResponse,
     ExplainResponse,
     ScreeningAnalysisResponse,
+    ImageValidationResponse,
     ErrorResponse,
 )
 from app.model_service import DRModelService
@@ -91,7 +92,7 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     if not file or not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No retinal fundus image file was provided."
+            detail="Please upload a valid image file. No file was provided."
         )
 
     # Check extension
@@ -99,7 +100,7 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file format '{file_ext}'. Allowed formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}."
+            detail="Please upload a valid image file (.jpg, .jpeg, .png)."
         )
 
     # Read and check size
@@ -109,19 +110,19 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
         logger.error(f"Error reading upload file: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not read the uploaded file."
+            detail="Could not read the uploaded image file."
         )
 
     if len(content) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The uploaded image file is empty."
+            detail="Please upload a valid image file. The uploaded file is empty."
         )
 
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File size exceeds the maximum limit of {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB."
+            detail=f"File size exceeds the maximum limit of {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB. Please upload a smaller image file."
         )
 
     # Verify PIL image integrity
@@ -165,6 +166,37 @@ async def health_check():
 
 
 @app.post(
+    "/api/validate-quality",
+    response_model=ImageValidationResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid file format or corrupt image"},
+    },
+    tags=["Validation"],
+    summary="Validate Retinal Fundus & Assess Image Quality",
+)
+async def validate_image(file: UploadFile = File(...)):
+    """
+    Phase 1 Pre-Inference Validation & Quality Assessment Gate:
+    - Verifies file format, integrity & resolution (>= 224x224)
+    - Verifies retinal fundus spectral & hue domain signature
+    - Evaluates sharpness/focus (Laplacian blur score), illumination & visible coverage
+    - Assigns structured screening status ('Ready for Screening', 'Image Quality Warning', or 'Image Re-capture Required')
+    """
+    image_bytes = await validate_and_read_image(file)
+
+    try:
+        pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        result = model_service.validate_image_quality(pil_image)
+        return ImageValidationResponse(**result)
+    except Exception as e:
+        logger.error(f"Image validation gate encountered an error: {e}", exc_info=False)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please upload a valid image file."
+        )
+
+
+@app.post(
     "/api/predict",
     response_model=PredictionResponse,
     responses={
@@ -185,10 +217,11 @@ async def predict_retinopathy(file: UploadFile = File(...)):
         result = model_service.predict(image_bytes)
         return PredictionResponse(**result)
     except ValueError as e:
-        logger.warning(f"Validation rejected image: {e}")
+        error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
+        logger.warning(f"Validation rejected image: {error_msg}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid retinal image. Please upload a valid fundus photograph."
+            detail=error_msg
         )
     except RuntimeError as e:
         logger.warning(f"Prediction requested while model not loaded: {e}")
@@ -226,10 +259,11 @@ async def explain_retinopathy(file: UploadFile = File(...)):
         result = model_service.generate_gradcam(image_bytes)
         return ExplainResponse(**result)
     except ValueError as e:
-        logger.warning(f"Validation rejected image: {e}")
+        error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
+        logger.warning(f"Validation rejected image: {error_msg}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid retinal image. Please upload a valid fundus photograph."
+            detail=error_msg
         )
     except RuntimeError as e:
         logger.warning(f"Grad-CAM requested while model not loaded: {e}")
@@ -270,10 +304,11 @@ async def analyze_screening(file: UploadFile = File(...)):
         result = model_service.analyze_screening(image_bytes)
         return ScreeningAnalysisResponse(**result)
     except ValueError as e:
-        logger.warning(f"Validation rejected image: {e}")
+        error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
+        logger.warning(f"Validation rejected image: {error_msg}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid retinal image. Please upload a valid fundus photograph."
+            detail=error_msg
         )
     except RuntimeError as e:
         logger.warning(f"Screening analysis requested while model not loaded: {e}")
@@ -287,4 +322,5 @@ async def analyze_screening(file: UploadFile = File(...)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred during screening analysis."
         )
+
 

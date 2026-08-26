@@ -15,11 +15,15 @@ def test_model_service_inference():
     service = DRModelService(model_path="models/test_model.pth")
     assert service.is_loaded is True
 
-    # 2. Generate sample fundus image
-    img = Image.new("RGB", (300, 300), color=(160, 40, 10))
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG")
-    jpeg_bytes = buf.getvalue()
+    # 2. Load or generate valid sample fundus image
+    import os
+    sample_path = os.path.join("..", "public", "samples", "eyes.png")
+    if os.path.exists(sample_path):
+        with open(sample_path, "rb") as f:
+            jpeg_bytes = f.read()
+    else:
+        from test_phase1_validation import generate_synthetic_fundus
+        jpeg_bytes, _ = generate_synthetic_fundus()
 
     # 3. Test predict
     pred = service.predict(jpeg_bytes)
@@ -40,7 +44,6 @@ def test_model_service_inference():
     assert analysis["disclaimer"] is not None
 
     # Clean up test model file
-    import os
     if os.path.exists("models/test_model.pth"):
         os.remove("models/test_model.pth")
 
