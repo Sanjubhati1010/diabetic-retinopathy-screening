@@ -253,6 +253,14 @@ export const AiAnalysisPage = () => {
       safetyStatus: primaryRes?.safety_status || 'READY_FOR_AI',
       screeningStatus: primaryRes?.screening_status || 'RELIABLE AI SCREENING',
       isLowConfidence: primaryRes?.is_low_confidence || false,
+      riskCategory: primaryRes?.risk_category || 'MODERATE',
+      referralPriority: primaryRes?.referral_priority || 'EYE SPECIALIST REVIEW RECOMMENDED',
+      riskExplanation: primaryRes?.risk_explanation || 'Features consistent with diabetic retinopathy detected.',
+      referralGuidance: primaryRes?.referral_guidance || 'Eye specialist review is recommended based on the AI-assisted screening result.',
+      riskCategoryOD: odRes?.risk_category || (odErrorState ? 'UNABLE TO ASSESS' : 'MODERATE'),
+      riskCategoryOS: osRes?.risk_category || (osErrorState ? 'UNABLE TO ASSESS' : 'MODERATE'),
+      referralPriorityOD: odRes?.referral_priority || (odErrorState ? 'IMAGE RE-CAPTURE REQUIRED' : 'EYE SPECIALIST REVIEW RECOMMENDED'),
+      referralPriorityOS: osRes?.referral_priority || (osErrorState ? 'IMAGE RE-CAPTURE REQUIRED' : 'EYE SPECIALIST REVIEW RECOMMENDED'),
       nextStep: primaryRes?.next_step || 'Continue to explanation / specialist review.',
       confidenceThreshold: primaryRes?.confidence_threshold || 0.60,
       gradCamUrl: getFullResultUrl(primaryRes?.gradcam_url),
@@ -272,7 +280,7 @@ export const AiAnalysisPage = () => {
       imageOD: activeScreening.imageOD || SAMPLE_FUNDUS_IMAGES.sample_od,
       imageOS: activeScreening.imageOS || SAMPLE_FUNDUS_IMAGES.sample_os,
       isRealPrediction: true,
-      doctorRemarks: `Bilateral Analysis: OD=${odRes ? `${odRes.class_name} (${formatConfidence(odRes.confidence)}) [${odRes.screening_status}]` : (odErrorState ? 'Rejected: Safety Gate Blocked' : 'Not Analyzed')}, OS=${osRes ? `${osRes.class_name} (${formatConfidence(osRes.confidence)}) [${osRes.screening_status}]` : (osErrorState ? 'Rejected: Safety Gate Blocked' : 'Not Analyzed')}. Overall: ${overallSeverity.toUpperCase()}.`,
+      doctorRemarks: `Bilateral Analysis: OD=${odRes ? `${odRes.class_name} (${formatConfidence(odRes.confidence)}) [Risk: ${odRes.risk_category || 'MODERATE'}]` : (odErrorState ? 'Rejected: Safety Gate Blocked' : 'Not Analyzed')}, OS=${osRes ? `${osRes.class_name} (${formatConfidence(osRes.confidence)}) [Risk: ${osRes.risk_category || 'MODERATE'}]` : (osErrorState ? 'Rejected: Safety Gate Blocked' : 'Not Analyzed')}. Overall: ${overallSeverity.toUpperCase()}.`,
     });
 
     navigate(`/screenings/${newScr.id}/result`);

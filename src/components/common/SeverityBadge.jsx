@@ -200,3 +200,107 @@ export const UrgencyBadge = ({ urgency }) => {
       );
   }
 };
+
+export const RiskBadge = ({ risk = 'MODERATE', size = 'md' }) => {
+  const { t } = useLanguage();
+  const normalized = (risk || '').toUpperCase().trim();
+
+  let config = {
+    label: t('riskModerate') || 'MODERATE',
+    bgColor: 'bg-amber-50 text-amber-800 border-amber-200',
+    icon: AlertTriangle,
+  };
+
+  if (normalized === 'LOW') {
+    config = {
+      label: t('riskLow') || 'LOW',
+      bgColor: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+      icon: ShieldCheck,
+    };
+  } else if (normalized === 'HIGH') {
+    config = {
+      label: t('riskHigh') || 'HIGH',
+      bgColor: 'bg-rose-50 text-rose-800 border-rose-200',
+      icon: AlertOctagon,
+    };
+  } else if (normalized.includes('LOW CONFIDENCE') || normalized.includes('REVIEW')) {
+    config = {
+      label: t('riskLowConf') || 'LOW CONFIDENCE / REVIEW REQUIRED',
+      bgColor: 'bg-amber-100 text-amber-900 border-amber-300',
+      icon: AlertTriangle,
+    };
+  } else if (normalized.includes('UNABLE') || normalized.includes('ASSESS')) {
+    config = {
+      label: t('riskUnable') || 'UNABLE TO ASSESS',
+      bgColor: 'bg-slate-100 text-slate-800 border-slate-300',
+      icon: HelpCircle,
+    };
+  }
+
+  const Icon = config.icon;
+  const sizeClasses = {
+    sm: 'px-2.5 py-0.5 text-xs font-bold',
+    md: 'px-3 py-1 text-xs font-bold',
+    lg: 'px-4 py-1.5 text-sm font-extrabold',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border shadow-sm ${config.bgColor} ${
+        sizeClasses[size] || sizeClasses.md
+      }`}
+    >
+      <Icon className={size === 'lg' ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+      <span>{config.label}</span>
+    </span>
+  );
+};
+
+export const ReferralBadge = ({ priority = 'EYE SPECIALIST REVIEW RECOMMENDED', size = 'md' }) => {
+  const { t } = useLanguage();
+  const normalized = (priority || '').toUpperCase().trim();
+
+  let config = {
+    label: t('referralSpecialist') || 'EYE SPECIALIST REVIEW RECOMMENDED',
+    bgColor: 'bg-amber-50 text-amber-800 border-amber-200',
+    icon: AlertTriangle,
+  };
+
+  if (normalized.includes('ROUTINE')) {
+    config = {
+      label: t('referralRoutine') || 'ROUTINE FOLLOW-UP',
+      bgColor: 'bg-blue-50 text-blue-800 border-blue-200',
+      icon: ShieldCheck,
+    };
+  } else if (normalized.includes('PRIORITY')) {
+    config = {
+      label: t('referralPrioritySpecialist') || 'PRIORITY SPECIALIST REVIEW',
+      bgColor: 'bg-rose-50 text-rose-800 border-rose-300 animate-pulse-subtle',
+      icon: AlertOctagon,
+    };
+  } else if (normalized.includes('RECAPTURE') || normalized.includes('RE-CAPTURE')) {
+    config = {
+      label: t('referralRecapture') || 'IMAGE RE-CAPTURE REQUIRED',
+      bgColor: 'bg-orange-50 text-orange-800 border-orange-200',
+      icon: AlertTriangle,
+    };
+  }
+
+  const Icon = config.icon;
+  const sizeClasses = {
+    sm: 'px-2.5 py-0.5 text-xs font-bold',
+    md: 'px-3 py-1 text-xs font-bold',
+    lg: 'px-4 py-1.5 text-sm font-extrabold',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border shadow-sm ${config.bgColor} ${
+        sizeClasses[size] || sizeClasses.md
+      }`}
+    >
+      <Icon className={size === 'lg' ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+      <span>{config.label}</span>
+    </span>
+  );
+};

@@ -18,6 +18,10 @@ class PredictionResponse(BaseModel):
     screening_status: str = Field(default="RELIABLE AI SCREENING", example="RELIABLE AI SCREENING", description="Final screening status: 'RELIABLE AI SCREENING', 'LOW CONFIDENCE', 'UNABLE TO ASSESS'")
     confidence_threshold: float = Field(default=0.60, example=0.60, description="Configured clinical confidence threshold")
     is_low_confidence: bool = Field(default=False, example=False, description="Whether predicted confidence is below the threshold")
+    risk_category: str = Field(default="MODERATE", example="MODERATE", description="Risk category: LOW, MODERATE, HIGH, UNABLE TO ASSESS, LOW CONFIDENCE / REVIEW REQUIRED")
+    referral_priority: str = Field(default="EYE SPECIALIST REVIEW RECOMMENDED", example="EYE SPECIALIST REVIEW RECOMMENDED", description="Referral priority: ROUTINE FOLLOW-UP, EYE SPECIALIST REVIEW RECOMMENDED, PRIORITY SPECIALIST REVIEW, IMAGE RE-CAPTURE REQUIRED")
+    risk_explanation: str = Field(default="Features consistent with diabetic retinopathy detected.", description="Explanation of risk classification")
+    referral_guidance: str = Field(default="Eye specialist review is recommended based on the AI-assisted screening result.", description="Guidance text for healthcare worker")
     safety_message: str = Field(default="AI Safety Gate cleared.", description="Clinical explanation of safety decision")
     next_step: str = Field(default="Continue to explanation / specialist review.", description="Actionable next step for healthcare worker")
     inference_time: float = Field(..., example=0.045, description="Model inference duration in seconds")
@@ -29,6 +33,10 @@ class ExplainResponse(BaseModel):
     gradcam_url: str = Field(..., example="/results/e9c12a8f_gradcam.jpg", description="URL path to the generated Grad-CAM blended overlay")
     heatmap_url: Optional[str] = Field(default=None, example="/results/e9c12a8f_heatmap.jpg", description="URL path to pure Grad-CAM heatmap")
     explainability_available: bool = Field(default=True, example=True, description="Whether explainability map is successfully computed")
+    risk_category: str = Field(default="MODERATE", example="MODERATE", description="Risk category")
+    referral_priority: str = Field(default="EYE SPECIALIST REVIEW RECOMMENDED", example="EYE SPECIALIST REVIEW RECOMMENDED", description="Referral priority")
+    risk_explanation: str = Field(default="Features consistent with diabetic retinopathy detected.", description="Explanation of risk classification")
+    referral_guidance: str = Field(default="Eye specialist review is recommended based on the AI-assisted screening result.", description="Guidance text for healthcare worker")
     explanation: str = Field(..., description="Explainability clinical interpretation guide")
     simple_explanation: str = Field(
         default="The AI model considered the highlighted retinal regions more important for its prediction.",
@@ -57,6 +65,10 @@ class ScreeningAnalysisResponse(BaseModel):
     screening_status: str = Field(default="RELIABLE AI SCREENING", example="RELIABLE AI SCREENING", description="Final screening status: 'RELIABLE AI SCREENING', 'LOW CONFIDENCE', 'UNABLE TO ASSESS'")
     confidence_threshold: float = Field(default=0.60, example=0.60, description="Configured clinical confidence threshold")
     is_low_confidence: bool = Field(default=False, example=False, description="Whether predicted confidence is below the threshold")
+    risk_category: str = Field(default="MODERATE", example="MODERATE", description="Risk category: LOW, MODERATE, HIGH, UNABLE TO ASSESS, LOW CONFIDENCE / REVIEW REQUIRED")
+    referral_priority: str = Field(default="EYE SPECIALIST REVIEW RECOMMENDED", example="EYE SPECIALIST REVIEW RECOMMENDED", description="Referral priority: ROUTINE FOLLOW-UP, EYE SPECIALIST REVIEW RECOMMENDED, PRIORITY SPECIALIST REVIEW, IMAGE RE-CAPTURE REQUIRED")
+    risk_explanation: str = Field(default="Features consistent with diabetic retinopathy detected.", description="Explanation of risk classification")
+    referral_guidance: str = Field(default="Eye specialist review is recommended based on the AI-assisted screening result.", description="Guidance text for healthcare worker")
     safety_message: str = Field(default="AI Safety Gate cleared.", description="Clinical explanation of safety decision")
     next_step: str = Field(default="Continue to explanation / specialist review.", description="Actionable next step for healthcare worker")
     explanation: str = Field(

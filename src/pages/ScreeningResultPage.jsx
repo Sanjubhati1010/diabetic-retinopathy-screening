@@ -2,7 +2,14 @@ import React, { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
-import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge } from '../components/common/SeverityBadge';
+import {
+  SeverityBadge,
+  UrgencyBadge,
+  SafetyBadge,
+  ScreeningStatusBadge,
+  RiskBadge,
+  ReferralBadge,
+} from '../components/common/SeverityBadge';
 import { BiomarkerTags } from '../components/visualizer/BiomarkerTags';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { Modal } from '../components/common/Modal';
@@ -28,8 +35,17 @@ import {
   HelpCircle,
   ChevronDown,
   Layers,
+  Activity,
+  Award,
 } from 'lucide-react';
-import { formatConfidence, getSeverityKeyFromClass, CONFIDENCE_THRESHOLD, evaluateConfidence } from '../services/api';
+import {
+  formatConfidence,
+  getSeverityKeyFromClass,
+  CONFIDENCE_THRESHOLD,
+  evaluateConfidence,
+  evaluateRiskAndReferral,
+  aggregateTwoEyeScreening,
+} from '../services/api';
 
 export const ScreeningResultPage = () => {
   const { id } = useParams();
@@ -101,12 +117,13 @@ export const ScreeningResultPage = () => {
       ? getSeverityKeyFromClass(leftEyeAnalysis.predicted_class)
       : 'drUncertain';
 
-  // Helper to extract Phase 2/3 evaluation for an eye
-  const getEyePhase2Metrics = (analysis, fallbackSeverity, errorState) => {
+  // Helper to extract Phase 2/3/4 evaluation for an eye
+  const getEyePhaseMetrics = (analysis, fallbackSeverity, errorState) => {
     if (!analysis) {
       if (errorState) {
         return {
           aiPrediction: 'Unable to Assess',
+          predictedClass: null,
           confidence: null,
           safetyStatus: 'IMAGE_INVALID',
           screeningStatus: 'UNABLE TO ASSESS',
@@ -120,6 +137,7 @@ export const ScreeningResultPage = () => {
       }
       return {
         aiPrediction: 'Not Screened',
+        predictedClass: null,
         confidence: null,
         safetyStatus: 'IMAGE_INVALID',
         screeningStatus: 'UNABLE TO ASSESS',
@@ -150,6 +168,7 @@ export const ScreeningResultPage = () => {
 
     return {
       aiPrediction: analysis.class_name || 'DR Prediction',
+      predictedClass: analysis.predicted_class ?? null,
       confidence: conf,
       safetyStatus,
       screeningStatus,
@@ -163,8 +182,26 @@ export const ScreeningResultPage = () => {
     };
   };
 
-  const odMetrics = getEyePhase2Metrics(rightEyeAnalysis, odSeverity, screening.odAnalysisError);
-  const osMetrics = getEyePhase2Metrics(leftEyeAnalysis, osSeverity, screening.osAnalysisError);
+  const odMetrics = getEyePhaseMetrics(rightEyeAnalysis, odSeverity, screening.odAnalysisError);
+  const osMetrics = getEyePhaseMetrics(leftEyeAnalysis, osSeverity, screening.osAnalysisError);
+
+  // Phase 4 Centralized Risk & Referral Evaluation for OD & OS
+  const odRiskEval = evaluateRiskAndReferral(
+    odMetrics.predictedClass,
+    odMetrics.confidence,
+    odMetrics.safetyStatus,
+    odMetrics.isLowConfidence
+  );
+
+  const osRiskEval = evaluateRiskAndReferral(
+    osMetrics.predictedClass,
+    osMetrics.confidence,
+    osMetrics.safetyStatus,
+    osMetrics.isLowConfidence
+  );
+
+  // Phase 4 Two-Eye Screening Summary (Max-Risk Rule)
+  const twoEyeSummary = aggregateTwoEyeScreening(odRiskEval, osRiskEval);
 
   // Active eye for Explainability Panel
   const activeMetrics = selectedExplainEye === 'OD' ? odMetrics : osMetrics;
@@ -227,10 +264,11 @@ export const ScreeningResultPage = () => {
 
   const triage = getTriageProtocol(screening.overallSeverity);
 
-  const renderEyeResultCard = (eyeName, tagLabel, imageSrc, severityKey, metrics, badgeColor) => {
+  const renderEyeResultCard = (eyeName, tagLabel, imageSrc, severityKey, metrics, riskEval, badgeColor) => {
     const isOD = eyeName === 'OD';
     const isLow = metrics.isLowConfidence;
     const isUnable = metrics.screeningStatus === 'UNABLE TO ASSESS';
+    const explainAvailable = Boolean(metrics.hasAnalysis && !metrics.safetyBlocked && (metrics.gradcamUrl || screening.gradCamUrl));
 
     return (
       <div
@@ -242,13 +280,15 @@ export const ScreeningResultPage = () => {
             : 'border-slate-200 bg-white'
         }`}
       >
-        {/* Header: Eye Name + Screening Status Badge */}
+        {/* Header: Eye Name + RiskBadge */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <span className={`w-3 h-3 rounded-full ${badgeColor}`}></span>
             <h4 className="text-sm font-bold text-slate-900">{tagLabel}</h4>
           </div>
-          <ScreeningStatusBadge status={metrics.screeningStatus} size="sm" />
+          <div className="flex items-center gap-2">
+            <RiskBadge risk={riskEval.riskCategory} size="sm" />
+          </div>
         </div>
 
         {/* Scan Preview + Structured Metrics */}
@@ -263,7 +303,7 @@ export const ScreeningResultPage = () => {
           </div>
 
           {/* Structured Attributes */}
-          <div className="sm:col-span-8 space-y-3">
+          <div className="sm:col-span-8 space-y-2.5">
             {/* 1. AI PREDICTION */}
             <div className="flex items-center justify-between text-xs pb-1.5 border-b border-slate-100">
               <span className="font-bold text-slate-500 uppercase tracking-wider">{t('aiPredictionLabel')}:</span>
@@ -310,19 +350,31 @@ export const ScreeningResultPage = () => {
               <SafetyBadge status={metrics.safetyStatus} size="sm" />
             </div>
 
-            {/* 4. SCREENING STATUS */}
+            {/* 4. SCREENING RISK (Phase 4) */}
             <div className="flex items-center justify-between text-xs pb-1.5 border-b border-slate-100">
-              <span className="font-bold text-slate-500 uppercase tracking-wider">{t('screeningStatusLabel')}:</span>
-              <span className={`font-bold text-xs ${
-                isUnable ? 'text-rose-700' : isLow ? 'text-amber-800' : 'text-emerald-700'
+              <span className="font-bold text-slate-500 uppercase tracking-wider">{t('screeningRiskLabel')}:</span>
+              <RiskBadge risk={riskEval.riskCategory} size="sm" />
+            </div>
+
+            {/* 5. REFERRAL PRIORITY (Phase 4) */}
+            <div className="flex items-center justify-between text-xs pb-1.5 border-b border-slate-100">
+              <span className="font-bold text-slate-500 uppercase tracking-wider">{t('referralPriorityLabel')}:</span>
+              <span className="font-bold text-[11px] text-slate-800">{riskEval.referralPriority}</span>
+            </div>
+
+            {/* 6. EXPLAINABILITY STATUS (Phase 3/4) */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-500 uppercase tracking-wider">Explainability:</span>
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                explainAvailable ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-slate-100 text-slate-500'
               }`}>
-                {metrics.screeningStatus}
+                {explainAvailable ? 'Available' : 'Unavailable'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* 5. NEXT STEP Callout Box */}
+        {/* 7. NEXT STEP Callout Box */}
         <div
           className={`p-3.5 rounded-2xl border text-xs space-y-1 ${
             isUnable
@@ -357,9 +409,9 @@ export const ScreeningResultPage = () => {
           </button>
         )}
 
-        {/* Medical Certainty Disclaimer */}
+        {/* Responsible AI Notice */}
         <p className="text-[10px] text-slate-500 italic leading-snug">
-          {t('confidenceDisclaimer')}
+          {t('responsibleAiDisclaimer')}
         </p>
       </div>
     );
@@ -375,33 +427,93 @@ export const ScreeningResultPage = () => {
         </span>
       </div>
 
-      {/* Top Banner with Patient & Camp details */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-card">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-600 font-bold text-lg">
-              <FileCheck className="w-6 h-6" />
+      {/* Phase 4: OVERALL TWO-EYE SCREENING SUMMARY */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-6 sm:p-8 border border-slate-700 shadow-2xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-700/80">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-brand-500/20 border border-brand-400/30 flex items-center justify-center text-brand-400 font-bold text-lg shadow-glow">
+              <Activity className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-extrabold text-slate-900">{t('resultTitle')}</h1>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+                <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">{t('twoEyeSummaryTitle')}</h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 font-mono">
                   {screening.id}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                Patient: <strong className="text-slate-800">{screening.patientName}</strong> • {screening.village}
+              <p className="text-xs text-slate-400">
+                Patient: <strong className="text-white">{screening.patientName}</strong> • {screening.village}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <UrgencyBadge urgency={screening.referralUrgency} />
           </div>
         </div>
 
-        {/* Primary Classification Showcase */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-6 items-start">
+        {/* 3-Column Summary Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* 1. Right Eye Status */}
+          <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+              <span>Right Eye (OD)</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-brand-400"></span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <SeverityBadge severity={odSeverity} size="sm" />
+              <RiskBadge risk={odRiskEval.riskCategory} size="sm" />
+            </div>
+            <p className="text-[11px] text-slate-300 font-medium">{odRiskEval.referralPriority}</p>
+          </div>
+
+          {/* 2. Left Eye Status */}
+          <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+              <span>Left Eye (OS)</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-teal-400"></span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <SeverityBadge severity={osSeverity} size="sm" />
+              <RiskBadge risk={osRiskEval.riskCategory} size="sm" />
+            </div>
+            <p className="text-[11px] text-slate-300 font-medium">{osRiskEval.referralPriority}</p>
+          </div>
+
+          {/* 3. Highest Screening Risk & Referral Recommendation */}
+          <div className="p-4 rounded-2xl bg-brand-950/60 border border-brand-500/40 space-y-2">
+            <div className="flex items-center justify-between text-xs text-brand-300 font-bold uppercase tracking-wider">
+              <span>{t('highestRiskEyeLabel')}</span>
+              <Award className="w-4 h-4 text-brand-400" />
+            </div>
+            <p className="text-sm font-extrabold text-white">{twoEyeSummary.highestRiskEye}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <RiskBadge risk={twoEyeSummary.overallRisk} size="sm" />
+              <ReferralBadge priority={twoEyeSummary.overallReferral} size="sm" />
+            </div>
+          </div>
+        </div>
+
+        {/* Overall Referral Guidance Callout */}
+        <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/80 text-xs space-y-1">
+          <div className="flex items-center gap-2 text-brand-300 font-bold text-[11px] uppercase tracking-wider">
+            <Info className="w-4 h-4 text-brand-400 shrink-0" />
+            <span>{t('overallReferralLabel')}</span>
+          </div>
+          <p className="text-slate-200 pl-6 text-xs leading-relaxed font-medium">
+            {twoEyeSummary.overallGuidance}
+          </p>
+        </div>
+
+        {/* Responsible AI Disclaimer */}
+        <p className="text-[11px] text-slate-400 italic">
+          {t('responsibleAiDisclaimer')}
+        </p>
+      </div>
+
+      {/* Primary Classification Showcase */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-card">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           {/* Main Grade & Probabilities Box (7 cols) */}
           <div className="md:col-span-7 p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
             <div className="flex items-center justify-between">
@@ -417,7 +529,7 @@ export const ScreeningResultPage = () => {
               {isReal ? (
                 <>
                   <SeverityBadge severity={screening.overallSeverity} size="lg" />
-                  <ScreeningStatusBadge status={screening.screeningStatus || 'RELIABLE AI SCREENING'} size="md" />
+                  <RiskBadge risk={twoEyeSummary.overallRisk} size="md" />
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Confidence: {formatConfidence(screening.confidence)}</span>
@@ -535,11 +647,11 @@ export const ScreeningResultPage = () => {
         </div>
       </div>
 
-      {/* Phase 2 Independent Two-Eye Evaluation Cards (OD & OS) */}
+      {/* Phase 4 Bilateral Two-Eye Evaluation Cards (OD & OS) */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-extrabold text-slate-900">{t('eyeComparison')}</h3>
-          <span className="text-xs text-slate-500 font-medium">Independent AI Safety Gate & Confidence Evaluation</span>
+          <span className="text-xs text-slate-500 font-medium">Independent Risk & Referral Decision</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -549,6 +661,7 @@ export const ScreeningResultPage = () => {
             screening.imageOD,
             odSeverity,
             odMetrics,
+            odRiskEval,
             'bg-brand-500'
           )}
           {renderEyeResultCard(
@@ -557,6 +670,7 @@ export const ScreeningResultPage = () => {
             screening.imageOS,
             osSeverity,
             osMetrics,
+            osRiskEval,
             'bg-teal-500'
           )}
         </div>
@@ -625,7 +739,7 @@ export const ScreeningResultPage = () => {
         )}
 
         {/* Key Prediction Stats for the Selected Eye */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
               {t('aiPredictionLabel')}
@@ -644,6 +758,13 @@ export const ScreeningResultPage = () => {
             }`}>
               {activeMetrics.confidence !== null ? formatConfidence(activeMetrics.confidence) : 'N/A'}
             </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+              {t('screeningRiskLabel')}
+            </span>
+            <RiskBadge risk={(selectedExplainEye === 'OD' ? odRiskEval : osRiskEval).riskCategory} size="sm" />
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
@@ -759,12 +880,13 @@ export const ScreeningResultPage = () => {
       >
         <div className="space-y-4 text-xs text-slate-600">
           <p>
-            Route screening packet (Bilateral Fundus, Grad-CAM Maps, Confidence Score, and AI Safety Gate decision) to District Hospital Tele-Ophthalmology Queue.
+            Route screening packet (Bilateral Fundus, Grad-CAM Maps, Confidence Score, Risk Assessment, and AI Safety Gate decision) to District Hospital Tele-Ophthalmology Queue.
           </p>
           <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
             <p><strong>Patient:</strong> {screening.patientName}</p>
-            <p><strong>Overall Severity:</strong> {screening.overallSeverity.toUpperCase()}</p>
-            <p><strong>Priority:</strong> {screening.referralUrgency.toUpperCase()}</p>
+            <p><strong>Overall Risk:</strong> {twoEyeSummary.overallRisk}</p>
+            <p><strong>Highest Risk Eye:</strong> {twoEyeSummary.highestRiskEye}</p>
+            <p><strong>Referral:</strong> {twoEyeSummary.overallReferral}</p>
           </div>
           <button
             type="button"

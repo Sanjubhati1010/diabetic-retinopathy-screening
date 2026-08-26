@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
-import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge } from '../components/common/SeverityBadge';
+import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge, RiskBadge, ReferralBadge } from '../components/common/SeverityBadge';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { MetricCard } from '../components/common/MetricCard';
 import {
@@ -18,6 +18,7 @@ import {
   Edit3,
 } from 'lucide-react';
 import { SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
+import { evaluateRiskAndReferral, aggregateTwoEyeScreening } from '../services/api';
 
 export const DoctorDashboardPage = () => {
   const { t } = useLanguage();
@@ -177,6 +178,8 @@ export const DoctorDashboardPage = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <RiskBadge risk={selectedScreening.riskCategory || 'MODERATE'} size="sm" />
+              <ReferralBadge priority={selectedScreening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED'} size="sm" />
               <SafetyBadge status={selectedScreening.safetyStatus || 'READY_FOR_AI'} size="sm" />
               <ScreeningStatusBadge status={selectedScreening.screeningStatus || 'RELIABLE AI SCREENING'} size="sm" />
               <SeverityBadge severity={selectedScreening.overallSeverity} />

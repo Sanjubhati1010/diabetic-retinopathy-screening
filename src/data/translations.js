@@ -239,6 +239,24 @@ export const translations = {
     lowConfidenceCaution: "AI confidence is low. The visualization should not be interpreted as a reliable clinical explanation. Consider image re-capture or specialist review.",
     modelAttentionOnly: "Model-highlighted regions",
 
+    // Phase 4: Risk Assessment & Referral Support
+    screeningRiskLabel: "Screening Risk",
+    referralPriorityLabel: "Referral Priority",
+    twoEyeSummaryTitle: "Overall Two-Eye Screening Summary",
+    highestRiskEyeLabel: "Highest Screening Risk",
+    overallReferralLabel: "Overall Referral Recommendation",
+    riskLow: "LOW",
+    riskModerate: "MODERATE",
+    riskHigh: "HIGH",
+    riskUnable: "UNABLE TO ASSESS",
+    riskLowConf: "LOW CONFIDENCE / REVIEW REQUIRED",
+    referralRoutine: "ROUTINE FOLLOW-UP",
+    referralSpecialist: "EYE SPECIALIST REVIEW RECOMMENDED",
+    referralPrioritySpecialist: "PRIORITY SPECIALIST REVIEW",
+    referralRecapture: "IMAGE RE-CAPTURE REQUIRED",
+    responsibleAiDisclaimer: "This result is AI-assisted screening support and does not replace professional clinical evaluation.",
+    screeningResultCardTitle: "AI-ASSISTED SCREENING RESULT",
+
     // Explainable AI / Grad-CAM
     xaiTitle: "Explainable AI (Grad-CAM) Visualizer",
     xaiSubtitle: "Explainability will appear after the trained model is connected",
@@ -584,6 +602,24 @@ export const translations = {
     explanationTempUnavailable: "स्पष्टीकरण विज़ुअलाइज़ेशन अस्थायी रूप से अनुपलब्ध है।",
     lowConfidenceCaution: "एआई कॉन्फिडेंस कम है। इस विज़ुअलाइज़ेशन को अंतिम नैदानिक स्पष्टीकरण न मानें। कृपया पुनः फोटो लें या विशेषज्ञ परामर्श लें।",
     modelAttentionOnly: "मॉडल द्वारा हाइलाइट किए गए क्षेत्र",
+
+    // Phase 4: Risk Assessment & Referral Support
+    screeningRiskLabel: "स्क्रीनिंग जोखिम (Risk)",
+    referralPriorityLabel: "रेफरल प्राथमिकता (Referral)",
+    twoEyeSummaryTitle: "समग्र द्विनेत्रीय (Two-Eye) स्क्रीनिंग सारांश",
+    highestRiskEyeLabel: "उच्चतम जोखिम वाला नेत्र",
+    overallReferralLabel: "समग्र रेफरल अनुशंसा",
+    riskLow: "LOW",
+    riskModerate: "MODERATE",
+    riskHigh: "HIGH",
+    riskUnable: "UNABLE TO ASSESS",
+    riskLowConf: "LOW CONFIDENCE / REVIEW REQUIRED",
+    referralRoutine: "ROUTINE FOLLOW-UP",
+    referralSpecialist: "EYE SPECIALIST REVIEW RECOMMENDED",
+    referralPrioritySpecialist: "PRIORITY SPECIALIST REVIEW",
+    referralRecapture: "IMAGE RE-CAPTURE REQUIRED",
+    responsibleAiDisclaimer: "यह परिणाम एआई-सहायता प्राप्त स्क्रीनिंग समर्थन है और किसी पेशेवर नैदानिक मूल्यांकन का विकल्प नहीं है।",
+    screeningResultCardTitle: "एआई-सहायता प्राप्त स्क्रीनिंग परिणाम (AI-ASSISTED SCREENING RESULT)",
 
     // Explainable AI / Grad-CAM
     xaiTitle: "व्याख्यात्मक एआई (Grad-CAM) विज़ुअलाइज़र",

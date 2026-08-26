@@ -104,6 +104,127 @@ export function evaluateConfidence(conf, threshold = CONFIDENCE_THRESHOLD) {
 }
 
 /**
+ * Phase 4: Centralized Risk and Referral Evaluation for Individual Eye
+ */
+export function evaluateRiskAndReferral(predictedClass, confidence, safetyStatus = 'READY_FOR_AI', isLowConfidence = false) {
+  if (safetyStatus !== 'READY_FOR_AI' || predictedClass === null || predictedClass === undefined) {
+    return {
+      riskCategory: 'UNABLE TO ASSESS',
+      referralPriority: 'IMAGE RE-CAPTURE REQUIRED',
+      riskExplanation: 'Image quality or retinal validation checks failed. Risk cannot be reliably computed.',
+      referralGuidance: 'Please capture a clearer fundus image or request specialist clinical examination.',
+      riskLevelNumeric: -1,
+    };
+  }
+
+  if (isLowConfidence) {
+    return {
+      riskCategory: 'LOW CONFIDENCE / REVIEW REQUIRED',
+      referralPriority: 'EYE SPECIALIST REVIEW RECOMMENDED',
+      riskExplanation: 'Model confidence is below the clinical threshold. Risk assessment requires specialist verification.',
+      referralGuidance: 'Consider image re-capture or specialist review.',
+      riskLevelNumeric: 1,
+    };
+  }
+
+  const cls = Number(predictedClass);
+  if (cls === 0) {
+    return {
+      riskCategory: 'LOW',
+      referralPriority: 'ROUTINE FOLLOW-UP',
+      riskExplanation: 'No diabetic retinopathy lesions detected. Low risk of vision impairment.',
+      referralGuidance: 'Routine follow-up may be appropriate according to local clinical protocol.',
+      riskLevelNumeric: 0,
+    };
+  } else if (cls === 1 || cls === 2) {
+    return {
+      riskCategory: 'MODERATE',
+      referralPriority: 'EYE SPECIALIST REVIEW RECOMMENDED',
+      riskExplanation: 'Features consistent with non-proliferative diabetic retinopathy detected. Moderate risk profile.',
+      referralGuidance: 'Eye specialist review is recommended based on the AI-assisted screening result.',
+      riskLevelNumeric: 2,
+    };
+  } else if (cls === 3 || cls === 4) {
+    return {
+      riskCategory: 'HIGH',
+      referralPriority: 'PRIORITY SPECIALIST REVIEW',
+      riskExplanation: 'Features consistent with severe non-proliferative or proliferative diabetic retinopathy detected. High risk profile.',
+      referralGuidance: 'Priority specialist review is recommended based on the AI-assisted screening result.',
+      riskLevelNumeric: 3,
+    };
+  }
+
+  return {
+    riskCategory: 'UNABLE TO ASSESS',
+    referralPriority: 'IMAGE RE-CAPTURE REQUIRED',
+    riskExplanation: 'Risk cannot be reliably computed.',
+    referralGuidance: 'Please capture a clearer fundus image or request specialist review.',
+    riskLevelNumeric: -1,
+  };
+}
+
+/**
+ * Phase 4: Two-Eye Aggregation using Max-Risk Rule
+ */
+export function aggregateTwoEyeScreening(odEval, osEval) {
+  const odLevel = odEval?.riskLevelNumeric ?? -1;
+  const osLevel = osEval?.riskLevelNumeric ?? -1;
+
+  const odCat = odEval?.riskCategory || 'UNABLE TO ASSESS';
+  const osCat = osEval?.riskCategory || 'UNABLE TO ASSESS';
+
+  if (odLevel === -1 && osLevel === -1) {
+    return {
+      overallRisk: 'UNABLE TO ASSESS',
+      highestRiskEye: 'Unable to Assess',
+      overallReferral: 'IMAGE RE-CAPTURE REQUIRED',
+      overallGuidance: 'Bilateral image capture did not pass AI safety checks. Please capture clearer fundus scans.',
+    };
+  }
+
+  if (odLevel === -1) {
+    return {
+      overallRisk: osCat,
+      highestRiskEye: 'Left Eye (OS)',
+      overallReferral: osEval.referralPriority,
+      overallGuidance: `Left eye evaluated as ${osCat}. Right eye image re-capture is required.`,
+    };
+  }
+
+  if (osLevel === -1) {
+    return {
+      overallRisk: odCat,
+      highestRiskEye: 'Right Eye (OD)',
+      overallReferral: odEval.referralPriority,
+      overallGuidance: `Right eye evaluated as ${odCat}. Left eye image re-capture is required.`,
+    };
+  }
+
+  if (odLevel > osLevel) {
+    return {
+      overallRisk: odEval.riskCategory,
+      highestRiskEye: 'Right Eye (OD)',
+      overallReferral: odEval.referralPriority,
+      overallGuidance: odEval.referralGuidance,
+    };
+  } else if (osLevel > odLevel) {
+    return {
+      overallRisk: osEval.riskCategory,
+      highestRiskEye: 'Left Eye (OS)',
+      overallReferral: osEval.referralPriority,
+      overallGuidance: osEval.referralGuidance,
+    };
+  } else {
+    return {
+      overallRisk: odEval.riskCategory,
+      highestRiskEye: 'Both Eyes',
+      overallReferral: odEval.referralPriority,
+      overallGuidance: odEval.referralGuidance,
+    };
+  }
+}
+
+/**
  * Converts any image input (File, Blob, base64 data URL, SVG data URI, or URL)
  * into a valid JPEG File object with proper MIME type and filename.
  */

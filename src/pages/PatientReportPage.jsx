@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
-import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge } from '../components/common/SeverityBadge';
+import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge, RiskBadge, ReferralBadge } from '../components/common/SeverityBadge';
 import {
   Printer,
   Share2,
@@ -172,6 +172,8 @@ export const PatientReportPage = () => {
             <div className="flex flex-wrap items-center gap-2">
               {screening.isRealPrediction || screening.confidence !== null ? (
                 <div className="flex flex-wrap items-center gap-2">
+                  <RiskBadge risk={screening.riskCategory || 'MODERATE'} size="sm" />
+                  <ReferralBadge priority={screening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED'} size="sm" />
                   <SafetyBadge status={screening.safetyStatus || 'READY_FOR_AI'} size="sm" />
                   <ScreeningStatusBadge status={screening.screeningStatus || 'RELIABLE AI SCREENING'} size="sm" />
                   <SeverityBadge severity={screening.overallSeverity} size="sm" />

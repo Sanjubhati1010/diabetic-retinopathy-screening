@@ -15,6 +15,8 @@ from PIL import Image
 import numpy as np
 import cv2
 
+from app.risk_service import evaluate_risk_and_referral, aggregate_two_eye_screening
+
 logger = logging.getLogger("dr_backend.model_service")
 
 CLASS_NAMES = [
@@ -431,6 +433,14 @@ class DRModelService:
             safety_message = "Model confidence indicates strong classification agreement."
             next_step = "Continue to explanation / specialist review."
 
+        # Risk & Referral Evaluation
+        risk_res = evaluate_risk_and_referral(
+            predicted_class=predicted_class,
+            confidence=confidence,
+            safety_status=safety_decision["safety_status"],
+            is_low_confidence=is_low_conf,
+        )
+
         return {
             "predicted_class": predicted_class,
             "class_name": self.class_names[predicted_class],
@@ -440,6 +450,10 @@ class DRModelService:
             "screening_status": screening_status,
             "confidence_threshold": self.confidence_threshold,
             "is_low_confidence": is_low_conf,
+            "risk_category": risk_res["risk_category"],
+            "referral_priority": risk_res["referral_priority"],
+            "risk_explanation": risk_res["risk_explanation"],
+            "referral_guidance": risk_res["referral_guidance"],
             "safety_message": safety_message,
             "next_step": next_step,
             "inference_time": inference_time,
@@ -522,12 +536,24 @@ class DRModelService:
 
             inference_time = round(time.perf_counter() - start_time, 4)
 
+            # Risk & Referral Evaluation
+            risk_res = evaluate_risk_and_referral(
+                predicted_class=target_class,
+                confidence=confidence,
+                safety_status=safety_decision["safety_status"],
+                is_low_confidence=is_low_conf,
+            )
+
             return {
                 "predicted_class": target_class,
                 "class_name": self.class_names[target_class],
                 "gradcam_url": f"/results/{overlay_filename}",
                 "heatmap_url": f"/results/{heatmap_filename}",
                 "explainability_available": True,
+                "risk_category": risk_res["risk_category"],
+                "referral_priority": risk_res["referral_priority"],
+                "risk_explanation": risk_res["risk_explanation"],
+                "referral_guidance": risk_res["referral_guidance"],
                 "explanation": EXPLANATION_TEXT,
                 "simple_explanation": "The AI model considered the highlighted retinal regions more important for its prediction.",
                 "limitation_note": "This visualization explains model behavior and does not replace professional clinical interpretation. The highlighted regions show model attention and are not confirmed clinical lesions.",
@@ -542,7 +568,7 @@ class DRModelService:
             b_handle.remove()
 
     def analyze_screening(self, image_bytes: bytes) -> Dict:
-        """Combined pipeline: classification + probabilities + Grad-CAM heatmap generation."""
+        """Combined pipeline: classification + probabilities + Grad-CAM heatmap generation + Risk & Referral."""
         self.ensure_model_available()
         start_time = time.perf_counter()
 
@@ -564,6 +590,10 @@ class DRModelService:
             "screening_status": pred_res.get("screening_status", "RELIABLE AI SCREENING"),
             "confidence_threshold": self.confidence_threshold,
             "is_low_confidence": pred_res.get("is_low_confidence", False),
+            "risk_category": pred_res.get("risk_category", "MODERATE"),
+            "referral_priority": pred_res.get("referral_priority", "EYE SPECIALIST REVIEW RECOMMENDED"),
+            "risk_explanation": pred_res.get("risk_explanation", "Features consistent with diabetic retinopathy detected."),
+            "referral_guidance": pred_res.get("referral_guidance", "Eye specialist review is recommended based on the AI-assisted screening result."),
             "safety_message": pred_res.get("safety_message", "AI Safety Gate cleared."),
             "next_step": pred_res.get("next_step", "Continue to explanation / specialist review."),
             "explanation": EXPLANATION_TEXT,
