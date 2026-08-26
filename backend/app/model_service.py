@@ -512,18 +512,25 @@ class DRModelService:
             orig_np = np.array(pil_image)
             blended = np.uint8(0.6 * orig_np + 0.4 * heatmap)
 
-            # Save result visualization
-            unique_filename = f"{uuid.uuid4().hex}_gradcam.jpg"
-            output_filepath = self.results_dir / unique_filename
-            Image.fromarray(blended).save(output_filepath, format="JPEG", quality=92)
+            # Save pure heatmap visualization and blended overlay visualization
+            file_stem = uuid.uuid4().hex
+            heatmap_filename = f"{file_stem}_heatmap.jpg"
+            overlay_filename = f"{file_stem}_gradcam.jpg"
+
+            Image.fromarray(heatmap).save(self.results_dir / heatmap_filename, format="JPEG", quality=92)
+            Image.fromarray(blended).save(self.results_dir / overlay_filename, format="JPEG", quality=92)
 
             inference_time = round(time.perf_counter() - start_time, 4)
 
             return {
                 "predicted_class": target_class,
                 "class_name": self.class_names[target_class],
-                "gradcam_url": f"/results/{unique_filename}",
+                "gradcam_url": f"/results/{overlay_filename}",
+                "heatmap_url": f"/results/{heatmap_filename}",
+                "explainability_available": True,
                 "explanation": EXPLANATION_TEXT,
+                "simple_explanation": "The AI model considered the highlighted retinal regions more important for its prediction.",
+                "limitation_note": "This visualization explains model behavior and does not replace professional clinical interpretation. The highlighted regions show model attention and are not confirmed clinical lesions.",
                 "safety_status": safety_decision["safety_status"],
                 "screening_status": "LOW CONFIDENCE" if is_low_conf else "RELIABLE AI SCREENING",
                 "is_low_confidence": is_low_conf,
@@ -551,6 +558,8 @@ class DRModelService:
             "confidence": pred_res["confidence"],
             "probabilities": pred_res["probabilities"],
             "gradcam_url": cam_res["gradcam_url"],
+            "heatmap_url": cam_res.get("heatmap_url"),
+            "explainability_available": True,
             "safety_status": pred_res.get("safety_status", "READY_FOR_AI"),
             "screening_status": pred_res.get("screening_status", "RELIABLE AI SCREENING"),
             "confidence_threshold": self.confidence_threshold,
@@ -558,6 +567,8 @@ class DRModelService:
             "safety_message": pred_res.get("safety_message", "AI Safety Gate cleared."),
             "next_step": pred_res.get("next_step", "Continue to explanation / specialist review."),
             "explanation": EXPLANATION_TEXT,
+            "simple_explanation": cam_res.get("simple_explanation", "The AI model considered the highlighted retinal regions more important for its prediction."),
+            "limitation_note": cam_res.get("limitation_note", "This visualization explains model behavior and does not replace professional clinical interpretation. The highlighted regions show model attention and are not confirmed clinical lesions."),
             "disclaimer": CLINICAL_DISCLAIMER,
             "inference_time": total_time,
         }

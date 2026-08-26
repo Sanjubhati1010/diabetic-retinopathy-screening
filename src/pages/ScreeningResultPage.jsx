@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge } from '../components/common/SeverityBadge';
 import { BiomarkerTags } from '../components/visualizer/BiomarkerTags';
+import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { Modal } from '../components/common/Modal';
 import {
   FileCheck,
@@ -24,6 +25,9 @@ import {
   AlertOctagon,
   ArrowUpRight,
   RotateCcw,
+  HelpCircle,
+  ChevronDown,
+  Layers,
 } from 'lucide-react';
 import { formatConfidence, getSeverityKeyFromClass, CONFIDENCE_THRESHOLD, evaluateConfidence } from '../services/api';
 
@@ -32,6 +36,7 @@ export const ScreeningResultPage = () => {
   const { t } = useLanguage();
   const { getScreeningById, screenings, activeScreening } = useApp();
   const navigate = useNavigate();
+  const explainRef = useRef(null);
 
   const latestRealScreening = screenings.find(
     (s) => s.isRealPrediction || s.gradCamUrl || s.confidence !== null
@@ -47,6 +52,8 @@ export const ScreeningResultPage = () => {
 
   const [teleModalOpen, setTeleModalOpen] = useState(false);
   const [teleSent, setTeleSent] = useState(false);
+  const [selectedExplainEye, setSelectedExplainEye] = useState('OD');
+  const [explainSectionOpen, setExplainSectionOpen] = useState(true);
 
   const handleSendTeleConsult = () => {
     setTeleSent(true);
@@ -54,6 +61,14 @@ export const ScreeningResultPage = () => {
       setTeleModalOpen(false);
       setTeleSent(false);
     }, 1500);
+  };
+
+  const handleOpenExplanation = (eye = 'OD') => {
+    setSelectedExplainEye(eye);
+    setExplainSectionOpen(true);
+    if (explainRef.current) {
+      explainRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const isReal = screening.isRealPrediction || screening.confidence !== null;
@@ -86,7 +101,7 @@ export const ScreeningResultPage = () => {
       ? getSeverityKeyFromClass(leftEyeAnalysis.predicted_class)
       : 'drUncertain';
 
-  // Helper to extract Phase 2 evaluation for an eye
+  // Helper to extract Phase 2/3 evaluation for an eye
   const getEyePhase2Metrics = (analysis, fallbackSeverity, errorState) => {
     if (!analysis) {
       if (errorState) {
@@ -98,6 +113,9 @@ export const ScreeningResultPage = () => {
           nextStep: t('nextStepUnable') || 'AI cannot reliably assess this image. Please capture another image or request specialist review.',
           isLowConfidence: false,
           hasAnalysis: false,
+          safetyBlocked: true,
+          gradcamUrl: null,
+          heatmapUrl: null,
         };
       }
       return {
@@ -108,6 +126,9 @@ export const ScreeningResultPage = () => {
         nextStep: 'Upload retinal scan to begin screening.',
         isLowConfidence: false,
         hasAnalysis: false,
+        safetyBlocked: true,
+        gradcamUrl: null,
+        heatmapUrl: null,
       };
     }
 
@@ -117,9 +138,12 @@ export const ScreeningResultPage = () => {
       : (conf !== null && (conf > 1.0 ? conf / 100.0 : conf) < CONFIDENCE_THRESHOLD);
 
     const safetyStatus = analysis.safety_status || 'READY_FOR_AI';
-    const screeningStatus = analysis.screening_status || (isLow ? 'LOW CONFIDENCE' : 'RELIABLE AI SCREENING');
+    const isBlocked = safetyStatus !== 'READY_FOR_AI';
+    const screeningStatus = analysis.screening_status || (isBlocked ? 'UNABLE TO ASSESS' : isLow ? 'LOW CONFIDENCE' : 'RELIABLE AI SCREENING');
     const nextStep = analysis.next_step || (
-      isLow
+      isBlocked
+        ? (t('nextStepUnable') || 'AI cannot reliably assess this image. Please capture another image or request specialist review.')
+        : isLow
         ? (t('nextStepLowConfidence') || 'AI confidence is low. Please capture a clearer image or request specialist review.')
         : (t('nextStepReliable') || 'Continue to explanation / specialist review.')
     );
@@ -133,11 +157,25 @@ export const ScreeningResultPage = () => {
       isLowConfidence: isLow,
       hasAnalysis: true,
       inferenceTime: analysis.inference_time,
+      safetyBlocked: isBlocked,
+      gradcamUrl: analysis.gradcam_url || null,
+      heatmapUrl: analysis.heatmap_url || null,
     };
   };
 
   const odMetrics = getEyePhase2Metrics(rightEyeAnalysis, odSeverity, screening.odAnalysisError);
   const osMetrics = getEyePhase2Metrics(leftEyeAnalysis, osSeverity, screening.osAnalysisError);
+
+  // Active eye for Explainability Panel
+  const activeMetrics = selectedExplainEye === 'OD' ? odMetrics : osMetrics;
+  const activeImage = selectedExplainEye === 'OD' ? screening.imageOD : screening.imageOS;
+  const activeSeverity = selectedExplainEye === 'OD' ? odSeverity : osSeverity;
+  const activeGradcam = selectedExplainEye === 'OD'
+    ? screening.gradCamOD || odMetrics.gradcamUrl || screening.gradCamUrl
+    : screening.gradCamOS || osMetrics.gradcamUrl || screening.gradCamUrl;
+  const activeHeatmap = selectedExplainEye === 'OD'
+    ? odMetrics.heatmapUrl || screening.heatmapOD || activeGradcam
+    : osMetrics.heatmapUrl || screening.heatmapOS || activeGradcam;
 
   // Triage recommendations based on ICDR Severity
   const getTriageProtocol = (severity) => {
@@ -306,6 +344,18 @@ export const ScreeningResultPage = () => {
           </div>
           <p className="text-xs leading-relaxed font-medium pl-5">{metrics.nextStep}</p>
         </div>
+
+        {/* Phase 3 "Why did the AI make this prediction?" Button */}
+        {!isUnable && (
+          <button
+            type="button"
+            onClick={() => handleOpenExplanation(eyeName)}
+            className="w-full py-2.5 px-4 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold transition flex items-center justify-center gap-2 group"
+          >
+            <Sparkles className="w-4 h-4 text-purple-600 group-hover:scale-110 transition-transform" />
+            <span>{t('btnWhyThisPrediction')} ({eyeName})</span>
+          </button>
+        )}
 
         {/* Medical Certainty Disclaimer */}
         <p className="text-[10px] text-slate-500 italic leading-snug">
@@ -509,6 +559,149 @@ export const ScreeningResultPage = () => {
             osMetrics,
             'bg-teal-500'
           )}
+        </div>
+      </div>
+
+      {/* Phase 3: Dedicated Explainability Section ("Why This Prediction?") */}
+      <div ref={explainRef} id="why-this-prediction" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-card space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <h2 className="text-lg font-extrabold text-slate-900">{t('explainTitle')}</h2>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">{t('explainSub')}</p>
+          </div>
+
+          {/* Eye Switcher for Explainability */}
+          <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setSelectedExplainEye('OD')}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                selectedExplainEye === 'OD'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Right Eye (OD)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedExplainEye('OS')}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                selectedExplainEye === 'OS'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Left Eye (OS)
+            </button>
+          </div>
+        </div>
+
+        {/* Low Confidence Warning Notice */}
+        {activeMetrics.isLowConfidence && !activeMetrics.safetyBlocked && (
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+            <div className="flex items-center gap-2 font-bold text-amber-950">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Low Confidence Prediction Alert</span>
+            </div>
+            <p className="leading-relaxed pl-6">{t('lowConfidenceCaution')}</p>
+          </div>
+        )}
+
+        {/* Safety Gate Block Notice */}
+        {activeMetrics.safetyBlocked && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1">
+            <div className="flex items-center gap-2 font-bold text-rose-950">
+              <AlertOctagon className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Explainability Unavailable</span>
+            </div>
+            <p className="leading-relaxed pl-6">{t('explanationUnavailable')}</p>
+          </div>
+        )}
+
+        {/* Key Prediction Stats for the Selected Eye */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+              {t('aiPredictionLabel')}
+            </span>
+            <div className="flex items-center gap-2">
+              <SeverityBadge severity={activeSeverity} size="md" />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+              {t('modelConfidenceLabel')}
+            </span>
+            <span className={`text-base font-extrabold font-mono ${
+              activeMetrics.isLowConfidence ? 'text-amber-700' : 'text-emerald-700'
+            }`}>
+              {activeMetrics.confidence !== null ? formatConfidence(activeMetrics.confidence) : 'N/A'}
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+              {t('screeningStatusLabel')}
+            </span>
+            <ScreeningStatusBadge status={activeMetrics.screeningStatus} size="sm" />
+          </div>
+        </div>
+
+        {/* Tri-View Grad-CAM Interactive Component */}
+        <GradCamViewer
+          originalImage={activeImage}
+          heatmapImage={activeGradcam}
+          heatmapUrl={activeHeatmap}
+          selectedEye={selectedExplainEye}
+          onEyeChange={setSelectedExplainEye}
+          confidence={activeMetrics.confidence}
+          severity={activeSeverity}
+          isLowConfidence={activeMetrics.isLowConfidence}
+          safetyBlocked={activeMetrics.safetyBlocked}
+          showControls={true}
+        />
+
+        {/* Simple Bilingual Explanation Section for Healthcare Workers */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* English Simple Explanation */}
+          <div className="p-5 rounded-2xl bg-purple-50/60 border border-purple-200 text-xs space-y-2">
+            <div className="flex items-center gap-2 text-purple-900 font-bold text-xs uppercase tracking-wider">
+              <HelpCircle className="w-4 h-4 text-purple-600" />
+              <span>{t('whatThisMeansTitle')} (English)</span>
+            </div>
+            <p className="text-purple-950 font-medium leading-relaxed">
+              {t('simpleExplanationEn')}
+            </p>
+          </div>
+
+          {/* Hindi Simple Explanation (Bilingual Support) */}
+          <div className="p-5 rounded-2xl bg-indigo-50/60 border border-indigo-200 text-xs space-y-2">
+            <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs uppercase tracking-wider">
+              <HelpCircle className="w-4 h-4 text-indigo-600" />
+              <span>{t('whatThisMeansTitle')} (हिन्दी)</span>
+            </div>
+            <p className="text-indigo-950 font-medium leading-relaxed font-hindi">
+              {t('simpleExplanationHi')}
+            </p>
+          </div>
+        </div>
+
+        {/* Important Clinical Limitation Notice */}
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5 text-slate-700">
+          <div className="flex items-center gap-2 font-bold text-slate-900 uppercase tracking-wider text-[11px]">
+            <Info className="w-4 h-4 text-brand-600" />
+            <span>{t('limitationTitle')}</span>
+          </div>
+          <p className="leading-relaxed text-[11px] text-slate-600 pl-6">
+            {t('limitationText')}
+          </p>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -26,8 +26,18 @@ class PredictionResponse(BaseModel):
 class ExplainResponse(BaseModel):
     predicted_class: int = Field(..., ge=0, le=4, example=2, description="Class index")
     class_name: str = Field(..., example="Moderate", description="Classification name")
-    gradcam_url: str = Field(..., example="/results/e9c12a8f_gradcam.jpg", description="URL path to the generated Grad-CAM heatmap visualization")
+    gradcam_url: str = Field(..., example="/results/e9c12a8f_gradcam.jpg", description="URL path to the generated Grad-CAM blended overlay")
+    heatmap_url: Optional[str] = Field(default=None, example="/results/e9c12a8f_heatmap.jpg", description="URL path to pure Grad-CAM heatmap")
+    explainability_available: bool = Field(default=True, example=True, description="Whether explainability map is successfully computed")
     explanation: str = Field(..., description="Explainability clinical interpretation guide")
+    simple_explanation: str = Field(
+        default="The AI model considered the highlighted retinal regions more important for its prediction.",
+        description="Simple explanation for community health workers and patients"
+    )
+    limitation_note: str = Field(
+        default="This visualization explains model behavior and does not replace professional clinical interpretation. The highlighted regions show model attention and are not confirmed clinical lesions.",
+        description="Clinical disclaimer on AI explanation limitations"
+    )
     safety_status: str = Field(default="READY_FOR_AI", example="READY_FOR_AI", description="Safety Gate status")
     screening_status: str = Field(default="RELIABLE AI SCREENING", example="RELIABLE AI SCREENING", description="Final screening status")
     is_low_confidence: bool = Field(default=False, example=False, description="Whether predicted confidence is below the threshold")
@@ -40,7 +50,9 @@ class ScreeningAnalysisResponse(BaseModel):
     class_name: str = Field(..., example="Moderate", description="Classification name")
     confidence: float = Field(..., ge=0.0, le=1.0, example=0.942, description="Probability score for predicted class")
     probabilities: Dict[str, float] = Field(..., description="Probabilities across all 5 classes")
-    gradcam_url: str = Field(..., example="/results/e9c12a8f_gradcam.jpg", description="URL path to the generated Grad-CAM heatmap visualization")
+    gradcam_url: str = Field(..., example="/results/e9c12a8f_gradcam.jpg", description="URL path to the generated Grad-CAM blended overlay")
+    heatmap_url: Optional[str] = Field(default=None, example="/results/e9c12a8f_heatmap.jpg", description="URL path to pure Grad-CAM heatmap")
+    explainability_available: bool = Field(default=True, example=True, description="Whether explainability map is successfully computed")
     safety_status: str = Field(default="READY_FOR_AI", example="READY_FOR_AI", description="Safety Gate status: 'READY_FOR_AI', 'IMAGE_INVALID', 'IMAGE_QUALITY_INSUFFICIENT', 'AI_ANALYSIS_BLOCKED'")
     screening_status: str = Field(default="RELIABLE AI SCREENING", example="RELIABLE AI SCREENING", description="Final screening status: 'RELIABLE AI SCREENING', 'LOW CONFIDENCE', 'UNABLE TO ASSESS'")
     confidence_threshold: float = Field(default=0.60, example=0.60, description="Configured clinical confidence threshold")
@@ -50,6 +62,14 @@ class ScreeningAnalysisResponse(BaseModel):
     explanation: str = Field(
         default="Highlighted regions indicate image areas that contributed to the model's prediction. This visualization supports professional review and does not constitute a medical diagnosis.",
         description="Explainability guidance"
+    )
+    simple_explanation: str = Field(
+        default="The AI model considered the highlighted retinal regions more important for its prediction.",
+        description="Simple explanation for community health workers and patients"
+    )
+    limitation_note: str = Field(
+        default="This visualization explains model behavior and does not replace professional clinical interpretation. The highlighted regions show model attention and are not confirmed clinical lesions.",
+        description="Clinical disclaimer on AI explanation limitations"
     )
     disclaimer: str = Field(
         default="AI-assisted screening only. This result is not a medical diagnosis and must be reviewed by a qualified healthcare professional.",

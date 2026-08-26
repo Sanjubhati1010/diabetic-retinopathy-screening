@@ -11,43 +11,52 @@ import {
   Info,
   AlertTriangle,
   RefreshCw,
+  Image as ImageIcon,
+  Flame,
 } from 'lucide-react';
 
 export const GradCamViewer = ({
   originalImage,
   heatmapImage,
+  heatmapUrl,
   title = 'Retinal Fundus & Grad-CAM Heatmap',
   confidence = null,
   severity = 'drUncertain',
   selectedEye = 'OD',
   onEyeChange,
   showControls = true,
+  onRetry,
+  isLowConfidence = false,
+  safetyBlocked = false,
 }) => {
   const { t } = useLanguage();
-  const [opacity, setOpacity] = useState(65);
-  const [viewMode, setViewMode] = useState('blend'); // 'blend' | 'split' | 'original'
+  // Modes: 'overlay' | 'heatmap' | 'original' | 'split'
+  const [viewMode, setViewMode] = useState('overlay');
+  const [opacity, setOpacity] = useState(70);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [showLandmarks, setShowLandmarks] = useState(true);
+  const [showLandmarks, setShowLandmarks] = useState(false);
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     setImageError(false);
-  }, [heatmapImage, selectedEye]);
+  }, [heatmapImage, heatmapUrl, selectedEye]);
 
   const handleZoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.25, 2.5));
   const handleZoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.25, 0.75));
   const handleReset = () => {
     setZoomLevel(1);
-    setOpacity(65);
-    setViewMode('blend');
+    setOpacity(70);
+    setViewMode('overlay');
   };
 
-  const hasValidHeatmap = Boolean(heatmapImage && !imageError);
+  const pureHeatmap = heatmapUrl || heatmapImage;
+  const overlayImage = heatmapImage || heatmapUrl;
+  const hasValidHeatmap = Boolean(overlayImage && !imageError && !safetyBlocked);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-card overflow-hidden transition-all">
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-card overflow-hidden transition-all">
       {/* Top Bar with Eye Switcher & Mode Toggles */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/70">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/80">
         <div className="flex items-center gap-3">
           {/* Eye Switcher */}
           {onEyeChange && (
@@ -77,46 +86,63 @@ export const GradCamViewer = ({
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-            <span>Grad-CAM Explainability Interface</span>
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+            <Sparkles className="w-4 h-4 text-purple-600" />
+            <span>Grad-CAM Explainability Tri-View</span>
           </div>
         </div>
 
-        {/* View Mode Pills */}
-        <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setViewMode('blend')}
-            className={`px-2.5 py-1 rounded-lg transition ${
-              viewMode === 'blend'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            {t('blendedView')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('split')}
-            className={`px-2.5 py-1 rounded-lg transition ${
-              viewMode === 'split'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Split Side-by-Side
-          </button>
+        {/* 3 Primary View Mode Pills: Original | Heatmap | Overlay (Plus Split) */}
+        <div className="flex flex-wrap items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-bold">
           <button
             type="button"
             onClick={() => setViewMode('original')}
-            className={`px-2.5 py-1 rounded-lg transition ${
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg transition ${
               viewMode === 'original'
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {t('originalScan')}
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span>{t('modeOriginal') || 'Original'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('heatmap')}
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg transition ${
+              viewMode === 'heatmap'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-orange-500" />
+            <span>{t('modeHeatmap') || 'Heatmap'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('overlay')}
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg transition ${
+              viewMode === 'overlay'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-brand-600" />
+            <span>{t('modeOverlay') || 'Overlay'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('split')}
+            className={`px-2.5 py-1 rounded-lg transition text-[11px] ${
+              viewMode === 'split'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Split
           </button>
         </div>
       </div>
@@ -127,7 +153,16 @@ export const GradCamViewer = ({
           className="relative transition-transform duration-150 ease-out max-w-full flex items-center justify-center"
           style={{ transform: `scale(${zoomLevel})` }}
         >
-          {viewMode === 'split' ? (
+          {safetyBlocked ? (
+            /* Safety Blocked State */
+            <div className="p-8 text-center text-rose-300 space-y-3 max-w-md bg-slate-900/90 rounded-2xl border border-rose-800 shadow-2xl">
+              <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
+              <h4 className="text-sm font-bold text-white">Explainability Unavailable</h4>
+              <p className="text-xs text-rose-200 leading-relaxed">
+                {t('explanationUnavailable') || 'Explainability is unavailable because the image did not pass the AI safety checks.'}
+              </p>
+            </div>
+          ) : viewMode === 'split' ? (
             /* Split View */
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black">
@@ -137,39 +172,98 @@ export const GradCamViewer = ({
                   className="w-full h-full object-contain"
                 />
                 <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-bold text-white border border-white/10">
-                  {t('originalScan')} ({selectedEye})
+                  {t('modeOriginal') || 'Original'} ({selectedEye})
                 </span>
               </div>
               <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
                 {hasValidHeatmap ? (
                   <>
                     <img
-                      src={heatmapImage}
-                      alt="Grad-CAM Heatmap"
+                      src={overlayImage}
+                      alt="Grad-CAM Visualization"
                       onError={() => setImageError(true)}
                       className="w-full h-full object-contain"
                     />
-                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-bold text-emerald-300 border border-white/10">
-                      Grad-CAM Heatmap ({selectedEye})
+                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-bold text-purple-300 border border-white/10">
+                      Grad-CAM Overlay ({selectedEye})
                     </span>
                   </>
                 ) : imageError ? (
-                  <div className="p-4 text-center text-rose-300 space-y-1">
+                  <div className="p-4 text-center text-rose-300 space-y-2">
                     <AlertTriangle className="w-6 h-6 text-rose-500 mx-auto" />
-                    <p className="text-xs font-bold">Unable to load Grad-CAM image</p>
-                    <p className="text-[10px] text-slate-400">Please verify backend service is running</p>
+                    <p className="text-xs font-bold">{t('explanationTempUnavailable') || 'Explanation visualization is temporarily unavailable.'}</p>
+                    {onRetry && (
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>{t('btnRetryExplanation') || 'Retry Explanation'}</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="p-4 text-center text-slate-400 space-y-1">
                     <Sparkles className="w-6 h-6 text-brand-400 mx-auto" />
                     <p className="text-xs font-bold text-slate-200">No Heatmap Available</p>
-                    <p className="text-[10px] text-slate-400">Run AI analysis to generate Grad-CAM</p>
                   </div>
                 )}
               </div>
             </div>
+          ) : viewMode === 'original' ? (
+            /* Original Fundus Mode */
+            <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
+              <img
+                src={originalImage}
+                alt="Retinal Fundus Image"
+                className="w-full h-full object-contain"
+              />
+              <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm border border-white/10 text-[10px] font-bold text-white flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                <span>{selectedEye} • {t('modeOriginal') || 'Original Fundus'}</span>
+              </div>
+            </div>
+          ) : viewMode === 'heatmap' ? (
+            /* Pure Heatmap Mode */
+            <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
+              {hasValidHeatmap ? (
+                <>
+                  <img
+                    src={pureHeatmap}
+                    alt="Grad-CAM Pure Heatmap"
+                    onError={() => setImageError(true)}
+                    className="w-full h-full object-contain"
+                  />
+                  <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm border border-white/10 text-[10px] font-bold text-orange-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+                    <span>{selectedEye} • {t('modeHeatmap') || 'Grad-CAM Heatmap (JET)'}</span>
+                  </div>
+                </>
+              ) : imageError ? (
+                <div className="p-6 text-center text-rose-300 space-y-2">
+                  <AlertTriangle className="w-6 h-6 text-rose-500 mx-auto" />
+                  <p className="text-xs font-bold">{t('explanationTempUnavailable') || 'Explanation visualization is temporarily unavailable.'}</p>
+                  {onRetry && (
+                    <button
+                      type="button"
+                      onClick={onRetry}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>{t('btnRetryExplanation') || 'Retry Explanation'}</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 text-center text-slate-400 space-y-1">
+                  <Sparkles className="w-6 h-6 text-brand-400 mx-auto" />
+                  <p className="text-xs font-bold text-slate-200">No Heatmap Available</p>
+                </div>
+              )}
+            </div>
           ) : (
-            /* Blended / Overlay View */
+            /* Blended / Overlay Mode */
             <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
               {/* Base Fundus Image */}
               <img
@@ -178,15 +272,15 @@ export const GradCamViewer = ({
                 className="w-full h-full object-contain"
               />
 
-              {/* Real Grad-CAM Heatmap Overlay Layer */}
-              {viewMode !== 'original' && hasValidHeatmap && (
+              {/* Heatmap Overlay Layer with Dynamic Opacity */}
+              {hasValidHeatmap && (
                 <div
                   className="absolute inset-0 pointer-events-none transition-opacity duration-150 flex items-center justify-center"
                   style={{ opacity: opacity / 100 }}
                 >
                   <img
-                    src={heatmapImage}
-                    alt="Grad-CAM Heatmap Layer"
+                    src={overlayImage}
+                    alt="Grad-CAM Overlay Layer"
                     onError={() => setImageError(true)}
                     className="w-full h-full object-contain"
                   />
@@ -223,13 +317,20 @@ export const GradCamViewer = ({
 
               {/* Error Notice */}
               {imageError && (
-                <div className="absolute bottom-3 inset-x-3 bg-slate-900/90 backdrop-blur-md rounded-xl p-2.5 border border-rose-800 text-center text-[11px] text-rose-300 shadow-lg pointer-events-none">
+                <div className="absolute bottom-3 inset-x-3 bg-slate-900/90 backdrop-blur-md rounded-xl p-3 border border-rose-800 text-center text-xs text-rose-300 shadow-lg space-y-1">
                   <span className="font-bold block">
-                    Unable to load Grad-CAM visualization from server.
+                    {t('explanationTempUnavailable') || 'Explanation visualization is temporarily unavailable.'}
                   </span>
-                  <span className="text-[10px] text-slate-400">
-                    Verify FastAPI backend results endpoint
-                  </span>
+                  {onRetry && (
+                    <button
+                      type="button"
+                      onClick={onRetry}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>{t('btnRetryExplanation') || 'Retry Explanation'}</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -237,12 +338,12 @@ export const GradCamViewer = ({
               <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-[10px] font-bold text-white">
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    hasValidHeatmap ? 'bg-emerald-400 animate-pulse' : 'bg-brand-400'
+                    hasValidHeatmap ? 'bg-purple-400 animate-pulse' : 'bg-brand-400'
                   }`}
                 ></div>
                 <span>{selectedEye === 'OD' ? 'OD (Right Eye)' : 'OS (Left Eye)'}</span>
                 <span className="text-slate-400">
-                  • {hasValidHeatmap ? 'Grad-CAM Active' : 'Fundus Scan'}
+                  • {hasValidHeatmap ? (t('modeOverlay') || 'Overlay') : 'Fundus Scan'}
                 </span>
               </div>
             </div>
@@ -281,33 +382,35 @@ export const GradCamViewer = ({
       {/* Bottom Interactive Controls */}
       {showControls && (
         <div className="p-4 sm:p-5 bg-white border-t border-slate-100 space-y-4">
-          {/* Opacity Slider */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-              <div className="flex items-center gap-1.5">
-                <Sliders className="w-4 h-4 text-brand-600" />
-                <span>{t('gradCamOpacity')}</span>
+          {/* Opacity Slider for Overlay Mode */}
+          {viewMode === 'overlay' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <div className="flex items-center gap-1.5">
+                  <Sliders className="w-4 h-4 text-brand-600" />
+                  <span>{t('heatmapOpacity') || 'Overlay Opacity'}</span>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-bold border border-brand-200">
+                  {opacity}%
+                </span>
               </div>
-              <span className="px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-bold border border-brand-200">
-                {opacity}%
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-slate-400 font-medium">{t('modeOriginal') || 'Original'} (0%)</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={opacity}
+                  onChange={(e) => setOpacity(Number(e.target.value))}
+                  className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-brand-600 focus:outline-none"
+                />
+                <span className="text-[11px] text-slate-400 font-medium">100% Overlay</span>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-[11px] text-slate-400 font-medium">{t('originalScan')} (0%)</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={opacity}
-                onChange={(e) => setOpacity(Number(e.target.value))}
-                className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-brand-600 focus:outline-none"
-              />
-              <span className="text-[11px] text-slate-400 font-medium">100% Grad-CAM</span>
-            </div>
-          </div>
+          )}
 
           {/* Overlays & Landmark Toggles */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-100 text-xs">
             <div className="flex flex-wrap items-center gap-4">
               <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -321,10 +424,10 @@ export const GradCamViewer = ({
             </div>
 
             <div className="flex items-center gap-2 text-slate-500 text-[11px]">
-              <Info className="w-3.5 h-3.5 text-brand-600" />
+              <Info className="w-3.5 h-3.5 text-purple-600" />
               <span>
                 {hasValidHeatmap
-                  ? 'EfficientNet-B0 Convolutional Layer Grad-CAM Loaded'
+                  ? 'Grad-CAM computed over EfficientNet-B0 conv_head'
                   : 'Grad-CAM Visualization Layer Ready'}
               </span>
             </div>

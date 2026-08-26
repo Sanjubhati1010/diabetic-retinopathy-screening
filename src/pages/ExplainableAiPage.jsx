@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
+import { SeverityBadge, ScreeningStatusBadge, SafetyBadge } from '../components/common/SeverityBadge';
 import {
   Sparkles,
   Info,
@@ -11,12 +12,14 @@ import {
   FileText,
   AlertTriangle,
   Eye,
+  HelpCircle,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
 import {
   getFullResultUrl,
   formatConfidence,
   getSeverityKeyFromClass,
+  CONFIDENCE_THRESHOLD,
 } from '../services/api';
 
 export const ExplainableAiPage = () => {
@@ -85,7 +88,13 @@ export const ExplainableAiPage = () => {
     ? rightEyeAnalysis?.gradcam_url || screening.gradCamOD || (screening.selectedEyeForAnalysis === 'OD' ? screening.gradCamUrl : null)
     : leftEyeAnalysis?.gradcam_url || screening.gradCamOS || (screening.selectedEyeForAnalysis === 'OS' ? screening.gradCamUrl : null);
 
+  const rawHeatmapPath = isOD
+    ? rightEyeAnalysis?.heatmap_url || screening.heatmapOD
+    : leftEyeAnalysis?.heatmap_url || screening.heatmapOS;
+
   const gradcamImageUrl = getFullResultUrl(rawGradCamPath);
+  const heatmapImageUrl = getFullResultUrl(rawHeatmapPath) || gradcamImageUrl;
+
   const isEyeAnalyzed = Boolean(currentAnalysis && gradcamImageUrl);
   const isReal = Boolean(rightEyeAnalysis || leftEyeAnalysis || screening.isRealPrediction);
 
@@ -95,6 +104,10 @@ export const ExplainableAiPage = () => {
 
   const currentConfidence = currentAnalysis?.confidence ?? (isEyeAnalyzed ? screening.confidence : null);
   const currentClassName = currentAnalysis?.class_name || (isEyeAnalyzed ? screening.className : 'Not Analyzed');
+
+  const safetyStatus = currentAnalysis?.safety_status || (isOD ? screening.safetyStatusOD : screening.safetyStatusOS) || 'READY_FOR_AI';
+  const safetyBlocked = safetyStatus !== 'READY_FOR_AI';
+  const isLowConfidence = currentConfidence !== null && (currentConfidence <= 1.0 ? currentConfidence : currentConfidence / 100.0) < CONFIDENCE_THRESHOLD;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -117,7 +130,7 @@ export const ExplainableAiPage = () => {
               <ChevronLeft className="w-5 h-5" />
             </button>
             <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-brand-600" />
+              <Sparkles className="w-6 h-6 text-purple-600" />
               <span>{t('xaiTitle')}</span>
             </h1>
           </div>
@@ -159,10 +172,13 @@ export const ExplainableAiPage = () => {
           <GradCamViewer
             originalImage={currentOriginal}
             heatmapImage={gradcamImageUrl}
+            heatmapUrl={heatmapImageUrl}
             confidence={currentConfidence}
             severity={currentSeverity}
             selectedEye={selectedEye}
             onEyeChange={setSelectedEye}
+            isLowConfidence={isLowConfidence}
+            safetyBlocked={safetyBlocked}
             showControls={true}
           />
         </div>
@@ -172,16 +188,22 @@ export const ExplainableAiPage = () => {
           {/* Healthcare Worker Interpretation Box */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-card space-y-3">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
-              <Info className="w-4 h-4 text-brand-600" />
-              <span>{t('xaiExplanation')} ({selectedEye})</span>
+              <HelpCircle className="w-4 h-4 text-purple-600" />
+              <span>{t('whatThisMeansTitle')} ({selectedEye})</span>
             </h3>
 
-            <p className="text-xs text-slate-600 leading-relaxed">
-              {currentAnalysis?.explanation ||
-                (isEyeAnalyzed
-                  ? "Highlighted regions indicate image areas that contributed to the model's prediction. This visualization supports professional review and does not constitute a medical diagnosis."
-                  : `Eye ${selectedEye} has not been analyzed by the AI model yet. Upload and analyze a retinal scan for this eye to generate its Grad-CAM visualizer.`)}
-            </p>
+            {/* Bilingual Simple Explanations */}
+            <div className="space-y-3">
+              <div className="p-3 rounded-2xl bg-purple-50/70 border border-purple-200 text-xs space-y-1 text-purple-950">
+                <span className="font-bold text-[10px] uppercase tracking-wider text-purple-800 block">English</span>
+                <p className="leading-relaxed font-medium">{t('simpleExplanationEn')}</p>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 text-xs space-y-1 text-indigo-950">
+                <span className="font-bold text-[10px] uppercase tracking-wider text-indigo-800 block">हिन्दी (Hindi)</span>
+                <p className="leading-relaxed font-medium font-hindi">{t('simpleExplanationHi')}</p>
+              </div>
+            </div>
 
             <div className="p-3 rounded-2xl bg-brand-50 border border-brand-200 text-xs text-brand-900 space-y-1">
               <p className="font-bold flex items-center gap-1">
@@ -190,56 +212,21 @@ export const ExplainableAiPage = () => {
               </p>
               <p className="text-[11px] text-brand-700 leading-normal">
                 {isEyeAnalyzed
-                  ? `EfficientNet-B0 final convolutional layer gradients are mapped onto this visualizer for ${selectedEye} (${currentClassName}) verification.`
+                  ? `EfficientNet-B0 final convolutional layer (conv_head) gradients are mapped onto this visualizer for ${selectedEye} (${currentClassName}) verification.`
                   : `Grad-CAM for ${selectedEye} will appear once its retinal scan is processed.`}
               </p>
             </div>
           </div>
 
-          {/* Anatomical Regions Evaluated */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-card space-y-3">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              {selectedEye} Anatomical Landmarks Inspection
+          {/* Clinical Limitation Notice */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-card space-y-2">
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Info className="w-3.5 h-3.5 text-brand-600" />
+              <span>{t('limitationTitle')}</span>
             </h4>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-semibold text-slate-700">Perifoveal Macula</span>
-                <span
-                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
-                    isEyeAnalyzed
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {isEyeAnalyzed ? 'Gradients Computed' : 'Pending Scan'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-semibold text-slate-700">Vascular Arcades</span>
-                <span
-                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
-                    isEyeAnalyzed
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {isEyeAnalyzed ? 'Gradients Computed' : 'Pending Scan'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-semibold text-slate-700">Optic Disc Perimeter</span>
-                <span
-                  className={`font-bold px-2 py-0.5 rounded text-[11px] ${
-                    isEyeAnalyzed
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {isEyeAnalyzed ? 'Gradients Computed' : 'Pending Scan'}
-                </span>
-              </div>
-            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {t('limitationText')}
+            </p>
           </div>
         </div>
       </div>

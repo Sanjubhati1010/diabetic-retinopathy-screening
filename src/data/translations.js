@@ -220,6 +220,25 @@ export const translations = {
     dr4: "Proliferative DR (PDR 4)",
     drUncertain: "AI model not connected yet",
     
+    // Phase 3: Explainable AI & Grad-CAM
+    btnWhyThisPrediction: "Why did the AI make this prediction?",
+    explainTitle: "Why This Prediction?",
+    explainSub: "Explainable AI (Grad-CAM) Visual Localization",
+    whatThisMeansTitle: "What this means",
+    simpleExplanationEn: "The AI model considered the highlighted retinal regions more important for its prediction.",
+    simpleExplanationHi: "AI ne retinal image ke kuch regions ko prediction ke liye zyada important maana. Ye regions Grad-CAM heatmap mein highlighted hain.",
+    limitationTitle: "Important Clinical Notice",
+    limitationText: "This visualization explains model behavior and does not replace professional clinical interpretation. The highlighted regions show model attention and are not confirmed clinical lesions.",
+    modeOriginal: "Original",
+    modeHeatmap: "Heatmap",
+    modeOverlay: "Overlay",
+    heatmapOpacity: "Overlay Opacity",
+    btnRetryExplanation: "Retry Explanation",
+    explanationUnavailable: "Explainability is unavailable because the image did not pass the AI safety checks.",
+    explanationTempUnavailable: "Explanation visualization is temporarily unavailable.",
+    lowConfidenceCaution: "AI confidence is low. The visualization should not be interpreted as a reliable clinical explanation. Consider image re-capture or specialist review.",
+    modelAttentionOnly: "Model-highlighted regions",
+
     // Explainable AI / Grad-CAM
     xaiTitle: "Explainable AI (Grad-CAM) Visualizer",
     xaiSubtitle: "Explainability will appear after the trained model is connected",
@@ -234,7 +253,7 @@ export const translations = {
     detectedBiomarkers: "Pathological Biomarkers",
     xaiPlaceholderText: "Explainability will appear after the trained model is connected. Convolutional activation maps will highlight regions influencing the prediction once the PyTorch model is integrated via FastAPI.",
     xaiExplanation: "Clinical Interpretation Framework",
-    xaiExplanationText: "The visualizer will compute activation gradients over deep convolutional feature maps, highlighting microaneurysms and exudate clusters with transparent, verifiable heatmaps.",
+    xaiExplanationText: "The visualizer computes activation gradients over deep convolutional feature maps (conv_head), highlighting retinal regions with transparent, verifiable heatmaps.",
     
     // Screening History
     historyTitle: "Screening Records & History",
@@ -547,6 +566,25 @@ export const translations = {
     dr4: "प्रोलिफेरेटिव डीआर (PDR 4)",
     drUncertain: "AI model not connected yet",
     
+    // Phase 3: Explainable AI & Grad-CAM
+    btnWhyThisPrediction: "एआई ने यह भविष्यवाणी क्यों की?",
+    explainTitle: "एआई ने यह भविष्यवाणी क्यों की?",
+    explainSub: "व्याख्यात्मक एआई (Grad-CAM) विज़ुअल लोकलाइज़ेशन",
+    whatThisMeansTitle: "इसका क्या अर्थ है?",
+    simpleExplanationEn: "The AI model considered the highlighted retinal regions more important for its prediction.",
+    simpleExplanationHi: "AI ne retinal image ke kuch regions ko prediction ke liye zyada important maana. Ye regions Grad-CAM heatmap mein highlighted hain.",
+    limitationTitle: "महत्वपूर्ण चिकित्सकीय सूचना",
+    limitationText: "यह विज़ुअलाइज़ेशन मॉडल के निर्णय व्यवहार को समझाता है और किसी योग्य नेत्र रोग विशेषज्ञ की नैदानिक जांच का विकल्प नहीं है। हाइलाइट किए गए क्षेत्र मॉडल के ध्यान को दर्शाते हैं, न कि अंतिम रूप से पुष्ट घावों (Lesions) को।",
+    modeOriginal: "मूल स्कैन (Original)",
+    modeHeatmap: "हीटमैप (Heatmap)",
+    modeOverlay: "ओवरले (Overlay)",
+    heatmapOpacity: "ओवरले पारदर्शिता (Opacity)",
+    btnRetryExplanation: "स्पष्टीकरण पुनः प्राप्त करें",
+    explanationUnavailable: "स्पष्टीकरण अनुपलब्ध है क्योंकि छवि एआई सुरक्षा जांच में सफल नहीं हुई।",
+    explanationTempUnavailable: "स्पष्टीकरण विज़ुअलाइज़ेशन अस्थायी रूप से अनुपलब्ध है।",
+    lowConfidenceCaution: "एआई कॉन्फिडेंस कम है। इस विज़ुअलाइज़ेशन को अंतिम नैदानिक स्पष्टीकरण न मानें। कृपया पुनः फोटो लें या विशेषज्ञ परामर्श लें।",
+    modelAttentionOnly: "मॉडल द्वारा हाइलाइट किए गए क्षेत्र",
+
     // Explainable AI / Grad-CAM
     xaiTitle: "व्याख्यात्मक एआई (Grad-CAM) विज़ुअलाइज़र",
     xaiSubtitle: "Explainability will appear after the trained model is connected",
@@ -561,7 +599,7 @@ export const translations = {
     detectedBiomarkers: "पहचाने जाने योग्य बायोमार्कर",
     xaiPlaceholderText: "Explainability will appear after the trained model is connected. प्रशिक्षित PyTorch मॉडल के FastAPI से जुड़ने के बाद वास्तविक Grad-CAM एक्टिवेशन प्रदर्शित होगा।",
     xaiExplanation: "नैदानिक व्याख्या संरचना",
-    xaiExplanationText: "विज़ुअलाइज़र डीप कनवोल्यूशनल लेयर्स पर एक्टिवेशन ग्रेडिएंट्स की गणना करेगा, जिससे स्वास्थ्य कार्यकर्ता यह देख सकेंगे कि मॉडल ने किस आधार पर निर्णय लिया।",
+    xaiExplanationText: "विज़ुअलाइज़र डीप कनवोल्यूशनल लेयर्स (conv_head) पर एक्टिवेशन ग्रेडिएंट्स की गणना करता है, जिससे स्वास्थ्य कार्यकर्ता यह समझ सकें कि मॉडल ने किस आधार पर निर्णय लिया।",
     
     // Screening History
     historyTitle: "स्क्रीनिंग रिकॉर्ड्स एवं इतिहास",

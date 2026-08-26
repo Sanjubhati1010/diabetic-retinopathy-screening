@@ -193,6 +193,11 @@ export const DoctorDashboardPage = () => {
                 ? selectedScreening.gradCamOD || selectedScreening.gradCamUrl
                 : selectedScreening.gradCamOS || selectedScreening.gradCamUrl
             }
+            heatmapUrl={
+              selectedEye === 'OD'
+                ? selectedScreening.heatmapOD || selectedScreening.gradCamOD || selectedScreening.gradCamUrl
+                : selectedScreening.heatmapOS || selectedScreening.gradCamOS || selectedScreening.gradCamUrl
+            }
             confidence={selectedScreening.confidence}
             severity={selectedScreening.overallSeverity}
             selectedEye={selectedEye}
