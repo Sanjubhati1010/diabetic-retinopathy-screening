@@ -33,7 +33,7 @@ export const GradCamViewer = ({
   const { t } = useLanguage();
   // Modes: 'overlay' | 'heatmap' | 'original' | 'split'
   const [viewMode, setViewMode] = useState('overlay');
-  const [opacity, setOpacity] = useState(70);
+  const [opacity, setOpacity] = useState(40);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showLandmarks, setShowLandmarks] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -46,7 +46,7 @@ export const GradCamViewer = ({
   const handleZoomOut = () => setZoomLevel((prev) => Math.max(Number((prev - 0.25).toFixed(2)), 0.75));
   const handleReset = () => {
     setZoomLevel(1);
-    setOpacity(70);
+    setOpacity(40);
     setViewMode('overlay');
   };
 
@@ -197,8 +197,8 @@ export const GradCamViewer = ({
                       src={pureHeatmap}
                       alt="Grad-CAM Overlay"
                       onError={() => setImageError(true)}
-                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                      style={{ opacity: 0.75, mixBlendMode: 'screen' }}
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none transition-opacity duration-150"
+                      style={{ opacity: opacity / 100, mixBlendMode: 'screen' }}
                     />
                     <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-bold text-purple-300 border border-white/10">
                       Grad-CAM Overlay ({selectedEye})
@@ -397,30 +397,55 @@ export const GradCamViewer = ({
       {/* Bottom Interactive Controls */}
       {showControls && (
         <div className="p-4 sm:p-5 bg-white border-t border-slate-100 space-y-4">
-          {/* Opacity Slider for Overlay Mode */}
-          {viewMode === 'overlay' && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+          {/* Opacity Slider for Overlay & Split Modes */}
+          {(viewMode === 'overlay' || viewMode === 'split') && (
+            <div className="space-y-2.5 p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-700">
                 <div className="flex items-center gap-1.5">
                   <Sliders className="w-4 h-4 text-brand-600" />
-                  <span>{t('heatmapOpacity') || 'Overlay Opacity'}</span>
+                  <span className="font-bold text-slate-900">
+                    {t('heatmapOpacity') || 'Overlay Opacity'}: <span className="font-mono text-brand-700 font-extrabold">{opacity}%</span>
+                  </span>
                 </div>
-                <span className="px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-bold border border-brand-200 font-mono">
-                  {opacity}%
-                </span>
+                
+                {/* Quick Opacity Presets */}
+                <div className="flex items-center gap-1">
+                  {[20, 30, 40, 50, 60, 70].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setOpacity(val)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition border ${
+                        opacity === val
+                          ? 'bg-brand-600 text-white border-brand-500 shadow-xs'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {val === 40 ? '40% (Default)' : `${val}%`}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] text-slate-400 font-medium">{t('modeOriginal') || 'Original'} (0%)</span>
+
+              {/* Slider Track (20% to 70%) */}
+              <div className="flex items-center gap-3 pt-1">
+                <span className="text-[11px] font-bold text-slate-500">20%</span>
                 <input
                   type="range"
-                  min="0"
-                  max="100"
+                  min="20"
+                  max="70"
+                  step="1"
                   value={opacity}
                   onChange={(e) => setOpacity(Number(e.target.value))}
                   className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-brand-600 focus:outline-none"
+                  aria-label="Adjust Overlay Opacity"
                 />
-                <span className="text-[11px] text-slate-400 font-medium">100% Overlay</span>
+                <span className="text-[11px] font-bold text-slate-500">70%</span>
               </div>
+
+              <p className="text-[11px] text-slate-500 font-medium">
+                Grad-CAM highlights regions that contributed to the model prediction.
+              </p>
             </div>
           )}
 
