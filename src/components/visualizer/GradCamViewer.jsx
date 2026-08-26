@@ -41,17 +41,19 @@ export const GradCamViewer = ({
     setImageError(false);
   }, [heatmapImage, heatmapUrl, selectedEye]);
 
-  const handleZoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.25, 2.5));
-  const handleZoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.25, 0.75));
+  const handleZoomIn = () => setZoomLevel((prev) => Math.min(Number((prev + 0.25).toFixed(2)), 2.5));
+  const handleZoomOut = () => setZoomLevel((prev) => Math.max(Number((prev - 0.25).toFixed(2)), 0.75));
   const handleReset = () => {
     setZoomLevel(1);
     setOpacity(70);
     setViewMode('overlay');
   };
 
+  // Pure Heatmap URL (JET heatmap without base image blend)
   const pureHeatmap = heatmapUrl || heatmapImage;
-  const overlayImage = heatmapImage || heatmapUrl;
-  const hasValidHeatmap = Boolean(overlayImage && !imageError && !safetyBlocked);
+  // Blended Overlay URL (pre-blended 60/40 result from backend)
+  const blendedOverlay = heatmapImage || heatmapUrl;
+  const hasValidHeatmap = Boolean((pureHeatmap || blendedOverlay) && !imageError && !safetyBlocked);
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white shadow-card overflow-hidden transition-all">
@@ -147,8 +149,8 @@ export const GradCamViewer = ({
         </div>
       </div>
 
-      {/* Main Canvas / Image Viewport */}
-      <div className="relative bg-slate-950 p-4 sm:p-6 flex items-center justify-center min-h-[380px] sm:min-h-[440px] overflow-hidden select-none">
+      {/* Main Canvas / Image Viewport - Aspect Ratio Preserved */}
+      <div className="relative bg-slate-950 p-4 sm:p-6 flex items-center justify-center min-h-[380px] sm:min-h-[460px] overflow-hidden select-none">
         <div
           className="relative transition-transform duration-150 ease-out max-w-full flex items-center justify-center"
           style={{ transform: `scale(${zoomLevel})` }}
@@ -163,33 +165,42 @@ export const GradCamViewer = ({
               </p>
             </div>
           ) : viewMode === 'split' ? (
-            /* Split View */
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black">
+            /* Split View: Side-by-Side with True Aspect Ratio */
+            <div className="flex flex-col sm:flex-row items-center gap-4 max-w-full">
+              {/* Split Left: Original Fundus */}
+              <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
                 <img
                   src={originalImage}
                   alt="Original Retinal Fundus Scan"
-                  className="w-full h-full object-contain"
+                  className="max-h-[320px] sm:max-h-[380px] w-auto max-w-full object-contain block"
                 />
                 <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-bold text-white border border-white/10">
                   {t('modeOriginal') || 'Original'} ({selectedEye})
                 </span>
               </div>
-              <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
+
+              {/* Split Right: Grad-CAM Overlay */}
+              <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
                 {hasValidHeatmap ? (
                   <>
                     <img
-                      src={overlayImage}
-                      alt="Grad-CAM Visualization"
+                      src={originalImage}
+                      alt="Base Fundus Scan"
+                      className="max-h-[320px] sm:max-h-[380px] w-auto max-w-full object-contain block"
+                    />
+                    <img
+                      src={pureHeatmap}
+                      alt="Grad-CAM Overlay"
                       onError={() => setImageError(true)}
-                      className="w-full h-full object-contain"
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                      style={{ opacity: 0.75, mixBlendMode: 'screen' }}
                     />
                     <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-bold text-purple-300 border border-white/10">
                       Grad-CAM Overlay ({selectedEye})
                     </span>
                   </>
                 ) : imageError ? (
-                  <div className="p-4 text-center text-rose-300 space-y-2">
+                  <div className="p-6 text-center text-rose-300 space-y-2">
                     <AlertTriangle className="w-6 h-6 text-rose-500 mx-auto" />
                     <p className="text-xs font-bold">{t('explanationTempUnavailable') || 'Explanation visualization is temporarily unavailable.'}</p>
                     {onRetry && (
@@ -204,7 +215,7 @@ export const GradCamViewer = ({
                     )}
                   </div>
                 ) : (
-                  <div className="p-4 text-center text-slate-400 space-y-1">
+                  <div className="p-6 text-center text-slate-400 space-y-1">
                     <Sparkles className="w-6 h-6 text-brand-400 mx-auto" />
                     <p className="text-xs font-bold text-slate-200">No Heatmap Available</p>
                   </div>
@@ -212,12 +223,12 @@ export const GradCamViewer = ({
               </div>
             </div>
           ) : viewMode === 'original' ? (
-            /* Original Fundus Mode */
-            <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
+            /* Mode 1: Pure Original Fundus Scan (Natural Aspect Ratio) */
+            <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
               <img
                 src={originalImage}
                 alt="Retinal Fundus Image"
-                className="w-full h-full object-contain"
+                className="max-h-[420px] sm:max-h-[480px] w-auto max-w-full object-contain block"
               />
               <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm border border-white/10 text-[10px] font-bold text-white flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-400"></span>
@@ -225,15 +236,15 @@ export const GradCamViewer = ({
               </div>
             </div>
           ) : viewMode === 'heatmap' ? (
-            /* Pure Heatmap Mode */
-            <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
+            /* Mode 2: Pure Grad-CAM Heatmap (Matching Aspect Ratio & Dimensions) */
+            <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
               {hasValidHeatmap ? (
                 <>
                   <img
                     src={pureHeatmap}
                     alt="Grad-CAM Pure Heatmap"
                     onError={() => setImageError(true)}
-                    className="w-full h-full object-contain"
+                    className="max-h-[420px] sm:max-h-[480px] w-auto max-w-full object-contain block"
                   />
                   <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm border border-white/10 text-[10px] font-bold text-orange-300 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
@@ -241,7 +252,7 @@ export const GradCamViewer = ({
                   </div>
                 </>
               ) : imageError ? (
-                <div className="p-6 text-center text-rose-300 space-y-2">
+                <div className="p-8 text-center text-rose-300 space-y-2">
                   <AlertTriangle className="w-6 h-6 text-rose-500 mx-auto" />
                   <p className="text-xs font-bold">{t('explanationTempUnavailable') || 'Explanation visualization is temporarily unavailable.'}</p>
                   {onRetry && (
@@ -256,35 +267,34 @@ export const GradCamViewer = ({
                   )}
                 </div>
               ) : (
-                <div className="p-4 text-center text-slate-400 space-y-1">
+                <div className="p-8 text-center text-slate-400 space-y-1">
                   <Sparkles className="w-6 h-6 text-brand-400 mx-auto" />
                   <p className="text-xs font-bold text-slate-200">No Heatmap Available</p>
                 </div>
               )}
             </div>
           ) : (
-            /* Blended / Overlay Mode */
-            <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black flex items-center justify-center">
-              {/* Base Fundus Image */}
+            /* Mode 3: Pixel-Aligned Overlay (Original + Transparent Heatmap Layer) */
+            <div className="relative rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-black inline-flex items-center justify-center">
+              {/* Base Fundus Image establishes the natural dimension frame */}
               <img
                 src={originalImage}
                 alt="Retinal Fundus Image"
-                className="w-full h-full object-contain"
+                className="max-h-[420px] sm:max-h-[480px] w-auto max-w-full object-contain block"
               />
 
-              {/* Heatmap Overlay Layer with Dynamic Opacity */}
+              {/* Heatmap Overlay Layer with Dynamic Opacity & Screen Blending */}
               {hasValidHeatmap && (
-                <div
-                  className="absolute inset-0 pointer-events-none transition-opacity duration-150 flex items-center justify-center"
-                  style={{ opacity: opacity / 100 }}
-                >
-                  <img
-                    src={overlayImage}
-                    alt="Grad-CAM Overlay Layer"
-                    onError={() => setImageError(true)}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
+                <img
+                  src={pureHeatmap}
+                  alt="Grad-CAM Overlay Layer"
+                  onError={() => setImageError(true)}
+                  className="absolute inset-0 w-full h-full object-contain pointer-events-none transition-opacity duration-150"
+                  style={{
+                    opacity: opacity / 100,
+                    mixBlendMode: 'screen',
+                  }}
+                />
               )}
 
               {/* Anatomical Landmark Overlays */}
@@ -390,7 +400,7 @@ export const GradCamViewer = ({
                   <Sliders className="w-4 h-4 text-brand-600" />
                   <span>{t('heatmapOpacity') || 'Overlay Opacity'}</span>
                 </div>
-                <span className="px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-bold border border-brand-200">
+                <span className="px-2 py-0.5 rounded bg-brand-50 text-brand-700 font-bold border border-brand-200 font-mono">
                   {opacity}%
                 </span>
               </div>

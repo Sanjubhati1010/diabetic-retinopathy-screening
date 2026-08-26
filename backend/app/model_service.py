@@ -522,8 +522,13 @@ class DRModelService:
             heatmap = cv2.applyColorMap(np.uint8(255 * cam_resized), cv2.COLORMAP_JET)
             heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
 
-            # Blend with original image
             orig_np = np.array(pil_image)
+
+            # Preserve natural circular fundus canvas (keep non-retinal black border black)
+            bg_mask = (orig_np[:, :, 0] < 12) & (orig_np[:, :, 1] < 12) & (orig_np[:, :, 2] < 12)
+            heatmap[bg_mask] = [0, 0, 0]
+
+            # Blend with original image
             blended = np.uint8(0.6 * orig_np + 0.4 * heatmap)
 
             # Save pure heatmap visualization and blended overlay visualization
