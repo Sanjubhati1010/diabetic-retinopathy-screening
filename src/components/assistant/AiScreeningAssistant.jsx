@@ -135,34 +135,34 @@ export const AiScreeningAssistant = () => {
 
   const quickActions = [
     {
-      label: assistantLang === 'hi' ? 'इमेज कैसे अपलोड करें?' : 'How to Upload?',
-      query: assistantLang === 'hi' ? 'इमेज कैसे अपलोड करें?' : 'How do I upload fundus images?',
-      icon: HelpCircle,
-    },
-    {
-      label: assistantLang === 'hi' ? 'परिणाम का क्या अर्थ है?' : 'Explain Result',
-      query: assistantLang === 'hi' ? 'इस परिणाम का क्या अर्थ है?' : 'What does this screening result mean?',
+      label: assistantLang === 'hi' ? 'एआई ने यह परिणाम क्यों दिया?' : 'Why this result?',
+      query: assistantLang === 'hi' ? 'एआई ने यह परिणाम क्यों दिया?' : 'Why did AI give this result?',
       icon: Sparkles,
     },
     {
-      label: assistantLang === 'hi' ? 'Grad-CAM क्या है?' : 'What is Grad-CAM?',
-      query: assistantLang === 'hi' ? 'Grad-CAM क्या है?' : 'What is Grad-CAM explainability?',
+      label: assistantLang === 'hi' ? 'कॉन्फिडेंस का क्या अर्थ है?' : 'What is confidence?',
+      query: assistantLang === 'hi' ? 'कॉन्फिडेंस का क्या अर्थ है?' : 'What does confidence mean?',
+      icon: Info,
+    },
+    {
+      label: assistantLang === 'hi' ? 'डॉक्टर समीक्षा क्यों जरूरी?' : 'Why doctor review?',
+      query: assistantLang === 'hi' ? 'डॉक्टर समीक्षा की सिफारिश क्यों की गई है?' : 'Why is doctor review recommended?',
+      icon: ShieldCheck,
+    },
+    {
+      label: assistantLang === 'hi' ? 'Grad-CAM क्या दिखाता है?' : 'What Grad-CAM shows?',
+      query: assistantLang === 'hi' ? 'Grad-CAM क्या दिखाता है?' : 'What does Grad-CAM show?',
       icon: Eye,
     },
     {
-      label: assistantLang === 'hi' ? 'इमेज खराब क्यों हुई?' : 'Quality Issues?',
-      query: assistantLang === 'hi' ? 'इमेज गुणवत्ता खराब क्यों है?' : 'Why was image quality rejected?',
-      icon: AlertTriangle,
+      label: assistantLang === 'hi' ? 'री-कैप्चर के बाद क्या होगा?' : 'After re-capture?',
+      query: assistantLang === 'hi' ? 'दोबारा फोटो लेने के बाद क्या होता है?' : 'What happens after re-capture?',
+      icon: RotateCcw,
     },
     {
-      label: assistantLang === 'hi' ? 'आगे क्या करना है?' : 'Next Step?',
-      query: assistantLang === 'hi' ? 'आगे क्या करना चाहिए?' : 'What is the next step after screening?',
-      icon: ChevronRight,
-    },
-    {
-      label: assistantLang === 'hi' ? 'डॉक्टर समीक्षा कैसे मांगें?' : 'Doctor Review?',
-      query: assistantLang === 'hi' ? 'डॉक्टर समीक्षा कैसे मांगें?' : 'How do I request tele-ophthalmology doctor review?',
-      icon: ShieldCheck,
+      label: assistantLang === 'hi' ? 'इमेज कैसे अपलोड करें?' : 'How to Upload?',
+      query: assistantLang === 'hi' ? 'इमेज कैसे अपलोड करें?' : 'How do I upload fundus images?',
+      icon: HelpCircle,
     },
   ];
 

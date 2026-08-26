@@ -13,10 +13,12 @@ import {
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { MetricCard } from '../components/common/MetricCard';
+import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
 import {
   Stethoscope,
   CheckCircle2,
   AlertTriangle,
+  AlertOctagon,
   Clock,
   Sparkles,
   Eye,
@@ -64,6 +66,7 @@ const DoctorDashboardContent = () => {
   const [selectedEye, setSelectedEye] = useState('OD');
   const [activeModal, setActiveModal] = useState(null); // 'ACCEPT' | 'MODIFY' | 'RECAPTURE' | null
   const [overrideClass, setOverrideClass] = useState(1);
+  const [overrideCategory, setOverrideCategory] = useState('Clinical assessment differs');
   const [overrideComment, setOverrideComment] = useState('');
   const [commentError, setCommentError] = useState('');
   const [recaptureComment, setRecaptureComment] = useState(
@@ -150,6 +153,7 @@ const DoctorDashboardContent = () => {
     try {
       const selectedOption = DR_OPTIONS.find((o) => o.value === Number(overrideClass)) || DR_OPTIONS[1];
       const originalAi = selectedScreening.className || t(selectedScreening.overallSeverity) || 'Moderate';
+      const finalComment = `[${overrideCategory}] ${overrideComment.trim()}`;
 
       const result = await submitDoctorReview(
         selectedScreening.id,
@@ -157,7 +161,7 @@ const DoctorDashboardContent = () => {
           action: 'MODIFY',
           reviewedClass: selectedOption.value,
           reviewedClassName: selectedOption.name,
-          reviewComment: overrideComment.trim(),
+          reviewComment: finalComment,
           originalAiResult: originalAi,
           originalConfidence: selectedScreening.confidence || 0.85,
           reviewerId: 'DOC-SWAMINATHAN',
@@ -358,12 +362,30 @@ const DoctorDashboardContent = () => {
             </div>
           </div>
 
+          {/* Prominent Image Re-capture Required Banner if Re-capture requested */}
+          {currentStatus === 'IMAGE_RECAPTURE_REQUESTED' && (
+            <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-xs space-y-1 text-rose-950">
+              <div className="flex items-center gap-2 font-bold text-rose-900">
+                <AlertOctagon className="w-5 h-5 text-rose-600 shrink-0" />
+                <span>IMAGE RE-CAPTURE REQUIRED (Historical AI Result Preserved)</span>
+              </div>
+              <p className="text-[11px] text-rose-800 pl-7">
+                Doctor requested new image due to quality or anatomical obstruction. The result below is preserved historical baseline data.
+              </p>
+            </div>
+          )}
+
+          {/* Phase 8: AI Clinical Evidence Card */}
+          <ClinicalEvidenceCard screening={selectedScreening} selectedEye={selectedEye} />
+
           {/* Side-by-Side Result Comparison Strip */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-3xl bg-slate-50 border border-slate-200">
             {/* Box 1: Original AI Result (Immutable) */}
             <div className="p-3.5 rounded-2xl bg-white border border-slate-200 space-y-1">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                {t('originalAiResultLabel') || 'Original AI Result (Preserved)'}
+                {currentStatus === 'IMAGE_RECAPTURE_REQUESTED'
+                  ? (t('historicalAiResult') || 'Historical AI Screening Result')
+                  : (t('originalAiResultLabel') || 'Original AI Result (Preserved)')}
               </span>
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-extrabold text-slate-900">{originalAiDisplay}</h4>
@@ -574,7 +596,24 @@ const DoctorDashboardContent = () => {
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  {t('lblReviewReason') || 'Clinical Review Reason (Required for Override)'}
+                  {t('doctorOverrideReason') || 'Override Reason Category'}
+                </label>
+                <select
+                  value={overrideCategory}
+                  onChange={(e) => setOverrideCategory(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-800 focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="Clinical assessment differs">{t('overrideReasonClinical') || 'Clinical assessment differs'}</option>
+                  <option value="AI prediction disagreement">{t('overrideReasonDisagree') || 'AI prediction disagreement'}</option>
+                  <option value="Image quality concern">{t('overrideReasonQuality') || 'Image quality concern'}</option>
+                  <option value="Additional specialist review required">{t('overrideReasonReview') || 'Additional specialist review required'}</option>
+                  <option value="Other clinical observation">{t('overrideReasonOther') || 'Other clinical observation'}</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {t('lblReviewReason') || 'Clinical Review Reason / Specific Findings'}
                 </label>
                 <textarea
                   rows="3"
@@ -583,7 +622,7 @@ const DoctorDashboardContent = () => {
                     setOverrideComment(e.target.value);
                     if (commentError) setCommentError('');
                   }}
-                  placeholder={t('placeholderReviewReason') || 'e.g., Clinical review indicates Mild NPDR based on isolated microaneurysms...'}
+                  placeholder={t('placeholderReviewReason') || 'e.g., Clinical review indicates Mild NPDR based on isolated microaneurysms in OD temporal quadrant...'}
                   className={`w-full p-2.5 rounded-xl border text-xs ${
                     commentError ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-300 focus:ring-2 focus:ring-brand-500'
                   }`}

@@ -123,8 +123,8 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 2. "Explain My Result"
-    if any(k in msg_clean for k in ["explain", "result", "parinaam", "samjhao", "score", "prediction", "mera result"]):
+    # 2. "Explain My Result" / "Why did AI give this result?"
+    if any(k in msg_clean for k in ["explain", "result", "parinaam", "samjhao", "score", "prediction", "mera result", "why did ai give", "परिणाम", "रिजल्ट", "समझाओ", "क्यों दिया"]):
         reply = explain_screening_context(screening_context, language="hi" if is_hi else "en")
         return {
             "reply": reply,
@@ -135,7 +135,7 @@ def generate_assistant_reply(
         }
 
     # 3. "Why Rejected?" / Image Quality Help
-    if any(k in msg_clean for k in ["reject", "quality", "blur", "dark", "bright", "asweekrit", "kharaab", "asafal"]):
+    if any(k in msg_clean for k in ["reject", "quality", "blur", "dark", "bright", "asweekrit", "kharaab", "asafal", "अस्वीकृत", "गुणवत्ता", "खराब"]):
         if is_hi:
             reply = (
                 "छवि अस्वीकृत होने के मुख्य कारण हो सकते हैं:\n"
@@ -162,29 +162,107 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 4. "What is Grad-CAM?"
-    if any(k in msg_clean for k in ["gradcam", "grad-cam", "heatmap", "overlay", "visualization", "rang"]):
+    # 4. "What does confidence mean?" (Phase 8)
+    if any(k in msg_clean for k in ["confidence mean", "confidence ka matlab", "what is confidence", "bharosa star", "model confidence", "कॉन्फिडेंस", "भरोसा"]):
         if is_hi:
             reply = (
-                "Grad-CAM (Gradient-weighted Class Activation Mapping) एक विज़ुअलाइज़ेशन तकनीक है "
-                "जो फंडस छवि के उन हिस्सों को रंगीन हीटमैप (Heatmap) के रूप में दिखाती है जिन पर एआई मॉडल ने अपना ध्यान केंद्रित किया।\n\n"
-                "महत्वपूर्ण: यह मॉडल के निर्णय व्यवहार को समझाता है और यह पुष्ट चिकित्सीय घाव (Lesions) नहीं हैं।"
+                "मॉडल कॉन्फिडेंस (Model Confidence) यह दर्शाता है कि एआई मॉडल अपने सांख्यिकीय पैटर्न पहचान में कितना आश्वस्त है।\n\n"
+                "• उच्च कॉन्फिडेंस (≥85%): मॉडल के आंतरिक निर्णय अत्यधिक सुसंगत हैं।\n"
+                "• मध्यम कॉन्फिडेंस (60-84%): मानक निर्णय समर्थन स्तर।\n"
+                "• कम कॉन्फिडेंस (<60%): सीमा से कम; विशेषज्ञ डॉक्टर सत्यापन आवश्यक।\n\n"
+                "महत्वपूर्ण: कॉन्फिडेंस सांख्यिकीय सहमति दर्शाता है, चिकित्सीय निश्चितता नहीं।"
             )
         else:
             reply = (
-                "Grad-CAM (Gradient-weighted Class Activation Mapping) is an explainability technique "
-                "that visualizes which regions of the fundus image the AI model focused on when making its prediction.\n\n"
-                "Important Note: Grad-CAM explains model attention patterns and is not a definitive clinical lesion detector."
+                "Model confidence represents the AI's internal statistical agreement over recognized retinal features.\n\n"
+                "• High Confidence (≥85%): Strong feature agreement and consistent pattern matching.\n"
+                "• Moderate Confidence (60-84%): Standard decision-support confidence.\n"
+                "• Low Confidence (<60%): Below threshold; clinical review or re-capture required.\n\n"
+                "Important: Confidence reflects statistical pattern agreement, not diagnostic certainty."
             )
         return {
             "reply": reply,
             "language": "hi" if is_hi else "en",
-            "suggested_actions": ["Explain My Result", "What is Safety Gate?"],
+            "suggested_actions": ["Why did AI give this result?", "Why is doctor review recommended?"],
             "context_used": False,
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 5. "What is Safety Gate?"
+    # 5. "Why is doctor review recommended?" (Phase 8)
+    if any(k in msg_clean for k in ["why is doctor review", "doctor review recommended", "doctor ki samiksha kyun", "doctor review kyun", "डॉक्टर समीक्षा", "समीक्षा क्यों"]):
+        ref = screening_context.get("referral_priority") if screening_context else None
+        risk = screening_context.get("risk_category") if screening_context else None
+        pred = screening_context.get("prediction") or screening_context.get("className") if screening_context else None
+
+        if is_hi:
+            reply = (
+                f"डॉक्टर समीक्षा की सिफारिश इसलिए की गई है क्योंकि एआई एक स्क्रीनिंग समर्थन प्रणाली है। "
+                f"{f'वर्तमान केस में {pred} (जोखिम: {risk}) का अनुमान लगाया गया है। ' if pred else ''}"
+                "डायबिटिक रेटिनोपैथी के पुष्ट निदान और उपचार योजना (लेजर/दवा) के लिए नेत्र रोग विशेषज्ञ द्वारा स्लिट-लैंप और फंडस जांच आवश्यक है।"
+            )
+        else:
+            reply = (
+                f"Doctor review is recommended because MADOCS is an AI-assisted screening tool, not a diagnostic authority. "
+                f"{f'The current scan was classified as {pred} ({risk} risk). ' if pred else ''}"
+                "An ophthalmologist must perform biomicroscopy and dilated examination to verify findings and determine clinical management."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["Why did AI give this result?", "What does Grad-CAM show?"],
+            "context_used": bool(screening_context),
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 6. "What happens after re-capture?" (Phase 8)
+    if any(k in msg_clean for k in ["after re-capture", "after recapture", "recapture ke baad", "re-capture ke baad", "dobara photo ke baad", "री-कैप्चर", "दोबारा फोटो"]):
+        if is_hi:
+            reply = (
+                "इमेज री-कैप्चर (Re-capture) के बाद की प्रक्रिया:\n"
+                "1. स्वास्थ्य कार्यकर्ता नई, स्पष्ट फंडस छवि अपलोड करेंगे।\n"
+                "2. AI Safety Gate नई छवि की गुणवत्ता (शार्पनेस/प्रकाश) की दोबारा पुष्टि करेगा।\n"
+                "3. नया एआई स्क्रीनिंग विश्लेषण और Grad-CAM हीटमैप जनरेट होगा।\n"
+                "4. पिछला परिणाम ऐतिहासिक डेटा (Historical AI Result) के रूप में सुरक्षित रहेगा और डॉक्टर नए स्कैन की समीक्षा करेंगे।"
+            )
+        else:
+            reply = (
+                "What happens after an image re-capture:\n"
+                "1. The health worker captures and uploads a clearer fundus photograph.\n"
+                "2. The AI Safety Gate automatically re-evaluates sharpness and illumination.\n"
+                "3. Fresh model inference and Grad-CAM attention maps are computed.\n"
+                "4. Previous AI findings are preserved as historical baseline data, and the reviewing doctor is notified of the updated scan."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["How to Use?", "Why Rejected?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 7. "What is Grad-CAM?" / "What does Grad-CAM show?"
+    if any(k in msg_clean for k in ["gradcam", "grad-cam", "heatmap", "overlay", "visualization", "rang", "what does grad-cam show", "हीटमैप", "दिखाता है"]):
+        if is_hi:
+            reply = (
+                "Grad-CAM (Gradient-weighted Class Activation Mapping) एआई का व्याख्यात्मक विज़ुअलाइज़ेशन है:\n\n"
+                "• यह फंडस फोटो के उन हिस्सों को रंगीन हीटमैप (40% डिफ़ॉल्ट पारदर्शिता) के रूप में दिखाता है जिन्होंने एआई निर्णय को सबसे ज्यादा प्रभावित किया।\n"
+                "• महत्वपूर्ण: यह मॉडल के ध्यान क्षेत्र (Model Attention) को दर्शाता है और यह पुष्ट चिकित्सीय घाव (Lesions) नहीं हैं।"
+            )
+        else:
+            reply = (
+                "Grad-CAM (Gradient-weighted Class Activation Mapping) is an explainability visualizer:\n\n"
+                "• It renders a transparent activation heatmap (40% default opacity) highlighting image regions that contributed most to the AI model's prediction.\n"
+                "• Important: Grad-CAM shows computational model attention and does NOT represent confirmed clinical lesions."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What does confidence mean?", "Why is doctor review recommended?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 8. "What is Safety Gate?"
     if any(k in msg_clean for k in ["safety gate", "safety", "suraksha", "gate"]):
         if is_hi:
             reply = (
@@ -208,7 +286,7 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 6. "Next Step" / Referral Guidance
+    # 9. "Next Step" / Referral Guidance
     if any(k in msg_clean for k in ["next step", "agla kadam", "referral", "kya karein", "what to do"]):
         if screening_context and screening_context.get("referral_priority"):
             ref = screening_context.get("referral_priority")
@@ -242,7 +320,7 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 7. "How to Use?" / General Screening Flow
+    # 10. "How to Use?" / General Screening Flow
     if any(k in msg_clean for k in ["how to use", "guide", "madad", "kaise use", "upload", "shuru", "help"]):
         if is_hi:
             reply = (
@@ -265,29 +343,35 @@ def generate_assistant_reply(
         return {
             "reply": reply,
             "language": "hi" if is_hi else "en",
-            "suggested_actions": ["Explain My Result", "Why Rejected?", "What is Grad-CAM?"],
+            "suggested_actions": ["Why did AI give this result?", "What is Grad-CAM?", "Why Rejected?"],
             "context_used": False,
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 8. Default Greeting / Friendly Fallback
+    # 11. Default Greeting / Friendly Fallback
     if is_hi:
         reply = (
-            "नमस्ते! मैं मैडॉक्स (MADOCS) स्क्रीनिंग सहायक हूँ। "
-            "मैं रेटिना छवि अपलोड करने, AI Safety Gate, Grad-CAM हीटमैप और स्क्रीनिंग परिणामों को समझने में आपकी सहायता कर सकता हूँ। "
+            "नमस्ते! मैं मैडॉक्स (MADOCS) क्लिनिकल एविडेंस एवं स्क्रीनिंग सहायक हूँ। "
+            "मैं एआई क्लिनिकल साक्ष्य, मॉडल कॉन्फिडेंस, Grad-CAM ध्यान क्षेत्र और डॉक्टर समीक्षा को समझने में आपकी सहायता कर सकता हूँ। "
             "नीचे दिए गए बटनों में से किसी एक को चुनें या अपना प्रश्न लिखें।"
         )
     else:
         reply = (
-            "Hi! I'm the MADOCS Screening Assistant. "
-            "I can help you capture retinal images, navigate the AI Safety Gate, interpret Grad-CAM visualizations, and understand your screening results. "
+            "Hi! I'm the MADOCS Clinical Evidence & Safety Intelligence Assistant. "
+            "I can help you understand AI clinical evidence, model confidence interpretations, Grad-CAM attention regions, and doctor review guidance. "
             "You can choose a quick action below or ask a question."
         )
 
     return {
         "reply": reply,
         "language": "hi" if is_hi else "en",
-        "suggested_actions": ["How to Use?", "Explain My Result", "What is Grad-CAM?", "Why Rejected?"],
+        "suggested_actions": [
+            "Why did AI give this result?",
+            "What does confidence mean?",
+            "Why is doctor review recommended?",
+            "What does Grad-CAM show?",
+            "What happens after re-capture?",
+        ],
         "context_used": False,
         "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
     }

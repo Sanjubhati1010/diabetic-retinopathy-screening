@@ -548,6 +548,18 @@ const PatientReportContent = () => {
               </p>
             </div>
           </div>
+
+          {/* Phase 8: Explainability Note */}
+          <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-200 text-xs text-purple-950 space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-[11px] text-purple-900">
+              <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <span>{t('explainabilityNoteTitle') || 'Explainability Note'} (Grad-CAM)</span>
+            </div>
+            <p className="text-[10.5px] leading-relaxed text-slate-700">
+              {t('explainabilityNoteText') ||
+                'Grad-CAM highlights image regions that contributed to the AI model prediction. These regions are not independent lesion diagnoses.'}
+            </p>
+          </div>
         </div>
 
         {/* Doctor Clinical Impression & Remarks Box */}

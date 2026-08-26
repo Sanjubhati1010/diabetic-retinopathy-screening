@@ -4,6 +4,9 @@ import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { SeverityBadge, ScreeningStatusBadge, SafetyBadge } from '../components/common/SeverityBadge';
+import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
+import { DecisionTrace } from '../components/evidence/DecisionTrace';
+import { GradCamEvidenceSummary } from '../components/evidence/GradCamEvidenceSummary';
 import {
   Sparkles,
   Info,
@@ -165,10 +168,14 @@ export const ExplainableAiPage = () => {
         </div>
       </div>
 
+      {/* Phase 8: AI Clinical Evidence Card */}
+      <ClinicalEvidenceCard screening={screening} selectedEye={selectedEye} />
+
       {/* Main Explainable AI Workspace Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Interactive Grad-CAM Canvas & Opacity Control (8 Cols) */}
         <div className="lg:col-span-8 space-y-4">
+          <GradCamEvidenceSummary selectedEye={selectedEye} />
           <GradCamViewer
             originalImage={currentOriginal}
             heatmapImage={gradcamImageUrl}
@@ -230,6 +237,9 @@ export const ExplainableAiPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Phase 8: AI Decision Trace */}
+      <DecisionTrace screening={screening} selectedEye={selectedEye} />
     </div>
   );
 };

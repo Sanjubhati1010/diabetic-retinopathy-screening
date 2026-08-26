@@ -14,6 +14,9 @@ import { BiomarkerTags } from '../components/visualizer/BiomarkerTags';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { Modal } from '../components/common/Modal';
 import { VoiceGuidanceControl } from '../components/common/VoiceGuidanceControl';
+import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
+import { DecisionTrace } from '../components/evidence/DecisionTrace';
+import { GradCamEvidenceSummary } from '../components/evidence/GradCamEvidenceSummary';
 import {
   FileCheck,
   Eye,
@@ -519,6 +522,9 @@ export const ScreeningResultPage = () => {
       {/* Spoken Voice Guidance Control */}
       <VoiceGuidanceControl stepKey="step6" />
 
+      {/* Phase 8: Clinical Evidence & Safety Intelligence Card */}
+      <ClinicalEvidenceCard screening={screening} selectedEye={selectedExplainEye} />
+
       {/* Primary Classification Showcase */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-card">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
@@ -684,8 +690,14 @@ export const ScreeningResultPage = () => {
         </div>
       </div>
 
-      {/* Phase 3: Dedicated Explainability Section ("Why This Prediction?") */}
+      {/* Phase 8: AI Decision Trace */}
+      <DecisionTrace screening={screening} selectedEye={selectedExplainEye} />
+
+      {/* Phase 3 & 8: Dedicated Explainability Section ("Why This Prediction?") */}
       <div ref={explainRef} id="why-this-prediction" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-card space-y-6">
+        {/* Phase 8: Why did the AI focus here? Evidence Summary */}
+        <GradCamEvidenceSummary selectedEye={selectedExplainEye} />
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
@@ -834,10 +846,12 @@ export const ScreeningResultPage = () => {
         </div>
       </div>
 
-      {/* Biomarker Tags */}
+      {/* AI Attention / Visual Evidence Regions */}
       {screening.biomarkers && screening.biomarkers.length > 0 && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-card space-y-3">
-          <h3 className="text-sm font-bold text-slate-900">Detected Pathological Biomarkers</h3>
+          <h3 className="text-sm font-bold text-slate-900">
+            {t('aiAttentionRegionsTitle') || 'AI Attention / Visual Evidence Regions'}
+          </h3>
           <BiomarkerTags biomarkers={screening.biomarkers} />
         </div>
       )}
