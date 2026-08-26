@@ -40,3 +40,6 @@ backend/uploads/*.jpeg
 *.njsproj
 *.sln
 *.sw?
+
+# Local backup directory
+.backup/
