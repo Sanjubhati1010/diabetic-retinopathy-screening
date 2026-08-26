@@ -547,3 +547,110 @@ export async function analyzeRetinalImage(imageSource, filename = 'retinal_fundu
   }
 }
 
+/**
+ * Phase 5: Query Contextual AI Screening Assistant
+ * Communicates with POST /api/assistant/chat with instant client-side offline fallback
+ */
+export async function queryAssistant(message, language = 'en', screeningContext = null, page = null) {
+  const assistantEndpoint = `${API_BASE_URL}/api/assistant/chat`;
+
+  try {
+    const res = await fetch(assistantEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        language,
+        page,
+        screening_context: screeningContext,
+      }),
+    });
+
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend assistant endpoint unreachable, using client fallback:', err);
+  }
+
+  // Client-Side Offline Fallback Engine
+  const isHi = language === 'hi' || /kaise|kyun|kya|batao|karein/i.test(message);
+  const msgClean = (message || '').toLowerCase().trim();
+
+  // Guardrail: Medication
+  if (/medicine|drug|tablet|dosage|prescription|dawa|dawai|ilaaj|treatment/i.test(msgClean)) {
+    return {
+      reply: isHi
+        ? 'मैं एक एआई स्क्रीनिंग सहायक हूँ और दवाइयां या चिकित्सा उपचार निर्धारित नहीं कर सकता। कृपया उचित निदान और उपचार के लिए किसी योग्य नेत्र रोग विशेषज्ञ (Ophthalmologist) से परामर्श लें।'
+        : 'I am an AI screening assistant and cannot prescribe medications or medical treatments. Please consult a qualified ophthalmologist or physician for clinical diagnosis and treatment planning.',
+      language: isHi ? 'hi' : 'en',
+      suggested_actions: ['Explain My Result', 'How to Use?'],
+      context_used: false,
+    };
+  }
+
+  // Explain My Result
+  if (/explain|result|parinaam|samjhao|prediction|score/i.test(msgClean)) {
+    if (!screeningContext || !Object.keys(screeningContext).length) {
+      return {
+        reply: isHi
+          ? 'वर्तमान में कोई स्क्रीनिंग परिणाम उपलब्ध नहीं है। कृपया पहले रेटिना छवि अपलोड और एआई स्क्रीनिंग पूरी करें।'
+          : 'No screening result is currently available. Please complete the image validation and AI screening first.',
+        language: isHi ? 'hi' : 'en',
+        suggested_actions: ['How to Use?', 'What is Safety Gate?'],
+        context_used: false,
+      };
+    }
+
+    const pred = screeningContext.prediction || screeningContext.className || 'Evaluated Pattern';
+    const conf = screeningContext.confidence !== null ? formatConfidence(screeningContext.confidence) : 'N/A';
+    const risk = screeningContext.risk_category || screeningContext.riskCategory || 'MODERATE';
+    const ref = screeningContext.referral_priority || screeningContext.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED';
+
+    return {
+      reply: isHi
+        ? `एआई स्क्रीनिंग मॉडल ने छवि को '${pred}' के रूप में वर्गीकृत किया है (मॉडल विश्वास: ${conf})। स्क्रीनिंग जोखिम स्तर '${risk}' है और रेफरल अनुशंसा '${ref}' है। यह परिणाम एआई-सहायता प्राप्त स्क्रीनिंग समर्थन है और किसी चिकित्सकीय निदान का विकल्प नहीं है।`
+        : `The AI screening model classified the retinal scan as ${pred} with ${conf} model confidence. The screening risk category is ${risk}, and the referral priority is ${ref}. This result is AI-assisted screening support and does not replace professional clinical evaluation.`,
+      language: isHi ? 'hi' : 'en',
+      suggested_actions: ['What is Grad-CAM?', 'Next Step'],
+      context_used: true,
+    };
+  }
+
+  // What is Grad-CAM
+  if (/gradcam|grad-cam|heatmap|overlay/i.test(msgClean)) {
+    return {
+      reply: isHi
+        ? 'Grad-CAM एक विज़ुअलाइज़ेशन तकनीक है जो दर्शाती है कि मॉडल ने भविष्यवाणी करने के लिए छवि के किन क्षेत्रों पर ध्यान दिया। यह पुष्ट नैदानिक घाव (Lesions) नहीं हैं बल्कि मॉडल का ध्यान है।'
+        : 'Grad-CAM is a visualization technique that highlights regions of the fundus image the AI model focused on for its prediction. Grad-CAM shows model attention patterns and is not a definitive clinical lesion detector.',
+      language: isHi ? 'hi' : 'en',
+      suggested_actions: ['Explain My Result', 'How to Use?'],
+      context_used: false,
+    };
+  }
+
+  // Why Rejected
+  if (/reject|quality|blur|asweekrit|kharaab/i.test(msgClean)) {
+    return {
+      reply: isHi
+        ? 'छवि अस्वीकृत होने के मुख्य कारण: 1. गैर-रेटिना फोटो, 2. धुंधलापन (Blur), 3. बहुत अंधेरी या चमकीली फोटो, 4. कम रिज़ॉल्यूशन (< 224x224)। कृपया कमरे की रोशनी कम करके स्पष्ट फोटो लें।'
+        : 'Images may be rejected due to: 1. Non-retinal capture, 2. Blur / insufficient sharpness, 3. Extreme brightness or darkness, 4. Low resolution (< 224x224). Tip: Dim lighting, steady camera, and re-capture.',
+      language: isHi ? 'hi' : 'en',
+      suggested_actions: ['How to Use?', 'What is Safety Gate?'],
+      context_used: false,
+    };
+  }
+
+  // How to Use
+  return {
+    reply: isHi
+      ? 'MADOCS स्क्रीनिंग के सरल चरण: 1. मरीज पंजीकृत करें, 2. दोनों आंखों (OD/OS) की फोटो अपलोड करें, 3. AI Safety Gate जांच पास होने पर स्क्रीनिंग शुरू करें, 4. परिणाम और Grad-CAM देखें।'
+      : 'Simple MADOCS steps: 1. Register patient, 2. Upload Right (OD) & Left (OS) scans, 3. Clear AI Safety Gate, 4. Run AI Screening and review prediction, Grad-CAM, & referral.',
+    language: isHi ? 'hi' : 'en',
+    suggested_actions: ['Explain My Result', 'Why Rejected?', 'What is Grad-CAM?'],
+    context_used: false,
+  };
+}
+

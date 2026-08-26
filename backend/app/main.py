@@ -17,8 +17,11 @@ from app.schemas import (
     ScreeningAnalysisResponse,
     ImageValidationResponse,
     ErrorResponse,
+    AssistantChatRequest,
+    AssistantChatResponse,
 )
 from app.model_service import DRModelService
+from app.assistant_service import generate_assistant_reply
 
 # Setup structured logging
 logging.basicConfig(
@@ -325,4 +328,36 @@ async def analyze_screening(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="AI screening is temporarily unavailable. Please try again."
+        )
+
+
+@app.post(
+    "/api/assistant/chat",
+    response_model=AssistantChatResponse,
+    tags=["Assistant"],
+    summary="Contextual AI Screening Assistant Chat",
+)
+async def assistant_chat(request: AssistantChatRequest):
+    """
+    Phase 5 Contextual AI Screening Assistant:
+    - Provides bilingual decision support (English & Hindi)
+    - Interprets active screening context (Prediction, Confidence, Safety Gate, Risk, Referral, Grad-CAM)
+    - Explains image validation failures, quality rules, and Grad-CAM visualizations
+    - Guardrails against unauthorized medical prescribing or clinical certainty
+    """
+    try:
+        reply_dict = generate_assistant_reply(
+            message=request.message,
+            language=request.language,
+            page=request.page,
+            screening_context=request.screening_context,
+        )
+        return AssistantChatResponse(**reply_dict)
+    except Exception as e:
+        logger.error(f"Assistant service error: {e}", exc_info=False)
+        return AssistantChatResponse(
+            reply="The MADOCS Assistant is temporarily experiencing connection difficulty. You can continue with standard screening or review quick help.",
+            language=request.language,
+            suggested_actions=["How to Use?", "Why Rejected?"],
+            context_used=False,
         )

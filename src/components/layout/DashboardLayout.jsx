@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Navbar } from '../common/Navbar';
 import { Sidebar } from '../common/Sidebar';
+import { AiScreeningAssistant } from '../assistant/AiScreeningAssistant';
 import { useApp } from '../../context/AppContext';
 
 export const DashboardLayout = () => {
@@ -41,6 +42,9 @@ export const DashboardLayout = () => {
           </footer>
         </main>
       </div>
+
+      {/* Global Contextual AI Screening Assistant Drawer */}
+      <AiScreeningAssistant />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from pydantic import BaseModel, Field
 
 
@@ -110,3 +110,21 @@ class ImageValidationResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str = Field(..., example="Trained model is not available.", description="Error message details")
+
+
+class AssistantChatRequest(BaseModel):
+    message: str = Field(..., example="Explain my screening result", description="User question or prompt")
+    language: str = Field(default="en", example="en", description="Language code: 'en' or 'hi'")
+    page: Optional[str] = Field(default=None, example="/screenings/result", description="Current frontend page context")
+    screening_context: Optional[Dict[str, Any]] = Field(default=None, description="Sanitized active screening context")
+
+
+class AssistantChatResponse(BaseModel):
+    reply: str = Field(..., description="Assistant response text")
+    language: str = Field(default="en", description="Language used in response")
+    suggested_actions: list[str] = Field(default_factory=list, description="Follow-up quick action prompts")
+    context_used: bool = Field(default=False, description="Whether screening context was utilized in generating the response")
+    disclaimer: str = Field(
+        default="The MADOCS Assistant is an AI-assisted screening support tool and does not provide clinical diagnoses or prescriptions.",
+        description="Clinical safety disclaimer"
+    )
