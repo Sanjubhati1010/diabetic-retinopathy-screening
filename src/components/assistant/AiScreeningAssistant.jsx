@@ -21,6 +21,7 @@ import {
   Maximize2,
   Bot,
   Compass,
+  Layers,
 } from 'lucide-react';
 
 export const AiScreeningAssistant = () => {

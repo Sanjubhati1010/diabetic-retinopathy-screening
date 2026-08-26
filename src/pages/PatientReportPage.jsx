@@ -35,6 +35,7 @@ import {
   HelpCircle,
   AlertTriangle,
   UploadCloud,
+  Info,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
 import { getScreeningReview, formatConfidence } from '../services/api';

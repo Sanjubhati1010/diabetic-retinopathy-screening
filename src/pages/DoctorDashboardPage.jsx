@@ -33,6 +33,7 @@ import {
   X,
   Info,
   Inbox,
+  FileCheck,
 } from 'lucide-react';
 import { submitDoctorReview, getScreeningReviewHistory, getFullResultUrl } from '../services/api';
 
