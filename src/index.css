@@ -86,3 +86,24 @@
     display: block !important;
   }
 }
+
+/* Phase 7: Rural Mode Enhancements (Minimum 48px Touch Targets & High Contrast Readability) */
+.rural-mode button,
+.rural-mode a.btn,
+.rural-mode input[type="button"],
+.rural-mode input[type="submit"] {
+  min-height: 44px;
+}
+
+.rural-mode {
+  --color-slate-500: #475569;
+  letter-spacing: -0.01em;
+}
+
+/* Low-Bandwidth Mode (Reduced Motion & Transitions) */
+.low-bandwidth * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+

@@ -14,10 +14,14 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
+import { RuralScreeningWizard } from '../components/rural/RuralScreeningWizard';
+
 export const NewScreeningPage = () => {
   const { t } = useLanguage();
-  const { patients, activeScreening, setActiveScreening } = useApp();
+  const { patients, activeScreening, setActiveScreening, ruralMode } = useApp();
   const navigate = useNavigate();
+
+  const [useWizard, setUseWizard] = useState(ruralMode);
 
   const [selectedPatientId, setSelectedPatientId] = useState(
     activeScreening.patientId || (patients[0] ? patients[0].id : '')
@@ -47,8 +51,23 @@ export const NewScreeningPage = () => {
     navigate('/screenings/upload');
   };
 
+  if (useWizard) {
+    return <RuralScreeningWizard onExitWizard={() => setUseWizard(false)} />;
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Mode Switcher */}
+      <div className="flex items-center justify-between p-3 rounded-2xl bg-teal-50 border border-teal-200 text-teal-900 text-xs">
+        <span className="font-bold">Standard Intake Mode</span>
+        <button
+          type="button"
+          onClick={() => setUseWizard(true)}
+          className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition"
+        >
+          Switch to 8-Step Rural Wizard
+        </button>
+      </div>
       {/* Wizard Step Tracker */}
       <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-card">
         <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">

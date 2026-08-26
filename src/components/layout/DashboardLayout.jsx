@@ -2,20 +2,24 @@ import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Navbar } from '../common/Navbar';
 import { Sidebar } from '../common/Sidebar';
+import { RuralModeBanner } from '../common/RuralModeBanner';
 import { AiScreeningAssistant } from '../assistant/AiScreeningAssistant';
 import { useApp } from '../../context/AppContext';
 
 export const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { highContrast, largeText } = useApp();
+  const { highContrast, largeText, ruralMode } = useApp();
   const location = useLocation();
 
   return (
     <div
       className={`min-h-screen bg-slate-50 text-slate-900 flex flex-col ${
         highContrast ? 'contrast-125 saturate-150' : ''
-      } ${largeText ? 'text-base' : 'text-sm'}`}
+      } ${largeText || ruralMode ? 'text-base' : 'text-sm'}`}
     >
+      {/* Rural Mode & Bandwidth Top Banner */}
+      <RuralModeBanner />
+
       {/* Top Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 

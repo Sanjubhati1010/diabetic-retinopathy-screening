@@ -17,9 +17,11 @@ import {
   MapPin,
 } from 'lucide-react';
 
+import { NetworkIndicator } from './NetworkIndicator';
+
 export const Navbar = ({ onToggleSidebar }) => {
   const { language, toggleLanguage, t } = useLanguage();
-  const { userRole, setUserRole, isOnline, setIsOnline, offlineSyncCount, logout } = useApp();
+  const { userRole, setUserRole, logout } = useApp();
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -105,30 +107,8 @@ export const Navbar = ({ onToggleSidebar }) => {
               <span className={language === 'hi' ? 'text-brand-700 font-bold' : 'text-slate-500'}>हिन्दी</span>
             </button>
 
-            {/* Connectivity Switch (Rural Offline Mode Simulator) */}
-            <button
-              onClick={() => setIsOnline(!isOnline)}
-              className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
-                isOnline
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-              }`}
-              title="Toggle Online/Offline mode simulation"
-            >
-              {isOnline ? (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>{t('onlineStatus')}</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3.5 h-3.5 text-amber-600" />
-                  <span>
-                    {t('offlineStatus')} ({offlineSyncCount})
-                  </span>
-                </>
-              )}
-            </button>
+            {/* Reactive Network Status Indicator */}
+            <NetworkIndicator compact={true} />
 
             {/* Role Switcher Dropdown */}
             <div className="relative">

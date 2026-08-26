@@ -25,7 +25,7 @@ import {
 
 export const AiScreeningAssistant = () => {
   const { t, language: appLang } = useLanguage();
-  const { activeScreening, screenings } = useApp();
+  const { activeScreening, screenings, voiceGuidanceEnabled, speakPrompt } = useApp();
   const location = useLocation();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -134,12 +134,36 @@ export const AiScreeningAssistant = () => {
   };
 
   const quickActions = [
-    { label: t('quickActionExplainResult') || 'Explain My Result', query: 'Explain My Result', icon: Sparkles },
-    { label: t('quickActionHowToUse') || 'How to Use?', query: 'How to Use?', icon: HelpCircle },
-    { label: t('quickActionWhyRejected') || 'Why Rejected?', query: 'Why was my image rejected?', icon: AlertTriangle },
-    { label: t('quickActionGradCam') || 'What is Grad-CAM?', query: 'What is Grad-CAM?', icon: Eye },
-    { label: t('quickActionSafetyGate') || 'What is Safety Gate?', query: 'What is Safety Gate?', icon: ShieldCheck },
-    { label: t('quickActionNextStep') || 'Next Step', query: 'What is the next step after screening?', icon: ChevronRight },
+    {
+      label: assistantLang === 'hi' ? 'इमेज कैसे अपलोड करें?' : 'How to Upload?',
+      query: assistantLang === 'hi' ? 'इमेज कैसे अपलोड करें?' : 'How do I upload fundus images?',
+      icon: HelpCircle,
+    },
+    {
+      label: assistantLang === 'hi' ? 'परिणाम का क्या अर्थ है?' : 'Explain Result',
+      query: assistantLang === 'hi' ? 'इस परिणाम का क्या अर्थ है?' : 'What does this screening result mean?',
+      icon: Sparkles,
+    },
+    {
+      label: assistantLang === 'hi' ? 'Grad-CAM क्या है?' : 'What is Grad-CAM?',
+      query: assistantLang === 'hi' ? 'Grad-CAM क्या है?' : 'What is Grad-CAM explainability?',
+      icon: Eye,
+    },
+    {
+      label: assistantLang === 'hi' ? 'इमेज खराब क्यों हुई?' : 'Quality Issues?',
+      query: assistantLang === 'hi' ? 'इमेज गुणवत्ता खराब क्यों है?' : 'Why was image quality rejected?',
+      icon: AlertTriangle,
+    },
+    {
+      label: assistantLang === 'hi' ? 'आगे क्या करना है?' : 'Next Step?',
+      query: assistantLang === 'hi' ? 'आगे क्या करना चाहिए?' : 'What is the next step after screening?',
+      icon: ChevronRight,
+    },
+    {
+      label: assistantLang === 'hi' ? 'डॉक्टर समीक्षा कैसे मांगें?' : 'Doctor Review?',
+      query: assistantLang === 'hi' ? 'डॉक्टर समीक्षा कैसे मांगें?' : 'How do I request tele-ophthalmology doctor review?',
+      icon: ShieldCheck,
+    },
   ];
 
   const guidedSteps = [

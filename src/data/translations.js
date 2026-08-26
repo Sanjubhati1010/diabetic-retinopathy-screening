@@ -413,6 +413,79 @@ export const translations = {
     offlineStatus: "Offline Mode Active",
     campBadge: "Camp Mode",
     activeCamp: "Rampur PHC Mobile Camp",
+
+    // Phase 7: Rural India Deployment Mode
+    ruralMode: "Rural Mode",
+    ruralModeDesc: "Optimized for rural health workers with large touch targets, simplified screens, and step-by-step guidance.",
+    ruralModeActive: "Rural Mode Active",
+    ruralModeStandard: "Standard Mode",
+    lowBandwidthMode: "Low Bandwidth Mode",
+    lowBandwidthDesc: "Reduces network data usage, compresses previews, and caches local screening assets.",
+    lowBandwidthActive: "Low Bandwidth Active",
+    voiceGuidance: "Voice Guidance",
+    voiceGuidanceDesc: "Audible bilingual step-by-step spoken workflow instructions for health workers.",
+    voicePlay: "Play Audio Guidance",
+    voiceStop: "Stop Audio",
+    voiceActive: "Voice Active",
+
+    // Network Status
+    netConnected: "Connected",
+    netWeak: "Weak Connection",
+    netOffline: "Offline",
+    netUnavailable: "Connection status unavailable",
+    netRetry: "Retry Connection",
+    netLostNotice: "Network connection unavailable. Your screening data has not been lost.",
+    netAiRequiredNotice: "AI screening requires a connection to the screening service. Patient details saved locally.",
+    
+    // Pending Sync
+    pendingSync: "Pending Sync",
+    synced: "Synced",
+    syncFailed: "Sync Failed",
+    draftSaved: "Draft Saved Locally",
+    syncQueueTitle: "Offline Sync Queue",
+    btnSyncNow: "Sync All Pending",
+
+    // Rural 8-Step Wizard
+    wizardTitle: "Rural DR Screening Wizard",
+    wizardStep1: "1. Patient Info",
+    wizardStep2: "2. Right Eye (OD)",
+    wizardStep3: "3. Left Eye (OS)",
+    wizardStep4: "4. Quality Check",
+    wizardStep5: "5. AI Screening",
+    wizardStep6: "6. Explainable AI",
+    wizardStep7: "7. Risk & Referral",
+    wizardStep8: "8. Doctor Review",
+    stepProgress: "Step {current} of {total}",
+    currentStepLabel: "Current Step",
+    completedStepsLabel: "Completed Steps",
+    nextStepActionLabel: "Next Step",
+
+    // Image Upload & Optimization
+    optimizingUpload: "Optimizing image for upload...",
+    usingOriginal: "Using original clinical image.",
+    fileSizeLabel: "File Size",
+    safeCompressionNotice: "Lightweight preview generated. Original clinical scan preserved for AI analysis.",
+    uploadRightEyePrompt: "Please capture or select the Right Eye (OD) fundus scan.",
+    uploadLeftEyePrompt: "Please capture or select the Left Eye (OS) fundus scan.",
+
+    // Rural Dashboard
+    dashTodayScreenings: "Today's Screenings",
+    dashPendingReviews: "Pending Doctor Reviews",
+    dashRecaptureRequired: "Image Re-capture Required",
+    dashReportsReady: "Reports Ready",
+    dashNetStatus: "Network Status",
+    doctorRecaptureReason: "Doctor's Reason",
+    recaptureGuidancePrompt: "Doctor has requested a clearer fundus image. Please capture and upload a new image.",
+    btnStartWizard: "Start Guided Rural Screening",
+    btnRecaptureNow: "Re-capture Scan Now",
+
+    // Rural Assistant Quick Actions
+    qHowToUpload: "How do I upload an image?",
+    qImageQuality: "Image quality poor?",
+    qWhatResultMeans: "What does this result mean?",
+    qWhatIsGradcam: "What is Grad-CAM?",
+    qWhatNext: "What should I do next?",
+    qHowToRequestReview: "How do I request doctor review?",
   },
   
   hi: {
@@ -829,5 +902,78 @@ export const translations = {
     offlineStatus: "ऑफलाइन मोड सक्रिय",
     campBadge: "कैंप मोड",
     activeCamp: "रामपुर पीएचसी मोबाइल कैंप",
+
+    // Phase 7: Rural India Deployment Mode (ग्रामीण भारत तैनाती मोड)
+    ruralMode: "ग्रामीण मोड",
+    ruralModeDesc: "ग्रामीण स्वास्थ्य कार्यकर्ताओं (आशा/एएनएम) के लिए बड़े बटन, सरल स्क्रीन और चरणबद्ध मार्गदर्शन।",
+    ruralModeActive: "ग्रामीण मोड सक्रिय",
+    ruralModeStandard: "सामान्य मोड",
+    lowBandwidthMode: "कम बैंडविड्थ (डेटा बचत) मोड",
+    lowBandwidthDesc: "इंटरनेट डेटा का कम उपयोग करता है, प्रीव्यू इमेज को ऑप्टिमाइज़ करता है और डेटा सुरक्षित रखता है।",
+    lowBandwidthActive: "कम डेटा मोड सक्रिय",
+    voiceGuidance: "आवाज़ मार्गदर्शन (Voice Guidance)",
+    voiceGuidanceDesc: "स्क्रीनिंग के प्रत्येक चरण के लिए हिंदी में बोले जाने वाले निर्देश।",
+    voicePlay: "निर्देश सुनें",
+    voiceStop: "आवाज़ बंद करें",
+    voiceActive: "वॉइस चालू",
+
+    // Network Status
+    netConnected: "कनेक्टेड (नेटवर्क उपलब्ध)",
+    netWeak: "कमजोर नेटवर्क",
+    netOffline: "ऑफ़लाइन (नेटवर्क नहीं है)",
+    netUnavailable: "नेटवर्क स्थिति अनुपलब्ध",
+    netRetry: "पुनः प्रयास करें",
+    netLostNotice: "इंटरनेट कनेक्शन उपलब्ध नहीं है। आपका स्क्रीनिंग डेटा सुरक्षित है और खोया नहीं है।",
+    netAiRequiredNotice: "एआई स्क्रीनिंग के लिए सर्वर कनेक्शन आवश्यक है। मरीज की जानकारी सुरक्षित रख ली गई है।",
+    
+    // Pending Sync
+    pendingSync: "सिंक प्रतीक्षित",
+    synced: "सिंक हो गया",
+    syncFailed: "सिंक विफल",
+    draftSaved: "ड्राफ्ट सुरक्षित",
+    syncQueueTitle: "ऑफ़लाइन सिंक कतार",
+    btnSyncNow: "सभी रिकॉर्ड सिंक करें",
+
+    // Rural 8-Step Wizard
+    wizardTitle: "ग्रामीण डीआर स्क्रीनिंग गाइड",
+    wizardStep1: "1. मरीज की जानकारी",
+    wizardStep2: "2. दाहिनी आँख (OD)",
+    wizardStep3: "3. बाईं आँख (OS)",
+    wizardStep4: "4. गुणवत्ता जाँच",
+    wizardStep5: "5. एआई स्क्रीनिंग",
+    wizardStep6: "6. व्याख्यात्मक एआई",
+    wizardStep7: "7. जोखिम व रेफरल",
+    wizardStep8: "8. डॉक्टर समीक्षा",
+    stepProgress: "चरण {current} / {total}",
+    currentStepLabel: "वर्तमान चरण",
+    completedStepsLabel: "पूर्ण चरण",
+    nextStepActionLabel: "अगला कदम",
+
+    // Image Upload & Optimization
+    optimizingUpload: "अपलोड हेतु इमेज ऑप्टिमाइज़ हो रही है...",
+    usingOriginal: "मूल नैदानिक इमेज उपयोग की जा रही है।",
+    fileSizeLabel: "फाइल साइज़",
+    safeCompressionNotice: "त्वरित प्रीव्यू तैयार। एआई जांच हेतु मूल उच्च-गुणवत्ता फंडस स्कैन सुरक्षित है।",
+    uploadRightEyePrompt: "कृपया मरीज की दाहिनी आँख (OD) का फंडस फोटो चुनें या खींचें।",
+    uploadLeftEyePrompt: "कृपया मरीज की बाईं आँख (OS) का फंडस फोटो चुनें या खींचें।",
+
+    // Rural Dashboard
+    dashTodayScreenings: "आज की स्क्रीनिंग",
+    dashPendingReviews: "लंबित डॉक्टर समीक्षा",
+    dashRecaptureRequired: "दोबारा इमेज जरूरी (Re-capture)",
+    dashReportsReady: "रिपोर्ट तैयार",
+    dashNetStatus: "नेटवर्क स्थिति",
+    doctorRecaptureReason: "डॉक्टर द्वारा दिया गया कारण",
+    recaptureGuidancePrompt: "डॉक्टर ने स्पष्ट फंडस इमेज की मांग की है। कृपया नई इमेज खींचकर अपलोड करें।",
+    btnStartWizard: "सरल ग्रामीण स्क्रीनिंग शुरू करें",
+    btnRecaptureNow: "अभी दोबारा फोटो लें",
+
+    // Rural Assistant Quick Actions
+    qHowToUpload: "इमेज कैसे अपलोड करें?",
+    qImageQuality: "इमेज गुणवत्ता खराब क्यों है?",
+    qWhatResultMeans: "इस परिणाम का क्या अर्थ है?",
+    qWhatIsGradcam: "Grad-CAM क्या है?",
+    qWhatNext: "आगे क्या करना चाहिए?",
+    qHowToRequestReview: "डॉक्टर समीक्षा कैसे मांगें?",
   }
 };

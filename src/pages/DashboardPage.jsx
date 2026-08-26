@@ -23,13 +23,19 @@ import {
 import { MOCK_UPCOMING_CAMPS } from '../data/mockData';
 
 export const DashboardPage = () => {
-  const { t } = useLanguage();
-  const { patients, screenings, offlineSyncCount, isOnline } = useApp();
+  const { t, language } = useLanguage();
+  const { patients, screenings, offlineSyncCount, isOnline, ruralMode, networkState } = useApp();
   const navigate = useNavigate();
 
   const todayScreenings = screenings.slice(0, 4);
   const urgentCount = screenings.filter((s) => s.referralUrgency === 'urgent').length;
   const pendingCount = screenings.filter((s) => s.doctorStatus === 'pending').length;
+  const recaptureList = screenings.filter(
+    (s) => s.doctorStatus === 'recapture_requested' || s.reviewStatus === 'IMAGE RE-CAPTURE REQUESTED'
+  );
+  const reportsReadyCount = screenings.filter(
+    (s) => s.doctorStatus === 'verified' || s.reviewStatus === 'AI RESULT ACCEPTED' || s.reviewStatus === 'DOCTOR REVIEWED / MODIFIED'
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -39,8 +45,59 @@ export const DashboardPage = () => {
         <span>DEMO DATA — NOT REAL MEDICAL RESULTS</span>
       </div>
 
+      {/* Re-capture Required High Visibility Banner */}
+      {recaptureList.length > 0 && (
+        <div className="p-5 sm:p-6 rounded-3xl bg-rose-50 border-2 border-rose-400 shadow-md space-y-3 animate-in fade-in duration-200">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-2xl bg-rose-600 text-white shrink-0 mt-0.5">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-extrabold text-rose-950 uppercase tracking-tight">
+                    {t('dashRecaptureRequired')} ({recaptureList.length})
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-200 text-rose-900 text-xs font-bold">
+                    Action Required
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-rose-900 font-medium">
+                  {t('recaptureGuidancePrompt') || 'Doctor has requested a clearer fundus image. Please capture and upload a new image.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            {recaptureList.map((rec) => (
+              <div
+                key={rec.id}
+                className="p-4 rounded-2xl bg-white border border-rose-300 shadow-sm flex items-center justify-between gap-3"
+              >
+                <div>
+                  <p className="font-extrabold text-sm text-slate-900">{rec.patientName}</p>
+                  <p className="text-xs text-rose-700 font-bold">
+                    {rec.id} • Reason: {rec.doctorRemarks || 'Quality insufficient'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Previous AI: {rec.className || 'Moderate'} (Historical)
+                  </p>
+                </div>
+                <Link
+                  to="/screenings/new"
+                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shrink-0 shadow-sm transition"
+                >
+                  {t('btnRecaptureNow') || 'Retake Scan'}
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Offline Alert if connectivity is down */}
-      {!isOnline && (
+      {(!isOnline || networkState.status === 'offline') && (
         <AlertBanner
           type="warning"
           title="Rural Offline Mode Active"
@@ -68,10 +125,10 @@ export const DashboardPage = () => {
           <div className="flex flex-wrap gap-3">
             <Link
               to="/screenings/new"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-400 text-slate-950 font-bold text-xs hover:bg-brand-300 shadow-glow transition transform hover:-translate-y-0.5"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-brand-400 text-slate-950 font-extrabold text-sm hover:bg-brand-300 shadow-glow transition transform hover:-translate-y-0.5"
             >
-              <PlusCircle className="w-4 h-4" />
-              <span>{t('btnQuickScreening')}</span>
+              <PlusCircle className="w-5 h-5" />
+              <span>{ruralMode ? (t('btnStartWizard') || 'Start Guided Screening') : t('btnQuickScreening')}</span>
             </Link>
             <Link
               to="/patients/register"
@@ -87,10 +144,10 @@ export const DashboardPage = () => {
         <div className="absolute -right-16 -bottom-16 w-64 h-64 rounded-full bg-brand-500/10 blur-2xl pointer-events-none" />
       </div>
 
-      {/* 4 Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 5 Metric Cards in Rural Mode / 4 in Standard */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <MetricCard
-          title={t('statTodayScreenings')}
+          title={t('dashTodayScreenings') || "Today's Screenings"}
           value="18"
           subtitle="Target for today's camp: 30"
           icon={Eye}
@@ -99,24 +156,31 @@ export const DashboardPage = () => {
           variant="emerald"
         />
         <MetricCard
-          title={t('statHighRisk')}
-          value={urgentCount}
-          subtitle="Immediate tele-referral required"
-          icon={AlertTriangle}
-          variant="rose"
-        />
-        <MetricCard
-          title={t('statPendingReview')}
+          title={t('dashPendingReviews') || "Pending Doctor Reviews"}
           value={pendingCount}
-          subtitle="Awaiting District Hospital sign-off"
+          subtitle="Awaiting District Hospital review"
           icon={Clock}
           variant="amber"
         />
         <MetricCard
-          title={t('statSyncQueue')}
-          value={offlineSyncCount}
-          subtitle={isOnline ? 'Online & synced' : 'Cached locally on device'}
-          icon={WifiOff}
+          title={t('dashRecaptureRequired') || "Re-capture Required"}
+          value={recaptureList.length}
+          subtitle="Doctor requested new scan"
+          icon={AlertTriangle}
+          variant="rose"
+        />
+        <MetricCard
+          title={t('dashReportsReady') || "Reports Ready"}
+          value={reportsReadyCount}
+          subtitle="Bilingual clinical reports"
+          icon={FileCheck}
+          variant="brand"
+        />
+        <MetricCard
+          title={t('dashNetStatus') || "Network Status"}
+          value={networkState.isOnline ? 'Online' : 'Offline'}
+          subtitle={`${offlineSyncCount} offline records`}
+          icon={networkState.isOnline ? Eye : WifiOff}
           variant="teal"
         />
       </div>

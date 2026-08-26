@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { MOCK_PATIENTS, MOCK_SCREENINGS, SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
+import { voiceService } from '../services/voiceService';
 
 const AppContext = createContext();
 
@@ -10,6 +11,59 @@ export const AppProvider = ({ children }) => {
 
   // User Role: 'health_worker' | 'doctor' | 'admin'
   const [userRole, setUserRole] = useState('health_worker');
+
+  // Phase 7: Rural Mode, Low-Bandwidth Mode & Voice Guidance Preferences
+  const [ruralMode, setRuralMode] = useState(() => {
+    try {
+      return localStorage.getItem('madocs_rural_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [lowBandwidthMode, setLowBandwidthMode] = useState(() => {
+    try {
+      return localStorage.getItem('madocs_low_bandwidth') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [voiceGuidanceEnabled, setVoiceGuidanceEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('madocs_voice_guidance') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Reactive Network Status Detection
+  const [networkState, setNetworkState] = useState(() => {
+    const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    const conn = typeof navigator !== 'undefined' && navigator.connection;
+    const effectiveType = conn?.effectiveType || '4g';
+    let status = online ? 'connected' : 'offline';
+    if (online && (effectiveType === '2g' || effectiveType === 'slow-2g')) {
+      status = 'weak';
+    }
+    return {
+      isOnline: online,
+      effectiveType,
+      downlink: conn?.downlink || null,
+      rtt: conn?.rtt || null,
+      status,
+    };
+  });
+
+  // Phase 7: Offline Sync Queue for Non-AI Records (Drafts, Reviews)
+  const [pendingSyncQueue, setPendingSyncQueue] = useState(() => {
+    try {
+      const saved = localStorage.getItem('madocs_sync_queue');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [patients, setPatients] = useState(() => {
     try {
@@ -267,6 +321,146 @@ export const AppProvider = ({ children }) => {
     });
   };
 
+  // Network Event Listeners
+  useEffect(() => {
+    const handleOnline = () => {
+      const conn = navigator.connection;
+      const effectiveType = conn?.effectiveType || '4g';
+      setNetworkState({
+        isOnline: true,
+        effectiveType,
+        downlink: conn?.downlink || null,
+        rtt: conn?.rtt || null,
+        status: effectiveType === '2g' || effectiveType === 'slow-2g' ? 'weak' : 'connected',
+      });
+      setIsOnline(true);
+    };
+
+    const handleOffline = () => {
+      setNetworkState((prev) => ({
+        ...prev,
+        isOnline: false,
+        status: 'offline',
+      }));
+      setIsOnline(false);
+    };
+
+    const handleConnectionChange = () => {
+      if (navigator.onLine) {
+        handleOnline();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    if (navigator.connection) {
+      navigator.connection.addEventListener('change', handleConnectionChange);
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (navigator.connection) {
+        navigator.connection.removeEventListener('change', handleConnectionChange);
+      }
+    };
+  }, []);
+
+  // Persist Rural Mode & Low Bandwidth Preferences
+  useEffect(() => {
+    try {
+      localStorage.setItem('madocs_rural_mode', String(ruralMode));
+      if (ruralMode) {
+        document.documentElement.classList.add('rural-mode');
+      } else {
+        document.documentElement.classList.remove('rural-mode');
+      }
+    } catch (e) {
+      console.warn('Unable to persist ruralMode:', e);
+    }
+  }, [ruralMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('madocs_low_bandwidth', String(lowBandwidthMode));
+      if (lowBandwidthMode) {
+        document.documentElement.classList.add('low-bandwidth');
+      } else {
+        document.documentElement.classList.remove('low-bandwidth');
+      }
+    } catch (e) {
+      console.warn('Unable to persist lowBandwidthMode:', e);
+    }
+  }, [lowBandwidthMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('madocs_voice_guidance', String(voiceGuidanceEnabled));
+    } catch (e) {
+      console.warn('Unable to persist voiceGuidanceEnabled:', e);
+    }
+  }, [voiceGuidanceEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('madocs_sync_queue', JSON.stringify(pendingSyncQueue));
+      setOfflineSyncCount(pendingSyncQueue.filter((q) => q.status === 'PENDING_SYNC').length);
+    } catch (e) {
+      console.warn('Unable to persist pendingSyncQueue:', e);
+    }
+  }, [pendingSyncQueue]);
+
+  const toggleRuralMode = () => setRuralMode((prev) => !prev);
+  const toggleLowBandwidthMode = () => setLowBandwidthMode((prev) => !prev);
+  const toggleVoiceGuidance = () => {
+    setVoiceGuidanceEnabled((prev) => {
+      const next = !prev;
+      if (!next) {
+        voiceService.stop();
+      }
+      return next;
+    });
+  };
+
+  const speakPrompt = useCallback(
+    (text, language = 'en') => {
+      if (voiceGuidanceEnabled) {
+        voiceService.speak(text, language);
+      }
+    },
+    [voiceGuidanceEnabled]
+  );
+
+  // Phase 7: Add item to offline sync queue (e.g. drafts or reviews)
+  const addToSyncQueue = (type, payload) => {
+    const queueItem = {
+      id: `SYNC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type, // 'PATIENT_DRAFT' | 'DOCTOR_REVIEW' | 'SCREENING_INTAKE'
+      payload,
+      timestamp: new Date().toISOString(),
+      status: 'PENDING_SYNC',
+    };
+    setPendingSyncQueue((prev) => [queueItem, ...prev]);
+    return queueItem;
+  };
+
+  const syncPendingQueue = () => {
+    // Mark all pending as synced
+    setPendingSyncQueue((prev) =>
+      prev.map((item) => ({
+        ...item,
+        status: 'SYNCED',
+        syncedAt: new Date().toISOString(),
+      }))
+    );
+    setOfflineSyncCount(0);
+    return true;
+  };
+
+  const clearSyncedQueue = () => {
+    setPendingSyncQueue((prev) => prev.filter((item) => item.status === 'PENDING_SYNC'));
+  };
+
   const doctorVerifyScreening = (screeningId, { confirmedSeverity, doctorRemarks, signatureApproved }) => {
     setScreenings((prev) =>
       prev.map((s) => {
@@ -284,7 +478,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const syncOfflineQueue = () => {
-    setOfflineSyncCount(0);
+    syncPendingQueue();
     return true;
   };
 
@@ -315,6 +509,22 @@ export const AppProvider = ({ children }) => {
         setHighContrast,
         largeText,
         setLargeText,
+        // Phase 7 Rural Deployments
+        ruralMode,
+        setRuralMode,
+        toggleRuralMode,
+        lowBandwidthMode,
+        setLowBandwidthMode,
+        toggleLowBandwidthMode,
+        voiceGuidanceEnabled,
+        setVoiceGuidanceEnabled,
+        toggleVoiceGuidance,
+        networkState,
+        pendingSyncQueue,
+        addToSyncQueue,
+        syncPendingQueue,
+        clearSyncedQueue,
+        speakPrompt,
       }}
     >
       {children}
