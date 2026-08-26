@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
-import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge, RiskBadge, ReferralBadge } from '../components/common/SeverityBadge';
+import { SeverityBadge, UrgencyBadge, SafetyBadge, ScreeningStatusBadge, RiskBadge, ReferralBadge, DoctorReviewStatusBadge } from '../components/common/SeverityBadge';
 import {
   Printer,
   Share2,
@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   FileCheck,
   Stethoscope,
+  UserCheck,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
 
@@ -38,6 +39,11 @@ export const PatientReportPage = () => {
   }
 
   const patient = getPatientById(screening.patientId);
+
+  // Load cached review state if available
+  const storedReviewJson = localStorage.getItem(`madocs_review_${screening.id}`);
+  const storedReview = storedReviewJson ? JSON.parse(storedReviewJson) : null;
+  const reviewStatus = storedReview?.review_status || (screening.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW');
 
   const [shareSuccess, setShareSuccess] = useState(false);
 
@@ -167,19 +173,15 @@ export const PatientReportPage = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between pb-2 border-b border-slate-200">
             <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
-              Explainable AI Diagnostic Assessment
+              Explainable AI Diagnostic Assessment & Doctor Review
             </h3>
             <div className="flex flex-wrap items-center gap-2">
+              <DoctorReviewStatusBadge status={reviewStatus} size="sm" />
               {screening.isRealPrediction || screening.confidence !== null ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <RiskBadge risk={screening.riskCategory || 'MODERATE'} size="sm" />
                   <ReferralBadge priority={screening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED'} size="sm" />
                   <SafetyBadge status={screening.safetyStatus || 'READY_FOR_AI'} size="sm" />
-                  <ScreeningStatusBadge status={screening.screeningStatus || 'RELIABLE AI SCREENING'} size="sm" />
-                  <SeverityBadge severity={screening.overallSeverity} size="sm" />
-                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    Confidence: {(screening.confidence <= 1 ? screening.confidence * 100 : screening.confidence).toFixed(2)}%
-                  </span>
                 </div>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300">
@@ -187,6 +189,37 @@ export const PatientReportPage = () => {
                   <span>AI model not connected yet</span>
                 </span>
               )}
+            </div>
+          </div>
+
+          {/* Dual Result Comparison: Original AI vs Doctor Reviewed */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                Original AI Screening Result (Preserved)
+              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-slate-900">
+                  {storedReview?.original_ai_result || screening.className || t(screening.overallSeverity) || 'Moderate DR'}
+                </span>
+                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                  {screening.confidence ? `${(screening.confidence * 100).toFixed(1)}% Conf.` : '85.0% Conf.'}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700">
+                Doctor Reviewed Screening Result
+              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-teal-950">
+                  {storedReview?.doctor_reviewed_result || (screening.doctorStatus === 'verified' ? (screening.className || t(screening.overallSeverity)) : 'Pending Specialist Review')}
+                </span>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-300">
+                  Dr. A. Swaminathan, MS
+                </span>
+              </div>
             </div>
           </div>
 

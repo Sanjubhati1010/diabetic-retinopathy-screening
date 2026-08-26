@@ -304,3 +304,59 @@ export const ReferralBadge = ({ priority = 'EYE SPECIALIST REVIEW RECOMMENDED', 
     </span>
   );
 };
+
+export const DoctorReviewStatusBadge = ({ status = 'PENDING DOCTOR REVIEW', size = 'md' }) => {
+  const { t } = useLanguage();
+  const normalized = (status || '').toUpperCase().trim();
+
+  let config = {
+    label: t('statusPendingDoctorReview') || 'PENDING DOCTOR REVIEW',
+    bgColor: 'bg-amber-50 text-amber-800 border-amber-300',
+    icon: Clock,
+  };
+
+  if (normalized.includes('ACCEPTED')) {
+    config = {
+      label: t('statusAiResultAccepted') || 'AI RESULT ACCEPTED',
+      bgColor: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+      icon: CheckCircle,
+    };
+  } else if (normalized.includes('MODIFIED') || normalized.includes('REVIEWED')) {
+    config = {
+      label: t('statusDoctorReviewedModified') || 'DOCTOR REVIEWED / MODIFIED',
+      bgColor: 'bg-blue-50 text-blue-800 border-blue-300',
+      icon: UserCheck,
+    };
+  } else if (normalized.includes('RECAPTURE') || normalized.includes('RE-CAPTURE')) {
+    config = {
+      label: t('statusImageRecaptureRequested') || 'IMAGE RE-CAPTURE REQUESTED',
+      bgColor: 'bg-rose-50 text-rose-800 border-rose-300',
+      icon: AlertTriangle,
+    };
+  } else if (normalized.includes('UNABLE')) {
+    config = {
+      label: t('statusUnableToAssess') || 'UNABLE TO ASSESS',
+      bgColor: 'bg-slate-100 text-slate-800 border-slate-300',
+      icon: AlertCircle,
+    };
+  }
+
+  const Icon = config.icon;
+  const sizeClasses = {
+    sm: 'px-2.5 py-0.5 text-[10px] font-bold',
+    md: 'px-3 py-1 text-xs font-bold',
+    lg: 'px-4 py-1.5 text-sm font-extrabold',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border shadow-sm ${config.bgColor} ${
+        sizeClasses[size] || sizeClasses.md
+      }`}
+    >
+      <Icon className={size === 'lg' ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+      <span>{config.label}</span>
+    </span>
+  );
+};
+

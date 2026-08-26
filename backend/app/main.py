@@ -2,9 +2,8 @@ import os
 import io
 import logging
 from pathlib import Path
-from typing import List
-
-from fastapi import FastAPI, File, UploadFile, HTTPException, status
+from typing import List, Optional
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
@@ -19,9 +18,13 @@ from app.schemas import (
     ErrorResponse,
     AssistantChatRequest,
     AssistantChatResponse,
+    DoctorReviewRequest,
+    DoctorReviewResponse,
+    ReviewHistoryResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
+from app.review_service import process_doctor_review, get_audit_history
 
 # Setup structured logging
 logging.basicConfig(
@@ -361,3 +364,68 @@ async def assistant_chat(request: AssistantChatRequest):
             suggested_actions=["How to Use?", "Why Rejected?"],
             context_used=False,
         )
+
+
+@app.post(
+    "/api/screenings/{screening_id}/review",
+    response_model=DoctorReviewResponse,
+    tags=["Doctor Review"],
+    summary="Submit Human-in-the-Loop Doctor Review",
+)
+async def submit_doctor_review(
+    screening_id: str,
+    review_req: DoctorReviewRequest,
+    x_user_role: Optional[str] = Header(default="doctor", alias="X-User-Role"),
+    original_ai_result: str = "Moderate",
+    original_confidence: Optional[float] = 0.85,
+):
+    """
+    Phase 6 Human-in-the-Loop Doctor Review:
+    - Allows verified doctor to ACCEPT, MODIFY, or REQUEST RE-CAPTURE
+    - Preserves original AI prediction permanently
+    - Requires review comment on MODIFY action
+    - Logs an immutable event to the audit trail
+    """
+    try:
+        response = process_doctor_review(
+            request=review_req,
+            original_ai_result=original_ai_result,
+            original_confidence=original_confidence,
+            role=x_user_role,
+        )
+        return response
+    except PermissionError as e:
+        logger.warning(f"Unauthorized doctor review attempt: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except ValueError as e:
+        logger.warning(f"Invalid doctor review submission: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Doctor review submission failed: {e}", exc_info=False)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to save the review. Please try again.",
+        )
+
+
+@app.get(
+    "/api/screenings/{screening_id}/history",
+    response_model=ReviewHistoryResponse,
+    tags=["Doctor Review"],
+    summary="Get Screening Audit Trail History",
+)
+async def get_screening_history(screening_id: str):
+    """
+    Retrieves the complete chronological audit history for a screening record.
+    """
+    events = get_audit_history(screening_id)
+    return ReviewHistoryResponse(
+        screening_id=screening_id,
+        events=events,
+    )

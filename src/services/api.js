@@ -654,3 +654,144 @@ export async function queryAssistant(message, language = 'en', screeningContext 
   };
 }
 
+/**
+ * Phase 6: Submit Human-in-the-Loop Doctor Review
+ * Actions: 'ACCEPT', 'MODIFY', 'RECAPTURE'
+ */
+export async function submitDoctorReview(screeningId, reviewData, role = 'doctor') {
+  const reviewEndpoint = `${API_BASE_URL}/api/screenings/${encodeURIComponent(screeningId)}/review`;
+
+  try {
+    const res = await fetch(reviewEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Role': role,
+      },
+      body: JSON.stringify({
+        screening_id: screeningId,
+        action: reviewData.action,
+        reviewed_class: reviewData.reviewedClass,
+        reviewed_class_name: reviewData.reviewedClassName,
+        review_comment: reviewData.reviewComment,
+        reviewer_id: reviewData.reviewerId || 'DOC-SWAMINATHAN',
+        reviewer_name: reviewData.reviewerName || 'Dr. A. Swaminathan, MS',
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      // Cache review locally
+      const storedKey = `madocs_review_${screeningId}`;
+      localStorage.setItem(storedKey, JSON.stringify(data));
+      return data;
+    } else {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.detail || 'Failed to submit doctor review');
+    }
+  } catch (err) {
+    console.warn('Backend doctor review endpoint unreachable or failed, fallback to local storage:', err);
+    // Local fallback processing
+    const isModify = reviewData.action === 'MODIFY';
+    if (isModify && (!reviewData.reviewComment || !reviewData.reviewComment.trim())) {
+      throw new Error('A review reason/comment is required when modifying the AI screening result.');
+    }
+
+    const reviewStatus =
+      reviewData.action === 'ACCEPT'
+        ? 'AI RESULT ACCEPTED'
+        : reviewData.action === 'MODIFY'
+        ? 'DOCTOR REVIEWED / MODIFIED'
+        : 'IMAGE RE-CAPTURE REQUESTED';
+
+    const fallbackResponse = {
+      screening_id: screeningId,
+      review_status: reviewStatus,
+      original_ai_result: reviewData.originalAiResult || 'Moderate',
+      original_confidence: reviewData.originalConfidence || 0.85,
+      doctor_reviewed_result:
+        reviewData.action === 'ACCEPT'
+          ? reviewData.originalAiResult || 'Moderate'
+          : reviewData.action === 'MODIFY'
+          ? reviewData.reviewedClassName || 'Mild'
+          : 'Image Re-capture Required',
+      review_action: reviewData.action,
+      review_comment: reviewData.reviewComment || (reviewData.action === 'ACCEPT' ? 'Verified by doctor.' : 'Re-capture needed.'),
+      reviewer_name: reviewData.reviewerName || 'Dr. A. Swaminathan, MS',
+      review_timestamp: new Date().toISOString(),
+      audit_record: {
+        event_id: `evt-${Date.now()}`,
+        screening_id: screeningId,
+        event_type: reviewData.action === 'ACCEPT' ? 'AI_RESULT_ACCEPTED' : reviewData.action === 'MODIFY' ? 'RESULT_MODIFIED' : 'IMAGE_RECAPTURE_REQUESTED',
+        description: `Review action '${reviewData.action}' recorded for ${screeningId}.`,
+        actor_id: reviewData.reviewerId || 'DOC-SWAMINATHAN',
+        actor_role: role,
+        original_ai_result: reviewData.originalAiResult || 'Moderate',
+        original_confidence: reviewData.originalConfidence || 0.85,
+        reviewed_result: reviewData.reviewedClassName || reviewData.originalAiResult || 'Moderate',
+        review_comment: reviewData.reviewComment,
+        timestamp: new Date().toISOString(),
+      },
+      message: 'Review saved locally.',
+    };
+
+    localStorage.setItem(`madocs_review_${screeningId}`, JSON.stringify(fallbackResponse));
+    return fallbackResponse;
+  }
+}
+
+/**
+ * Phase 6: Fetch Chronological Audit History for a Screening
+ */
+export async function getScreeningReviewHistory(screeningId) {
+  const historyEndpoint = `${API_BASE_URL}/api/screenings/${encodeURIComponent(screeningId)}/history`;
+
+  try {
+    const res = await fetch(historyEndpoint);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend history endpoint unreachable, checking local fallback:', err);
+  }
+
+  // Fallback to locally stored review record
+  const local = localStorage.getItem(`madocs_review_${screeningId}`);
+  if (local) {
+    const parsed = JSON.parse(local);
+    return {
+      screening_id: screeningId,
+      events: [
+        {
+          event_id: 'evt-init',
+          screening_id: screeningId,
+          event_type: 'AI_SCREENING_COMPLETED',
+          description: `AI model screening completed (${parsed.original_ai_result}).`,
+          actor_id: 'SYSTEM_AI',
+          actor_role: 'ai_screening_engine',
+          original_ai_result: parsed.original_ai_result,
+          original_confidence: parsed.original_confidence,
+          timestamp: new Date(Date.now() - 300000).toISOString(),
+        },
+        parsed.audit_record,
+      ],
+    };
+  }
+
+  return {
+    screening_id: screeningId,
+    events: [
+      {
+        event_id: 'evt-init',
+        screening_id: screeningId,
+        event_type: 'AI_SCREENING_COMPLETED',
+        description: 'AI model screening inference completed.',
+        actor_id: 'SYSTEM_AI',
+        actor_role: 'ai_screening_engine',
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+

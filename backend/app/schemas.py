@@ -128,3 +128,47 @@ class AssistantChatResponse(BaseModel):
         default="The MADOCS Assistant is an AI-assisted screening support tool and does not provide clinical diagnoses or prescriptions.",
         description="Clinical safety disclaimer"
     )
+
+
+# Phase 6: Human-in-the-Loop Doctor Review Schemas
+class DoctorReviewRequest(BaseModel):
+    screening_id: str = Field(..., example="SCR-2026-081", description="Unique screening record identifier")
+    action: str = Field(..., example="ACCEPT", description="Doctor action: 'ACCEPT', 'MODIFY', 'RECAPTURE'")
+    reviewed_class: Optional[int] = Field(default=None, ge=0, le=4, example=2, description="Reviewed DR ICDR class index (0-4)")
+    reviewed_class_name: Optional[str] = Field(default=None, example="Moderate", description="Reviewed class name")
+    review_comment: Optional[str] = Field(default=None, example="Clinical agreement with AI screening output.", description="Specialist review notes / reason")
+    reviewer_id: str = Field(default="DOC-SWAMINATHAN", example="DOC-SWAMINATHAN", description="Unique reviewer ID")
+    reviewer_name: str = Field(default="Dr. A. Swaminathan, MS", example="Dr. A. Swaminathan, MS", description="Doctor display name")
+
+
+class ReviewAuditRecord(BaseModel):
+    event_id: str = Field(..., description="Unique event ID")
+    screening_id: str = Field(..., description="Screening identifier")
+    event_type: str = Field(..., description="Event type: 'AI_SCREENING_COMPLETED', 'DOCTOR_REVIEW_STARTED', 'AI_RESULT_ACCEPTED', 'RESULT_MODIFIED', 'IMAGE_RECAPTURE_REQUESTED'")
+    description: str = Field(..., description="Detailed event summary")
+    actor_id: str = Field(..., description="Actor ID (System / Doctor / Health Worker)")
+    actor_role: str = Field(..., description="Actor role")
+    original_ai_result: Optional[str] = Field(default=None, description="Preserved original AI prediction")
+    original_confidence: Optional[float] = Field(default=None, description="Preserved original AI confidence")
+    reviewed_result: Optional[str] = Field(default=None, description="Doctor confirmed / modified diagnosis")
+    review_comment: Optional[str] = Field(default=None, description="Review reason / notes")
+    timestamp: str = Field(..., description="ISO timestamp")
+
+
+class DoctorReviewResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    review_status: str = Field(..., example="AI RESULT ACCEPTED", description="Updated review status")
+    original_ai_result: str = Field(..., description="Permanently preserved original AI prediction")
+    original_confidence: Optional[float] = Field(default=None, description="Permanently preserved original confidence")
+    doctor_reviewed_result: str = Field(..., description="Specialist final classification")
+    review_action: str = Field(..., description="Review action executed")
+    review_comment: Optional[str] = Field(default=None, description="Doctor review notes")
+    reviewer_name: str = Field(..., description="Reviewing doctor name")
+    review_timestamp: str = Field(..., description="Review completion timestamp")
+    audit_record: ReviewAuditRecord = Field(..., description="Generated audit trail record")
+    message: str = Field(..., description="Confirmation message")
+
+
+class ReviewHistoryResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    events: List[ReviewAuditRecord] = Field(default_factory=list, description="Chronological audit history events")
