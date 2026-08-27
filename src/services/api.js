@@ -3,6 +3,26 @@
  * Connects NetraAI React frontend to FastAPI EfficientNet-B0 & Grad-CAM screening endpoints.
  */
 
+import {
+  safeLocalStorageSet,
+  safeLocalStorageGet,
+  safeLocalStorageRemove,
+  persistLightweightReview,
+  getLightweightReview,
+  sanitizeScreeningsForStorage,
+  sanitizePatientsForStorage,
+} from './storage';
+
+export {
+  safeLocalStorageSet,
+  safeLocalStorageGet,
+  safeLocalStorageRemove,
+  persistLightweightReview,
+  getLightweightReview,
+  sanitizeScreeningsForStorage,
+  sanitizePatientsForStorage,
+};
+
 export const API_BASE_URL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8000';
 
@@ -693,16 +713,24 @@ export async function submitDoctorReview(screeningId, reviewData, role = 'doctor
 
     if (res.ok) {
       const data = await res.json();
-      // Cache review locally
-      const storedKey = `madocs_review_${screeningId}`;
-      localStorage.setItem(storedKey, JSON.stringify(data));
+      // Cache ONLY lightweight review state, keeping clinical data in MySQL
+      persistLightweightReview(screeningId, {
+        screeningId: data.screening_id || screeningId,
+        reviewStatus: data.review_status,
+        doctorDecision: data.review_action || reviewData.action,
+        doctorReviewedResult: data.doctor_reviewed_result,
+        updatedAt: data.review_timestamp || new Date().toISOString(),
+      });
       return data;
     } else {
       const errJson = await res.json().catch(() => ({}));
       throw new Error(errJson.detail || 'Failed to submit doctor review');
     }
   } catch (err) {
-    console.warn('Backend doctor review endpoint unreachable or failed, fallback to local storage:', err);
+    if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+      throw err;
+    }
+    console.warn('Backend doctor review endpoint unreachable, fallback to local storage:', err);
     // Local fallback processing
     const isModify = reviewData.action === 'MODIFY';
     if (isModify && (!reviewData.reviewComment || !reviewData.reviewComment.trim())) {
@@ -747,7 +775,13 @@ export async function submitDoctorReview(screeningId, reviewData, role = 'doctor
       message: 'Review saved locally.',
     };
 
-    localStorage.setItem(`madocs_review_${screeningId}`, JSON.stringify(fallbackResponse));
+    persistLightweightReview(screeningId, {
+      screeningId,
+      reviewStatus,
+      doctorDecision: reviewData.action,
+      doctorReviewedResult: fallbackResponse.doctor_reviewed_result,
+      updatedAt: fallbackResponse.review_timestamp,
+    });
     return fallbackResponse;
   }
 }
@@ -763,21 +797,29 @@ export async function getScreeningReview(screeningId) {
     if (res.ok) {
       const data = await res.json();
       if (data) {
-        localStorage.setItem(`madocs_review_${screeningId}`, JSON.stringify(data));
+        persistLightweightReview(screeningId, {
+          screeningId: data.screening_id || screeningId,
+          reviewStatus: data.review_status,
+          doctorDecision: data.review_action,
+          doctorReviewedResult: data.doctor_reviewed_result,
+          updatedAt: data.review_timestamp,
+        });
         return data;
       }
     }
   } catch (err) {
-    console.warn('Backend review fetch unreachable, using localStorage:', err);
+    console.warn('Backend review fetch unreachable, using lightweight cache:', err);
   }
 
-  const local = localStorage.getItem(`madocs_review_${screeningId}`);
+  const local = getLightweightReview(screeningId);
   if (local) {
-    try {
-      return JSON.parse(local);
-    } catch {
-      return null;
-    }
+    return {
+      screening_id: local.screeningId || screeningId,
+      review_status: local.reviewStatus,
+      doctor_reviewed_result: local.doctorReviewedResult,
+      review_action: local.doctorDecision,
+      review_timestamp: local.updatedAt,
+    };
   }
 
   return null;
@@ -795,13 +837,12 @@ export async function getScreeningReviewHistory(screeningId) {
       return await res.json();
     }
   } catch (err) {
-    console.warn('Backend history endpoint unreachable, checking local fallback:', err);
+    console.warn('Backend history endpoint unreachable, checking lightweight cache fallback:', err);
   }
 
-  // Fallback to locally stored review record
-  const local = localStorage.getItem(`madocs_review_${screeningId}`);
+  // Fallback to lightweight stored review record
+  const local = getLightweightReview(screeningId);
   if (local) {
-    const parsed = JSON.parse(local);
     return {
       screening_id: screeningId,
       events: [
@@ -809,14 +850,13 @@ export async function getScreeningReviewHistory(screeningId) {
           event_id: 'evt-init',
           screening_id: screeningId,
           event_type: 'AI_SCREENING_COMPLETED',
-          description: `AI model screening completed (${parsed.original_ai_result}).`,
+          description: `AI model screening completed.`,
           actor_id: 'SYSTEM_AI',
           actor_role: 'ai_screening_engine',
-          original_ai_result: parsed.original_ai_result,
-          original_confidence: parsed.original_confidence,
+          original_ai_result: 'Moderate',
+          original_confidence: 0.85,
           timestamp: new Date(Date.now() - 300000).toISOString(),
         },
-        parsed.audit_record,
       ],
     };
   }

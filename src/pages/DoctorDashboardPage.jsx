@@ -40,7 +40,8 @@ import {
   GitCompare,
   Video,
 } from 'lucide-react';
-import { submitDoctorReview, getScreeningReviewHistory, getFullResultUrl } from '../services/api';
+import { submitDoctorReview, getScreeningReview, getScreeningReviewHistory, getFullResultUrl } from '../services/api';
+import { getLightweightReview } from '../services/storage';
 
 const DR_OPTIONS = [
   { value: 0, label: 'DR 0 — No Retinopathy', name: 'No DR' },
@@ -75,7 +76,8 @@ const DoctorDashboardContent = () => {
   };
 
   const [selectedEye, setSelectedEye] = useState('OD');
-  const [activeModal, setActiveModal] = useState(null); // 'ACCEPT' | 'MODIFY' | 'RECAPTURE' | null
+  const [filter, setFilter] = useState('all'); // 'all' | 'pending' | 'verified' | 'recapture' | 'urgent'
+  const [activeModal, setActiveModal] = useState(null); // 'accept' | 'modify' | 'recapture' | 'history' | null
   const [overrideClass, setOverrideClass] = useState(1);
   const [overrideCategory, setOverrideCategory] = useState('Clinical assessment differs');
   const [overrideComment, setOverrideComment] = useState('');
@@ -90,22 +92,30 @@ const DoctorDashboardContent = () => {
   const [selectedPreviousId, setSelectedPreviousId] = useState(null);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('verification'); // 'verification' | 'longitudinal'
 
-  // Load audit history and local review record on screening selection
+  // Load live review status and audit history from backend (with lightweight fallback)
   useEffect(() => {
     if (!selectedScreening.id) return;
 
-    // Check cached review
-    const local = localStorage.getItem(`madocs_review_${selectedScreening.id}`);
-    if (local) {
-      try {
-        setReviewState(JSON.parse(local));
-      } catch (e) {
-        setReviewState(null);
-      }
+    // Check lightweight cache
+    const cached = getLightweightReview(selectedScreening.id);
+    if (cached) {
+      setReviewState(cached);
     } else {
       setReviewState(null);
     }
 
+    // Fetch canonical live review from FastAPI/MySQL
+    getScreeningReview(selectedScreening.id)
+      .then((res) => {
+        if (res) {
+          setReviewState(res);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load canonical review from backend:', err);
+      });
+
+    // Fetch live audit events from FastAPI/MySQL
     getScreeningReviewHistory(selectedScreening.id)
       .then((res) => {
         if (res && res.events) {

@@ -52,6 +52,7 @@ import {
   retryWhatsAppDelivery,
   generateReportPdf,
 } from '../services/api';
+import { getLightweightReview } from '../services/storage';
 import { ClassificationChangeBadge } from '../components/longitudinal/LongitudinalComparisonCard';
 import { History, GitCompare } from 'lucide-react';
 
@@ -288,9 +289,14 @@ const PatientReportContent = () => {
   // Resolve patient details safely
   const patient = getPatientById(screening?.patientId) || {};
 
-  // Load cached or live review state
-  const storedReviewJson = localStorage.getItem(`madocs_review_${screening.id}`);
-  const storedReview = liveReview || (storedReviewJson ? JSON.parse(storedReviewJson) : null);
+  // Load live review or fallback to lightweight cache
+  const cachedReview = getLightweightReview(screening?.id);
+  const storedReview = liveReview || (cachedReview ? {
+    review_status: cachedReview.reviewStatus,
+    doctor_reviewed_result: cachedReview.doctorReviewedResult,
+    review_action: cachedReview.doctorDecision,
+    review_timestamp: cachedReview.updatedAt,
+  } : null);
   
   const rawStatus =
     storedReview?.review_status ||

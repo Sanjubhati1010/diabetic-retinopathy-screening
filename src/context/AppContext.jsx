@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { MOCK_PATIENTS, MOCK_SCREENINGS, SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
 import { voiceService } from '../services/voiceService';
+import {
+  safeLocalStorageSet,
+  safeLocalStorageGet,
+  getLightweightReview,
+  sanitizeScreeningsForStorage,
+  sanitizePatientsForStorage,
+} from '../services/storage';
 
 const AppContext = createContext();
 
@@ -14,27 +21,15 @@ export const AppProvider = ({ children }) => {
 
   // Phase 7: Rural Mode, Low-Bandwidth Mode & Voice Guidance Preferences
   const [ruralMode, setRuralMode] = useState(() => {
-    try {
-      return localStorage.getItem('madocs_rural_mode') === 'true';
-    } catch {
-      return false;
-    }
+    return safeLocalStorageGet('madocs_rural_mode', false) === 'true' || safeLocalStorageGet('madocs_rural_mode', false) === true;
   });
 
   const [lowBandwidthMode, setLowBandwidthMode] = useState(() => {
-    try {
-      return localStorage.getItem('madocs_low_bandwidth') === 'true';
-    } catch {
-      return false;
-    }
+    return safeLocalStorageGet('madocs_low_bandwidth', false) === 'true' || safeLocalStorageGet('madocs_low_bandwidth', false) === true;
   });
 
   const [voiceGuidanceEnabled, setVoiceGuidanceEnabled] = useState(() => {
-    try {
-      return localStorage.getItem('madocs_voice_guidance') === 'true';
-    } catch {
-      return false;
-    }
+    return safeLocalStorageGet('madocs_voice_guidance', false) === 'true' || safeLocalStorageGet('madocs_voice_guidance', false) === true;
   });
 
   // Reactive Network Status Detection
@@ -57,41 +52,22 @@ export const AppProvider = ({ children }) => {
 
   // Phase 7: Offline Sync Queue for Non-AI Records (Drafts, Reviews)
   const [pendingSyncQueue, setPendingSyncQueue] = useState(() => {
-    try {
-      const saved = localStorage.getItem('madocs_sync_queue');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+    return safeLocalStorageGet('madocs_sync_queue', []);
   });
 
   const [patients, setPatients] = useState(() => {
-    try {
-      const saved = localStorage.getItem('dr_patients');
-      return saved ? JSON.parse(saved) : MOCK_PATIENTS;
-    } catch {
-      return MOCK_PATIENTS;
-    }
+    return safeLocalStorageGet('dr_patients', MOCK_PATIENTS);
   });
 
   const [screenings, setScreenings] = useState(() => {
-    try {
-      const saved = localStorage.getItem('dr_screenings');
-      return saved ? JSON.parse(saved) : MOCK_SCREENINGS;
-    } catch {
-      return MOCK_SCREENINGS;
-    }
+    return safeLocalStorageGet('dr_screenings', MOCK_SCREENINGS);
   });
 
   // Phase 11: Appointments & Doctors State
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState(() => {
-    try {
-      const saved = localStorage.getItem('dr_appointments');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
+    const saved = safeLocalStorageGet('dr_appointments', null);
+    if (saved) return saved;
     return [
       {
         id: "APT-2026-101",
@@ -195,11 +171,7 @@ export const AppProvider = ({ children }) => {
 
   // Save appointments to local storage
   useEffect(() => {
-    try {
-      localStorage.setItem('dr_appointments', JSON.stringify(appointments));
-    } catch (e) {
-      console.warn('Failed to save appointments to localStorage', e);
-    }
+    safeLocalStorageSet('dr_appointments', appointments);
   }, [appointments]);
 
   // Offline mode state for rural connectivity simulation
@@ -253,19 +225,11 @@ export const AppProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    try {
-      localStorage.setItem('dr_patients', JSON.stringify(patients));
-    } catch (e) {
-      console.warn('Unable to persist patients to localStorage:', e);
-    }
+    safeLocalStorageSet('dr_patients', sanitizePatientsForStorage(patients));
   }, [patients]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('dr_screenings', JSON.stringify(screenings));
-    } catch (e) {
-      console.warn('Unable to persist screenings to localStorage:', e);
-    }
+    safeLocalStorageSet('dr_screenings', sanitizeScreeningsForStorage(screenings));
   }, [screenings]);
 
   const login = (role, userDetails) => {
@@ -346,31 +310,26 @@ export const AppProvider = ({ children }) => {
     if (found) return found;
     if (activeScreening && activeScreening.id === id) return activeScreening;
 
-    // Check localStorage cache
-    try {
-      const local = localStorage.getItem(`madocs_review_${id}`);
-      if (local) {
-        const parsed = JSON.parse(local);
-        return {
-          id,
-          patientId: 'PAT-2026-081',
-          patientName: 'Patient',
-          village: 'Rampur',
-          screeningDate: parsed.review_timestamp ? new Date(parsed.review_timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleString('en-IN'),
-          className: parsed.original_ai_result || 'Moderate DR',
-          confidence: parsed.original_confidence || 0.85,
-          overallSeverity: 'dr2',
-          riskCategory: 'MODERATE',
-          referralPriority: 'EYE SPECIALIST REVIEW RECOMMENDED',
-          screeningStatus: 'RELIABLE AI SCREENING',
-          safetyStatus: 'READY_FOR_AI',
-          doctorStatus: parsed.review_status === 'AI RESULT ACCEPTED' ? 'verified' : 'pending',
-          imageOD: SAMPLE_FUNDUS_IMAGES.sample_od,
-          imageOS: SAMPLE_FUNDUS_IMAGES.sample_os,
-        };
-      }
-    } catch (e) {
-      console.warn('Error reading cached screening:', e);
+    // Check lightweight cache
+    const local = getLightweightReview(id);
+    if (local) {
+      return {
+        id,
+        patientId: 'PAT-2026-081',
+        patientName: 'Patient',
+        village: 'Rampur',
+        screeningDate: local.updatedAt ? new Date(local.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleString('en-IN'),
+        className: local.doctorReviewedResult || 'Moderate DR',
+        confidence: 0.85,
+        overallSeverity: 'dr2',
+        riskCategory: 'MODERATE',
+        referralPriority: 'EYE SPECIALIST REVIEW RECOMMENDED',
+        screeningStatus: 'RELIABLE AI SCREENING',
+        safetyStatus: 'READY_FOR_AI',
+        doctorStatus: local.reviewStatus === 'AI RESULT ACCEPTED' ? 'verified' : 'pending',
+        imageOD: SAMPLE_FUNDUS_IMAGES.sample_od,
+        imageOS: SAMPLE_FUNDUS_IMAGES.sample_os,
+      };
     }
 
     return null;
@@ -457,11 +416,7 @@ export const AppProvider = ({ children }) => {
         finalScreenings = [newRecord, ...prev];
       }
 
-      try {
-        localStorage.setItem('dr_screenings', JSON.stringify(finalScreenings));
-      } catch (e) {
-        console.warn('Unable to persist screenings to localStorage:', e);
-      }
+      safeLocalStorageSet('dr_screenings', sanitizeScreeningsForStorage(finalScreenings));
       return finalScreenings;
     });
   };
@@ -513,46 +468,30 @@ export const AppProvider = ({ children }) => {
 
   // Persist Rural Mode & Low Bandwidth Preferences
   useEffect(() => {
-    try {
-      localStorage.setItem('madocs_rural_mode', String(ruralMode));
-      if (ruralMode) {
-        document.documentElement.classList.add('rural-mode');
-      } else {
-        document.documentElement.classList.remove('rural-mode');
-      }
-    } catch (e) {
-      console.warn('Unable to persist ruralMode:', e);
+    safeLocalStorageSet('madocs_rural_mode', String(ruralMode));
+    if (ruralMode) {
+      document.documentElement.classList.add('rural-mode');
+    } else {
+      document.documentElement.classList.remove('rural-mode');
     }
   }, [ruralMode]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('madocs_low_bandwidth', String(lowBandwidthMode));
-      if (lowBandwidthMode) {
-        document.documentElement.classList.add('low-bandwidth');
-      } else {
-        document.documentElement.classList.remove('low-bandwidth');
-      }
-    } catch (e) {
-      console.warn('Unable to persist lowBandwidthMode:', e);
+    safeLocalStorageSet('madocs_low_bandwidth', String(lowBandwidthMode));
+    if (lowBandwidthMode) {
+      document.documentElement.classList.add('low-bandwidth');
+    } else {
+      document.documentElement.classList.remove('low-bandwidth');
     }
   }, [lowBandwidthMode]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('madocs_voice_guidance', String(voiceGuidanceEnabled));
-    } catch (e) {
-      console.warn('Unable to persist voiceGuidanceEnabled:', e);
-    }
+    safeLocalStorageSet('madocs_voice_guidance', String(voiceGuidanceEnabled));
   }, [voiceGuidanceEnabled]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('madocs_sync_queue', JSON.stringify(pendingSyncQueue));
-      setOfflineSyncCount(pendingSyncQueue.filter((q) => q.status === 'PENDING_SYNC').length);
-    } catch (e) {
-      console.warn('Unable to persist pendingSyncQueue:', e);
-    }
+    safeLocalStorageSet('madocs_sync_queue', pendingSyncQueue);
+    setOfflineSyncCount(pendingSyncQueue.filter((q) => q.status === 'PENDING_SYNC').length);
   }, [pendingSyncQueue]);
 
   const toggleRuralMode = () => setRuralMode((prev) => !prev);
