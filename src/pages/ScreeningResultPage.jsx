@@ -12,10 +12,7 @@ import {
 } from '../components/common/SeverityBadge';
 import { BiomarkerTags } from '../components/visualizer/BiomarkerTags';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
-import { Modal } from '../components/common/Modal';
-import { VoiceGuidanceControl } from '../components/common/VoiceGuidanceControl';
 import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
-import { DecisionTrace } from '../components/evidence/DecisionTrace';
 import { GradCamEvidenceSummary } from '../components/evidence/GradCamEvidenceSummary';
 import { DualEvidenceViewer } from '../components/evidence/DualEvidenceViewer';
 import { LongitudinalComparisonCard } from '../components/longitudinal/LongitudinalComparisonCard';
@@ -692,9 +689,6 @@ export const ScreeningResultPage = () => {
           )}
         </div>
       </div>
-
-      {/* Phase 8: AI Decision Trace */}
-      <DecisionTrace screening={screening} selectedEye={selectedExplainEye} />
 
       {/* Phase 9: Dual-Evidence Analysis */}
       <DualEvidenceViewer

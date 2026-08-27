@@ -5,7 +5,6 @@ import { useApp } from '../context/AppContext';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { SeverityBadge, ScreeningStatusBadge, SafetyBadge } from '../components/common/SeverityBadge';
 import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
-import { DecisionTrace } from '../components/evidence/DecisionTrace';
 import { GradCamEvidenceSummary } from '../components/evidence/GradCamEvidenceSummary';
 import { DualEvidenceViewer } from '../components/evidence/DualEvidenceViewer';
 import {
@@ -219,9 +218,6 @@ export const ExplainableAiPage = () => {
           </div>
         </div>
       </div>
-
-      {/* Phase 8: AI Decision Trace */}
-      <DecisionTrace screening={screening} selectedEye={selectedEye} />
     </div>
   );
 };
