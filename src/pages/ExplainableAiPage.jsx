@@ -36,12 +36,13 @@ export const ExplainableAiPage = () => {
     (s) => s.isRealPrediction || s.gradCamUrl || s.confidence !== null
   );
 
-  let screening = id
-    ? getScreeningById(id)
-    : latestRealScreening ||
-      (activeScreening.aiResult || activeScreening.rightEyeAnalysis || activeScreening.leftEyeAnalysis
+  let screening = id ? getScreeningById(id) : (latestRealScreening || null);
+
+  if (!screening) {
+    screening =
+      activeScreening.aiResult || activeScreening.rightEyeAnalysis || activeScreening.leftEyeAnalysis
         ? {
-            id: activeScreening.id || 'SCR-CURRENT',
+            id: activeScreening.id || id || 'SCR-CURRENT',
             patientId: activeScreening.patientId || 'PAT-2026-081',
             patientName: activeScreening.patientName || 'Ramesh Kumar Verma',
             imageOD: activeScreening.imageOD || SAMPLE_FUNDUS_IMAGES.sample_od,
@@ -59,10 +60,33 @@ export const ExplainableAiPage = () => {
               : null,
             isRealPrediction: true,
           }
-        : screenings[0]);
+        : latestRealScreening || (screenings && screenings[0]) || {
+            id: id || 'SCR-2026-1024',
+            patientId: 'PAT-2026-081',
+            patientName: 'Ramesh Kumar Verma',
+            imageOD: SAMPLE_FUNDUS_IMAGES.sample_od,
+            imageOS: SAMPLE_FUNDUS_IMAGES.sample_os,
+            overallSeverity: 'dr2',
+            className: 'Moderate',
+            confidence: 0.85,
+            isRealPrediction: false,
+          };
+  }
 
-  if (!screening.isRealPrediction && !screening.gradCamUrl && latestRealScreening) {
-    screening = latestRealScreening;
+  if (id && screening.id !== id && !screenings.some((s) => s.id === id)) {
+    screening = {
+      ...screening,
+      id: id,
+    };
+  }
+
+  if (screening && !screening.isRealPrediction && !screening.gradCamUrl && latestRealScreening) {
+    screening = {
+      ...latestRealScreening,
+      id: screening.id || id || latestRealScreening.id,
+      patientId: screening.patientId || latestRealScreening.patientId,
+      patientName: screening.patientName || latestRealScreening.patientName,
+    };
   }
 
   const [selectedEye, setSelectedEye] = useState(

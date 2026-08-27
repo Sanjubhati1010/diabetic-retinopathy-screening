@@ -11,7 +11,7 @@ import {
   getLightweightReview,
   sanitizeScreeningsForStorage,
   sanitizePatientsForStorage,
-} from './storage';
+} from './storage.js';
 
 export {
   safeLocalStorageSet,
