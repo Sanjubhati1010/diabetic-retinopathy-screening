@@ -52,7 +52,12 @@ const DR_OPTIONS = [
 
 const DoctorDashboardContent = () => {
   const { t } = useLanguage();
-  const { screenings = [], getPatientById, updateScreeningReview } = useApp();
+  const {
+    screenings = [],
+    appointments = [],
+    getPatientById,
+    updateScreeningReview,
+  } = useApp();
 
   const [selectedScreeningId, setSelectedScreeningId] = useState(
     screenings.find((s) => s.doctorStatus === 'pending')?.id || screenings[0]?.id || 'SCR-2026-001'
@@ -231,6 +236,7 @@ const DoctorDashboardContent = () => {
 
   const pendingCount = screenings.filter((s) => s.doctorStatus === 'pending' && s.reviewStatus !== 'AI RESULT ACCEPTED' && s.reviewStatus !== 'DOCTOR REVIEWED / MODIFIED' && s.reviewStatus !== 'IMAGE RE-CAPTURE REQUESTED').length;
   const verifiedCount = screenings.filter((s) => s.doctorStatus === 'verified' || s.reviewStatus === 'AI RESULT ACCEPTED' || s.reviewStatus === 'DOCTOR REVIEWED / MODIFIED').length;
+  const teleAppointmentsCount = appointments.length;
 
   return (
     <div className="space-y-6 font-sans">
