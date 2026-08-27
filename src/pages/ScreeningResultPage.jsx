@@ -18,6 +18,7 @@ import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCar
 import { DecisionTrace } from '../components/evidence/DecisionTrace';
 import { GradCamEvidenceSummary } from '../components/evidence/GradCamEvidenceSummary';
 import { DualEvidenceViewer } from '../components/evidence/DualEvidenceViewer';
+import { LongitudinalComparisonCard } from '../components/longitudinal/LongitudinalComparisonCard';
 import {
   FileCheck,
   Eye,
@@ -76,6 +77,7 @@ export const ScreeningResultPage = () => {
   const [teleSent, setTeleSent] = useState(false);
   const [selectedExplainEye, setSelectedExplainEye] = useState('OD');
   const [explainSectionOpen, setExplainSectionOpen] = useState(true);
+  const [selectedPreviousId, setSelectedPreviousId] = useState(null);
 
   const handleSendTeleConsult = () => {
     setTeleSent(true);
@@ -863,6 +865,13 @@ export const ScreeningResultPage = () => {
           <BiomarkerTags biomarkers={screening.biomarkers} />
         </div>
       )}
+
+      {/* Phase 10: Longitudinal Screening Overview & Comparison */}
+      <LongitudinalComparisonCard
+        currentScreening={screening}
+        selectedPreviousId={selectedPreviousId}
+        onSelectPreviousId={setSelectedPreviousId}
+      />
 
       {/* Action Footer */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-6 rounded-3xl bg-white border border-slate-200 shadow-card">

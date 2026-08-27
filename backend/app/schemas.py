@@ -196,3 +196,61 @@ class DualEvidenceSummary(BaseModel):
     gradcam_attention: Dict[str, Any] = Field(..., description="Grad-CAM attention evidence")
     doctor_review: Optional[Dict[str, Any]] = Field(default=None, description="Doctor review status")
 
+
+# Phase 10: Longitudinal Patient Tracking & Screening Progression Intelligence Schemas
+class ScreeningHistoryRecord(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    screening_date: str = Field(..., description="Date of screening")
+    predicted_class: Optional[int] = Field(default=None, ge=0, le=4, description="ICDR severity grade index")
+    class_name: Optional[str] = Field(default=None, description="Human readable DR classification name")
+    confidence: Optional[float] = Field(default=None, description="AI model confidence score")
+    dr_severity_od: Optional[str] = Field(default=None, description="Right eye severity")
+    dr_severity_os: Optional[str] = Field(default=None, description="Left eye severity")
+    overall_severity: Optional[str] = Field(default=None, description="Overall bilateral severity")
+    safety_status: str = Field(default="READY_FOR_AI", description="Safety gate status")
+    screening_status: str = Field(default="RELIABLE AI SCREENING", description="Screening status")
+    risk_category: str = Field(default="MODERATE", description="Risk category")
+    referral_priority: str = Field(default="EYE SPECIALIST REVIEW RECOMMENDED", description="Referral priority")
+    doctor_status: str = Field(default="pending", description="Doctor review status: 'pending' | 'verified' | 'recapture_requested'")
+    review_status: Optional[str] = Field(default=None, description="Canonical doctor review status")
+    doctor_reviewed_result: Optional[str] = Field(default=None, description="Doctor confirmed / modified diagnosis")
+    reviewer_name: Optional[str] = Field(default=None, description="Doctor display name")
+    is_recapture: bool = Field(default=False, description="Whether screening requires image re-capture")
+    image_od: Optional[str] = Field(default=None, description="Right eye fundus image URL")
+    image_os: Optional[str] = Field(default=None, description="Left eye fundus image URL")
+    gradcam_od: Optional[str] = Field(default=None, description="Right eye Grad-CAM URL")
+    gradcam_os: Optional[str] = Field(default=None, description="Left eye Grad-CAM URL")
+    lesion_available: bool = Field(default=False, description="Whether lesion analysis is available")
+
+
+class PatientScreeningHistoryResponse(BaseModel):
+    patient_id: str = Field(..., description="Unique patient identifier")
+    patient_name: str = Field(..., description="Patient name")
+    total_screenings: int = Field(..., description="Total historical screenings count")
+    screenings: List[ScreeningHistoryRecord] = Field(default_factory=list, description="Chronological screenings, newest first")
+
+
+class ScreeningComparisonResponse(BaseModel):
+    patient_id: str = Field(..., description="Patient identifier")
+    patient_name: str = Field(..., description="Patient name")
+    village: str = Field(..., description="Patient village/community")
+    current_screening: ScreeningHistoryRecord = Field(..., description="Active/current screening session")
+    previous_screening: Optional[ScreeningHistoryRecord] = Field(default=None, description="Compared previous screening session")
+    has_previous_screening: bool = Field(..., description="Whether previous screening exists")
+    classification_change_status: str = Field(
+        ...,
+        description="Safe comparison status: 'IMPROVED', 'UNCHANGED', 'CLASSIFICATION INCREASED', 'CLASSIFICATION DECREASED', 'NOT COMPARABLE', 'HISTORY UNAVAILABLE'"
+    )
+    classification_change_summary: str = Field(..., description="Clinical summary of AI classification change")
+    classification_change_summary_hi: str = Field(..., description="Hindi clinical summary of AI classification change")
+    clinical_recommendation: str = Field(..., description="Clinical next step guidance")
+    clinical_recommendation_hi: str = Field(..., description="Hindi clinical next step guidance")
+    confidence_comparison: Dict[str, Any] = Field(..., description="Separate previous and current confidence scores")
+    image_comparison: Dict[str, Any] = Field(..., description="Visual image URLs for clinical review")
+    gradcam_comparison: Dict[str, Any] = Field(..., description="Grad-CAM attention maps with explainability limitation note")
+    lesion_comparison: Dict[str, Any] = Field(..., description="Lesion evidence availability status")
+    doctor_review_comparison: Dict[str, Any] = Field(..., description="Doctor review statuses across screenings")
+    disclaimer: str = Field(..., description="Mandatory clinical disclaimer on longitudinal comparison")
+    disclaimer_hi: str = Field(..., description="Hindi mandatory clinical disclaimer")
+
+

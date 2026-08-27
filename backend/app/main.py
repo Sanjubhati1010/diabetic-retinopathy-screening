@@ -22,11 +22,15 @@ from app.schemas import (
     DoctorReviewResponse,
     ReviewHistoryResponse,
     LesionEvidenceResponse,
+    ScreeningHistoryRecord,
+    PatientScreeningHistoryResponse,
+    ScreeningComparisonResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
 from app.review_service import process_doctor_review, get_audit_history, get_screening_review
 from app.lesion_service import lesion_service
+from app.longitudinal_service import longitudinal_service
 
 # Setup structured logging
 logging.basicConfig(
@@ -479,4 +483,149 @@ async def analyze_lesions(screening_id: str = "SCR-DIRECT", eye: str = "OD"):
     """
     analysis = lesion_service.get_lesion_analysis(screening_id=screening_id, eye=eye)
     return LesionEvidenceResponse(**analysis)
+
+
+# Phase 10: Longitudinal Patient Tracking & Progression Intelligence Endpoints
+@app.get(
+    "/api/patients/{patient_id}/screening-history",
+    response_model=PatientScreeningHistoryResponse,
+    tags=["Longitudinal Intelligence"],
+    summary="Get Patient Chronological Screening History",
+)
+async def get_patient_screening_history(patient_id: str):
+    """
+    Phase 10 Longitudinal Tracking:
+    - Retrieves complete chronological screening sessions for a specific patient (newest first).
+    - Preserves data isolation across patients.
+    """
+    history = longitudinal_service.get_patient_screening_history(patient_id)
+    patient_name = history[0].get("patient_name") if history else "Patient"
+    
+    formatted_screenings = [
+        ScreeningHistoryRecord(**longitudinal_service._format_screening_summary(scr))
+        for scr in history
+    ]
+    
+    return PatientScreeningHistoryResponse(
+        patient_id=patient_id,
+        patient_name=patient_name,
+        total_screenings=len(formatted_screenings),
+        screenings=formatted_screenings,
+    )
+
+
+@app.get(
+    "/api/screenings/{screening_id}/comparison/{previous_screening_id}",
+    response_model=ScreeningComparisonResponse,
+    tags=["Longitudinal Intelligence"],
+    summary="Compare Current vs Specific Previous Screening",
+)
+async def compare_specific_screenings(screening_id: str, previous_screening_id: str):
+    """
+    Phase 10 Longitudinal Comparison:
+    - Compares current screening with a manually selected historical screening.
+    - Evaluates safe screening classification change without claiming autonomous disease progression.
+    - Strictly prevents cross-patient comparisons.
+    """
+    current_scr = longitudinal_service.get_screening(screening_id)
+    if not current_scr:
+        # Fallback to reviewing active cache if exists
+        rev = get_screening_review(screening_id)
+        if rev:
+            current_scr = {
+                "screening_id": screening_id,
+                "patient_id": "PAT-2026-081",
+                "patient_name": "Ramesh Kumar Verma",
+                "village": "Rampur Gram Panchayat",
+                "screening_date": rev.get("review_timestamp", "2026-08-22"),
+                "predicted_class": 2,
+                "class_name": rev.get("original_ai_result", "Moderate"),
+                "confidence": rev.get("original_confidence", 0.85),
+                "doctor_status": "verified" if rev.get("review_status") == "AI RESULT ACCEPTED" else "pending",
+                "review_status": rev.get("review_status"),
+                "doctor_reviewed_result": rev.get("doctor_reviewed_result"),
+                "reviewer_name": rev.get("reviewer_name"),
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Current screening '{screening_id}' not found.",
+            )
+
+    previous_scr = longitudinal_service.get_screening(previous_screening_id)
+    if not previous_scr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Previous screening '{previous_screening_id}' not found.",
+        )
+
+    try:
+        comparison = longitudinal_service.compare_screenings(
+            current_screening=current_scr,
+            previous_screening=previous_scr,
+        )
+        return ScreeningComparisonResponse(**comparison)
+    except ValueError as e:
+        logger.warning(f"Longitudinal comparison rejected: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Longitudinal comparison failed: {e}", exc_info=False)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to compare screenings at this time.",
+        )
+
+
+@app.get(
+    "/api/screenings/{screening_id}/longitudinal",
+    response_model=ScreeningComparisonResponse,
+    tags=["Longitudinal Intelligence"],
+    summary="Get Automated Longitudinal Comparison for Screening",
+)
+async def get_automated_longitudinal_comparison(screening_id: str, patient_id: Optional[str] = None):
+    """
+    Phase 10 Automated Comparison:
+    - Automatically finds the most recent comparable historical screening for the patient.
+    - Returns structured classification change status or 'HISTORY UNAVAILABLE' if none exists.
+    """
+    current_scr = longitudinal_service.get_screening(screening_id)
+    if not current_scr:
+        current_scr = {
+            "screening_id": screening_id,
+            "patient_id": patient_id or "PAT-2026-081",
+            "patient_name": "Ramesh Kumar Verma",
+            "village": "Rampur Gram Panchayat",
+            "screening_date": "2026-08-22 10:45 AM",
+            "predicted_class": 2,
+            "class_name": "Moderate",
+            "confidence": 0.85,
+            "safety_status": "READY_FOR_AI",
+            "doctor_status": "verified",
+            "image_od": "/samples/eyes.png",
+            "image_os": "/samples/eyes_os.png",
+            "gradcam_od": "/results/sample_od_gradcam.jpg",
+        }
+
+    pid = current_scr.get("patient_id") or patient_id
+    previous_scr = longitudinal_service.get_latest_comparable_screening(
+        current_screening_id=screening_id,
+        patient_id=pid,
+    )
+
+    try:
+        comparison = longitudinal_service.compare_screenings(
+            current_screening=current_scr,
+            previous_screening=previous_scr,
+        )
+        return ScreeningComparisonResponse(**comparison)
+    except Exception as e:
+        logger.error(f"Automated comparison failed: {e}", exc_info=False)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to compute longitudinal comparison.",
+        )
+
 

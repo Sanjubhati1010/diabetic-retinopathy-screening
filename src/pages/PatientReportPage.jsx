@@ -38,7 +38,9 @@ import {
   Info,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
-import { getScreeningReview, formatConfidence } from '../services/api';
+import { getScreeningReview, formatConfidence, calculateLongitudinalComparison } from '../services/api';
+import { ClassificationChangeBadge } from '../components/longitudinal/LongitudinalComparisonCard';
+import { History, GitCompare } from 'lucide-react';
 
 const PatientReportContent = () => {
   const { id } = useParams();
@@ -585,6 +587,92 @@ const PatientReportContent = () => {
             </div>
           </div>
         </div>
+
+        {/* Phase 10: Previous Screening Context */}
+        {(() => {
+          const previousScreening = getLatestComparableScreening
+            ? getLatestComparableScreening(screening.id, screening.patientId)
+            : null;
+          const longitudinalComp = calculateLongitudinalComparison(screening, previousScreening);
+
+          return (
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-teal-600" />
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                    Previous Screening Context
+                  </h4>
+                </div>
+                <ClassificationChangeBadge status={longitudinalComp?.classification_change_status} size="sm" />
+              </div>
+
+              {longitudinalComp?.has_previous_screening && previousScreening ? (
+                <div className="space-y-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Previous Screening */}
+                    <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                        {t('previousScreening') || 'Previous Screening'}
+                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800">{previousScreening.screeningDate || previousScreening.date}</span>
+                        <span className="font-mono text-[10px] text-slate-400">{previousScreening.id || previousScreening.screening_id}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-slate-500">DR Grade:</span>
+                        <span className="font-extrabold text-slate-900">{previousScreening.className || previousScreening.overallSeverity}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Doctor Status:</span>
+                        <span className="font-bold text-emerald-700">{previousScreening.doctorStatus === 'verified' ? 'Accepted' : 'Pending'}</span>
+                      </div>
+                    </div>
+
+                    {/* Current Screening */}
+                    <div className="p-3.5 rounded-xl bg-teal-50/70 border border-teal-200 space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700 block">
+                        {t('currentScreening') || 'Current Screening'}
+                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800">{screening.screeningDate || 'Today'}</span>
+                        <span className="font-mono text-[10px] text-teal-700">{screening.id || 'Active'}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-slate-500">DR Grade:</span>
+                        <span className="font-extrabold text-slate-900">{screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate DR')}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Doctor Status:</span>
+                        <span className="font-bold text-teal-900">{reviewStatus === 'AI RESULT ACCEPTED' ? 'Accepted' : reviewStatus === 'IMAGE RE-CAPTURE REQUESTED' ? 'Re-capture' : 'Pending Review'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Classification Change Summary */}
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      {t('screeningClassificationChange') || 'Screening Classification Change'}
+                    </span>
+                    <p className="font-bold text-slate-900 text-xs">{longitudinalComp?.classification_change_summary}</p>
+                    <p className="text-[11px] text-teal-800 font-medium">{longitudinalComp?.clinical_recommendation}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs text-slate-500">
+                  <p className="font-bold text-slate-800">{t('prevScreeningNotAvailable') || 'Previous screening history is unavailable.'}</p>
+                  <p className="text-[11px] text-slate-400">This screening is recorded as the patient's baseline examination.</p>
+                </div>
+              )}
+
+              {/* Mandatory Disclaimer */}
+              <p className="text-[10px] text-slate-500 leading-relaxed italic border-t border-slate-200/60 pt-2">
+                "{t('longitudinalDisclaimer') ||
+                  'This comparison summarizes AI-assisted screening results across visits. It does not independently establish disease progression or replace clinical assessment.'}"
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Doctor Clinical Impression & Remarks Box */}
         <div className={`p-6 rounded-2xl border space-y-3 ${isRecaptureRequested ? 'bg-rose-50/50 border-rose-200' : 'bg-teal-50/50 border-teal-200'}`}>

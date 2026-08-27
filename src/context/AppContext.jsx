@@ -257,6 +257,32 @@ export const AppProvider = ({ children }) => {
     return null;
   };
 
+  const getPatientScreenings = useCallback(
+    (patientId) => {
+      if (!patientId) return [];
+      return screenings
+        .filter((s) => s.patientId === patientId || s.patient_id === patientId)
+        .sort((a, b) => {
+          const dateA = new Date(a.screeningDate || a.date || 0).getTime();
+          const dateB = new Date(b.screeningDate || b.date || 0).getTime();
+          return dateB - dateA;
+        });
+    },
+    [screenings]
+  );
+
+  const getLatestComparableScreening = useCallback(
+    (currentScreeningId, patientId) => {
+      const targetScreening = getScreeningById(currentScreeningId);
+      const pid = targetScreening?.patientId || targetScreening?.patient_id || patientId;
+      if (!pid) return null;
+      const patientHistory = getPatientScreenings(pid);
+      const candidates = patientHistory.filter((s) => (s.id || s.screening_id) !== currentScreeningId);
+      return candidates.length > 0 ? candidates[0] : null;
+    },
+    [getScreeningById, getPatientScreenings]
+  );
+
   const updateScreeningReview = (screeningId, reviewResponse) => {
     if (!screeningId || !reviewResponse) return;
 
@@ -497,6 +523,8 @@ export const AppProvider = ({ children }) => {
         screenings,
         addScreening,
         getScreeningById,
+        getPatientScreenings,
+        getLatestComparableScreening,
         doctorVerifyScreening,
         updateScreeningReview,
         activeScreening,

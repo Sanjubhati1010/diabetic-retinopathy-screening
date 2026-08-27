@@ -123,6 +123,155 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
+    # Phase 10 Longitudinal Intelligence Queries
+    # 1. "What changed from the previous screening?"
+    if any(k in msg_clean for k in ["what changed from the previous screening", "what changed from previous", "previous screening se kya badla", "kya badla", "पिछली स्क्रीनिंग से क्या बदला", "क्या बदला"]):
+        long_summary = (
+            screening_context.get("classification_change_summary")
+            if screening_context
+            else None
+        )
+        long_summary_hi = (
+            screening_context.get("classification_change_summary_hi")
+            if screening_context
+            else None
+        )
+        prev_pred = (
+            screening_context.get("previous_prediction")
+            or screening_context.get("previous_class_name")
+            if screening_context
+            else None
+        )
+        curr_pred = (
+            screening_context.get("prediction")
+            or screening_context.get("className")
+            if screening_context
+            else None
+        )
+
+        if is_hi:
+            if long_summary_hi:
+                reply = (
+                    f"पिछली स्क्रीनिंग की तुलना:\n\n"
+                    f"• {long_summary_hi}\n"
+                    f"• ध्यान दें: इसे 'स्क्रीनिंग क्लासिफिकेशन में बदलाव' कहा जाता है, स्वतंत्र बीमारी की प्रगति नहीं।\n"
+                    f"• इस बदलाव की पुष्टि और सही व्याख्या के लिए डॉक्टर की समीक्षा आवश्यक है।"
+                )
+            elif prev_pred and curr_pred:
+                reply = (
+                    f"पिछली स्क्रीनिंग की तुलना:\n\n"
+                    f"• पिछली स्क्रीनिंग: {prev_pred}\n"
+                    f"• वर्तमान स्क्रीनिंग: {curr_pred}\n"
+                    f"• स्थिति: स्क्रीनिंग क्लासिफिकेशन में बदलाव दर्ज किया गया है। विस्तृत नैदानिक व्याख्या के लिए डॉक्टर समीक्षा की सलाह दी जाती है।"
+                )
+            else:
+                reply = (
+                    "वर्तमान सत्र में पिछली स्क्रीनिंग का विवरण उपलब्ध नहीं है। "
+                    "यदि इस मरीज की पुरानी जांच मौजूद है, तो डॉक्टर पोर्टल या पेशेंट रिपोर्ट में 'पिछली स्क्रीनिंग से तुलना करें' पर जाकर दोनों परिणामों की साथ-साथ तुलना देख सकते हैं।"
+                )
+        else:
+            if long_summary:
+                reply = (
+                    f"Comparison with previous screening:\n\n"
+                    f"• {long_summary}\n"
+                    f"• Notice: This is categorized as a 'Screening Classification Change', not an autonomous diagnosis of disease progression.\n"
+                    f"• Doctor review is recommended to interpret this change."
+                )
+            elif prev_pred and curr_pred:
+                reply = (
+                    f"Comparison with previous screening:\n\n"
+                    f"• Previous Screening: {prev_pred}\n"
+                    f"• Current Screening: {curr_pred}\n"
+                    f"• Status: AI screening classification change recorded. Clinical doctor review is recommended to interpret this observation."
+                )
+            else:
+                reply = (
+                    "Previous screening history is not attached to the active session. "
+                    "When previous records exist for the patient, you can select 'Compare With Previous Screening' in the Doctor Portal or Patient Report to inspect chronological side-by-side changes."
+                )
+
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["Why is this not called disease progression?", "Why is doctor review needed?", "What does unchanged mean?"],
+            "context_used": bool(long_summary or (prev_pred and curr_pred)),
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 2. "Why is this not called disease progression?" (Phase 10 Medical Safety)
+    if any(k in msg_clean for k in ["why is this not called disease progression", "why not disease progression", "disease progression kyun nahi", "बीमारी की प्रगति क्यों नहीं", "रोग की प्रगति क्यों नहीं"]):
+        if is_hi:
+            reply = (
+                "इसे 'बीमारी की प्रगति' (Disease Progression) क्यों नहीं कहा जाता:\n\n"
+                "1. एआई मॉडल स्वतंत्र रूप से प्रत्येक छवि का एकल-दौरा (Single-Visit) वर्गीकरण करता है।\n"
+                "2. छवि कोण, प्रकाश, या पुतली के फैलाव में मामूली अंतर से एआई स्कोर में थोड़ा अंतर आ सकता है।\n"
+                "3. वास्तविक जैविक बीमारी की प्रगति केवल एक योग्य नेत्र विशेषज्ञ (Ophthalmologist) द्वारा संपूर्ण नैदानिक इतिहास और स्लिट-लैंप जांच के बाद ही स्थापित की जा सकती है।\n\n"
+                "चिकित्सीय सुरक्षा के लिए हम इसे 'स्क्रीनिंग क्लासिफिकेशन में बदलाव' (Screening Classification Change) कहते हैं।"
+            )
+        else:
+            reply = (
+                "Why this is labeled 'Screening Classification Change' instead of 'Disease Progression':\n\n"
+                "1. The AI model evaluates single-visit retinal image patterns independently without an autonomous longitudinal biophysical model.\n"
+                "2. Slight variations in image illumination, camera field angle, or pupil dilation can produce classification differences between visits.\n"
+                "3. True biological disease progression requires comprehensive clinical correlation, optical coherence tomography (OCT), or biomicroscopy by an ophthalmologist.\n\n"
+                "Clinical Safety Standard: We strictly avoid claiming autonomous disease progression and recommend specialist review."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What changed from the previous screening?", "Why is doctor review needed?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 3. "What does unchanged mean?" (Phase 10)
+    if any(k in msg_clean for k in ["what does unchanged mean", "unchanged ka matlab", "unchanged mean", "अपरिवर्तित का क्या अर्थ", "कोई बदलाव नहीं का क्या मतलब", "अपरिवर्तित का मतलब"]):
+        if is_hi:
+            reply = (
+                "'अपरिवर्तित' (Unchanged) का अर्थ:\n\n"
+                "• इसका अर्थ है कि वर्तमान और पिछली स्क्रीनिंग में एआई मॉडल ने एक ही डायबिटिक रेटिनोपैथी गंभीरता ग्रेड (उदा. दोनों बार Mild NPDR या दोनों बार No DR) का अनुमान लगाया है।\n"
+                "• यह रेटिना की स्थिरता का सांख्यिकीय संकेत देता है, लेकिन मरीज को निर्धारित अंतराल पर नियमित नेत्र जांच जारी रखनी चाहिए।"
+            )
+        else:
+            reply = (
+                "Meaning of 'Unchanged' status:\n\n"
+                "• It indicates that the AI screening model assigned the exact same ICDR diabetic retinopathy severity grade across both visits (e.g. Mild NPDR on both screenings).\n"
+                "• This points to stable feature patterns between screenings, but does not eliminate the need for periodic clinical ophthalmic follow-ups."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What changed from the previous screening?", "How can I compare two screenings?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 4. "How can I compare two screenings?" (Phase 10)
+    if any(k in msg_clean for k in ["how can i compare two screenings", "how to compare screenings", "compare two screenings", "screenings ki tulna kaise karein", "तुलना कैसे करें", "दो स्क्रीनिंग की तुलना"]):
+        if is_hi:
+            reply = (
+                "दो स्क्रीनिंग की तुलना करने का तरीका:\n\n"
+                "1. डॉक्टर पोर्टल (Doctor Portal) या पेशेंट प्रोफाइल में मरीज का चयन करें।\n"
+                "2. 'स्क्रीनिंग इतिहास' (Screening History) या 'लॉन्गिट्यूडनल तुलना' (Longitudinal Overview) सेक्शन खोलें।\n"
+                "3. सिस्टम स्वचालित रूप से सबसे हालिया तुलनीय स्क्रीनिंग का चयन करेगा, या आप ड्रॉपडाउन से कोई भी पिछली तारीख चुन सकते हैं।\n"
+                "4. आप पिछली और वर्तमान फंडस फोटो, Grad-CAM हीटमैप, क्लासिफिकेशन में बदलाव, और डॉक्टर समीक्षा की साथ-साथ तुलना देख सकते हैं।"
+            )
+        else:
+            reply = (
+                "How to compare two screenings in MADOCS:\n\n"
+                "1. Select the patient in the Doctor Portal, Screening History, or Patient Report.\n"
+                "2. Open the 'Longitudinal Screening Overview' or 'Compare With Previous Screening' panel.\n"
+                "3. The system automatically selects the most recent valid comparable screening, or you can manually choose any historical visit from the dropdown.\n"
+                "4. Review side-by-side fundus images, Grad-CAM attention maps, DR classifications, confidence levels, and doctor verification notes."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["What changed from the previous screening?", "Why is this not called disease progression?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
     # 2. "Explain My Result" / "Why did AI give this result?"
     if any(k in msg_clean for k in ["explain", "result", "parinaam", "samjhao", "score", "prediction", "mera result", "why did ai give", "परिणाम", "रिजल्ट", "समझाओ", "क्यों दिया"]):
         reply = explain_screening_context(screening_context, language="hi" if is_hi else "en")

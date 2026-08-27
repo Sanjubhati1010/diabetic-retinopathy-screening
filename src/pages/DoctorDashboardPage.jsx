@@ -14,6 +14,8 @@ import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { GradCamViewer } from '../components/visualizer/GradCamViewer';
 import { MetricCard } from '../components/common/MetricCard';
 import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
+import { LongitudinalComparisonCard } from '../components/longitudinal/LongitudinalComparisonCard';
+import { PatientScreeningHistoryTimeline } from '../components/longitudinal/PatientScreeningHistoryTimeline';
 import {
   Stethoscope,
   CheckCircle2,
@@ -34,6 +36,7 @@ import {
   Info,
   Inbox,
   FileCheck,
+  GitCompare,
 } from 'lucide-react';
 import { submitDoctorReview, getScreeningReviewHistory, getFullResultUrl } from '../services/api';
 
@@ -77,6 +80,8 @@ const DoctorDashboardContent = () => {
   const [reviewState, setReviewState] = useState(null);
   const [loadingAction, setLoadingAction] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [selectedPreviousId, setSelectedPreviousId] = useState(null);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('verification'); // 'verification' | 'longitudinal'
 
   // Load audit history and local review record on screening selection
   useEffect(() => {
@@ -363,6 +368,57 @@ const DoctorDashboardContent = () => {
             </div>
           </div>
 
+          {/* Workspace Mode Tabs (Phase 10) */}
+          <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setActiveWorkspaceTab('verification')}
+              className={`flex-1 py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition ${
+                activeWorkspaceTab === 'verification'
+                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200 font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Stethoscope className="w-4 h-4 text-teal-600" />
+              <span>Clinical Verification & Grad-CAM</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveWorkspaceTab('longitudinal')}
+              className={`flex-1 py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition ${
+                activeWorkspaceTab === 'longitudinal'
+                  ? 'bg-white text-teal-900 shadow-sm border border-teal-300 font-extrabold ring-1 ring-teal-400/30'
+                  : 'text-slate-600 hover:text-teal-700'
+              }`}
+            >
+              <GitCompare className="w-4 h-4 text-teal-600" />
+              <span>{t('longitudinalOverview') || 'Longitudinal Screening Overview'}</span>
+            </button>
+          </div>
+
+          {activeWorkspaceTab === 'longitudinal' ? (
+            /* Phase 10: Longitudinal Screening Overview View */
+            <div className="space-y-6 animate-fade-in">
+              <LongitudinalComparisonCard
+                currentScreening={selectedScreening}
+                selectedPreviousId={selectedPreviousId}
+                onSelectPreviousId={setSelectedPreviousId}
+              />
+              <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-card">
+                <PatientScreeningHistoryTimeline
+                  patientId={selectedScreening?.patientId}
+                  currentScreeningId={selectedScreening?.id}
+                  onCompareWith={(prevId) => {
+                    setSelectedPreviousId(prevId);
+                    window.scrollTo({ top: 300, behavior: 'smooth' });
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            /* Clinical Verification Workspace Tab */
+            <>
+
           {/* Prominent Image Re-capture Required Banner if Re-capture requested */}
           {currentStatus === 'IMAGE_RECAPTURE_REQUESTED' && (
             <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-xs space-y-1 text-rose-950">
@@ -520,6 +576,21 @@ const DoctorDashboardContent = () => {
                 <span>{t('btnRequestRecapture') || 'Request Re-capture'}</span>
               </button>
             </div>
+
+            {/* Quick Action: Review Longitudinal History */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500 font-medium">
+                {t('longitudinalSub') || 'Compare with previous screenings for this patient'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveWorkspaceTab('longitudinal')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold transition border border-teal-200"
+              >
+                <History className="w-3.5 h-3.5 text-teal-600" />
+                <span>{t('reviewHistory') || 'Review History'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Chronological Review Audit Trail Timeline */}
@@ -558,6 +629,8 @@ const DoctorDashboardContent = () => {
               )}
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
 

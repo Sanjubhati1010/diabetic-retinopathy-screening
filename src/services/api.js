@@ -871,5 +871,222 @@ export async function getLesionAnalysis(screeningId, eye = 'OD') {
   };
 }
 
+/**
+ * Phase 10: Fetch Chronological Patient Screening History
+ */
+export async function getPatientScreeningHistory(patientId) {
+  if (!patientId) return null;
+  const endpoint = `${API_BASE_URL}/api/patients/${encodeURIComponent(patientId)}/screening-history`;
+
+  try {
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend patient history API unavailable, using local context:', err);
+  }
+  return null;
+}
+
+/**
+ * Phase 10: Compare Current Screening with Specific Previous Screening
+ */
+export async function getScreeningComparison(screeningId, previousScreeningId) {
+  if (!screeningId || !previousScreeningId) return null;
+  const endpoint = `${API_BASE_URL}/api/screenings/${encodeURIComponent(screeningId)}/comparison/${encodeURIComponent(previousScreeningId)}`;
+
+  try {
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend screening comparison API unavailable, using local calculation:', err);
+  }
+  return null;
+}
+
+/**
+ * Phase 10: Automated Longitudinal Comparison
+ */
+export async function getAutomatedLongitudinalComparison(screeningId, patientId) {
+  if (!screeningId) return null;
+  const query = patientId ? `?patient_id=${encodeURIComponent(patientId)}` : '';
+  const endpoint = `${API_BASE_URL}/api/screenings/${encodeURIComponent(screeningId)}/longitudinal${query}`;
+
+  try {
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Backend automated comparison API unavailable:', err);
+  }
+  return null;
+}
+
+/**
+ * Phase 10: Client-side faithful calculation helper for longitudinal comparison
+ */
+export function calculateLongitudinalComparison(current, previous) {
+  if (!current) return null;
+
+  if (!previous) {
+    return {
+      patient_id: current.patientId || current.patient_id || 'PAT-2026-081',
+      patient_name: current.patientName || current.patient_name || 'Patient',
+      village: current.village || 'Rampur Gram Panchayat',
+      current_screening: current,
+      previous_screening: null,
+      has_previous_screening: false,
+      classification_change_status: 'HISTORY UNAVAILABLE',
+      classification_change_summary: 'Previous screening history is unavailable.',
+      classification_change_summary_hi: 'पिछली स्क्रीनिंग उपलब्ध नहीं है।',
+      clinical_recommendation: 'Baseline screening recorded. Routine clinical follow-up as indicated.',
+      clinical_recommendation_hi: 'प्रारंभिक स्क्रीनिंग दर्ज की गई। आवश्यकतानुसार नियमित नैदानिक परामर्श लें।',
+      confidence_comparison: {
+        current_confidence: current.confidence,
+        previous_confidence: null,
+        note: 'Initial baseline confidence score.',
+      },
+      image_comparison: {
+        current_image_od: current.imageOD || current.image_od,
+        current_image_os: current.imageOS || current.image_os,
+        previous_image_od: null,
+        previous_image_os: null,
+        label: 'Visual comparison for clinical review.',
+      },
+      gradcam_comparison: {
+        current_gradcam: current.gradCamOD || current.gradcam_od || current.gradCamUrl,
+        previous_gradcam: null,
+        explanation: 'Grad-CAM shows model attention and is not a direct measurement of disease progression.',
+      },
+      lesion_comparison: {
+        current_available: Boolean(current.lesion_available),
+        previous_available: false,
+        note: 'Lesion-specific comparison unavailable.',
+      },
+      disclaimer: 'This comparison summarizes AI-assisted screening results across visits. It does not independently establish disease progression or replace clinical assessment.',
+      disclaimer_hi: 'यह तुलना विभिन्न दौरों के एआई-सहायता प्राप्त स्क्रीनिंग परिणामों को संक्षेप में प्रस्तुत करती है। यह स्वतंत्र रूप से बीमारी की प्रगति को स्थापित नहीं करती है और न ही नैदानिक मूल्यांकन का स्थान लेती है।',
+    };
+  }
+
+  const currRecapture =
+    current.is_recapture === true ||
+    current.doctorStatus === 'recapture_requested' ||
+    current.doctor_status === 'recapture_requested' ||
+    current.reviewStatus === 'IMAGE RE-CAPTURE REQUESTED';
+
+  const prevRecapture =
+    previous.is_recapture === true ||
+    previous.doctorStatus === 'recapture_requested' ||
+    previous.doctor_status === 'recapture_requested' ||
+    previous.reviewStatus === 'IMAGE RE-CAPTURE REQUESTED';
+
+  const gradeMap = { dr0: 0, dr1: 1, dr2: 2, dr3: 3, dr4: 4 };
+  const currGrade =
+    typeof current.predictedClass === 'number'
+      ? current.predictedClass
+      : typeof current.predicted_class === 'number'
+      ? current.predicted_class
+      : gradeMap[current.overallSeverity] ?? null;
+
+  const prevGrade =
+    typeof previous.predictedClass === 'number'
+      ? previous.predictedClass
+      : typeof previous.predicted_class === 'number'
+      ? previous.predicted_class
+      : gradeMap[previous.overallSeverity] ?? null;
+
+  const nameMap = { 0: 'No DR', 1: 'Mild', 2: 'Moderate', 3: 'Severe', 4: 'Proliferative DR' };
+  const currName = current.className || current.class_name || (currGrade !== null ? nameMap[currGrade] : 'Unknown');
+  const prevName = previous.className || previous.class_name || (prevGrade !== null ? nameMap[prevGrade] : 'Unknown');
+
+  let status = 'UNCHANGED';
+  let summaryEn = `AI screening classification is unchanged (${currName}).`;
+  let summaryHi = `एआई स्क्रीनिंग वर्गीकरण अपरिवर्तित है (${currName})।`;
+  let recEn = 'Doctor review is recommended to confirm stable retinal status.';
+  let recHi = 'स्थिर रेटिना स्थिति की पुष्टि के लिए डॉक्टर की समीक्षा की सलाह दी जाती है।';
+
+  if (currRecapture) {
+    status = 'NOT COMPARABLE';
+    summaryEn = 'Current screening requires image re-capture and cannot be evaluated as a finalized result.';
+    summaryHi = 'वर्तमान स्क्रीनिंग में इमेज पुनः कैप्चर की आवश्यकता है और इसे अंतिम परिणाम के रूप में मूल्यांकित नहीं किया जा सकता है।';
+    recEn = 'Please re-capture fundus image before evaluating screening classification change.';
+    recHi = 'स्क्रीनिंग वर्गीकरण में बदलाव का मूल्यांकन करने से पहले कृपया पुनः फंडस फोटो लें।';
+  } else if (prevRecapture || currGrade === null || prevGrade === null) {
+    status = 'NOT COMPARABLE';
+    summaryEn = 'Previous screening is incomplete or invalid. Direct classification comparison is not possible.';
+    summaryHi = 'पिछली स्क्रीनिंग अधूरी या अमान्य है। सीधा वर्गीकरण तुलना संभव नहीं है।';
+    recEn = 'Doctor review is recommended to assess patient eye health.';
+    recHi = 'मरीज के नेत्र स्वास्थ्य का आकलन करने के लिए डॉक्टर की समीक्षा की सलाह दी जाती है।';
+  } else if (currGrade > prevGrade) {
+    status = 'CLASSIFICATION INCREASED';
+    summaryEn = `AI screening classification increased from ${prevName} to ${currName}.`;
+    summaryHi = `एआई स्क्रीनिंग वर्गीकरण ${prevName} से बढ़कर ${currName} हो गया है।`;
+    recEn = 'Doctor review is recommended to interpret this change.';
+    recHi = 'इस बदलाव की व्याख्या के लिए डॉक्टर की समीक्षा की सलाह दी जाती है।';
+  } else if (currGrade < prevGrade) {
+    status = 'CLASSIFICATION DECREASED';
+    summaryEn = `AI screening classification decreased from ${prevName} to ${currName}.`;
+    summaryHi = `एआई स्क्रीनिंग वर्गीकरण ${prevName} से घटकर ${currName} हो गया है।`;
+    recEn = 'Doctor review is recommended to verify clinical interpretation.';
+    recHi = 'नैदानिक व्याख्या को सत्यापित करने के लिए डॉक्टर की समीक्षा की सलाह दी जाती है।';
+  }
+
+  const currConf = current.confidence;
+  const prevConf = previous.confidence;
+  const confNote =
+    currConf !== null && prevConf !== null && currConf !== undefined && prevConf !== undefined
+      ? `Previous AI Confidence: ${(prevConf * 100).toFixed(1)}%, Current AI Confidence: ${(currConf * 100).toFixed(1)}%. Confidence reflects single-image model probability and is not a measure of clinical change.`
+      : 'AI model confidence recorded per screening visit.';
+
+  return {
+    patient_id: current.patientId || current.patient_id || 'PAT-2026-081',
+    patient_name: current.patientName || current.patient_name || 'Patient',
+    village: current.village || 'Rampur Gram Panchayat',
+    current_screening: current,
+    previous_screening: previous,
+    has_previous_screening: true,
+    classification_change_status: status,
+    classification_change_summary: summaryEn,
+    classification_change_summary_hi: summaryHi,
+    clinical_recommendation: recEn,
+    clinical_recommendation_hi: recHi,
+    confidence_comparison: {
+      current_confidence: currConf,
+      previous_confidence: prevConf,
+      note: confNote,
+    },
+    image_comparison: {
+      current_image_od: current.imageOD || current.image_od,
+      current_image_os: current.imageOS || current.image_os,
+      previous_image_od: previous.imageOD || previous.image_od,
+      previous_image_os: previous.imageOS || previous.image_os,
+      label: 'Visual comparison for clinical review.',
+    },
+    gradcam_comparison: {
+      current_gradcam: current.gradCamOD || current.gradcam_od || current.gradCamUrl,
+      previous_gradcam: previous.gradCamOD || previous.gradcam_od || previous.gradCamUrl,
+      explanation: 'Grad-CAM shows model attention and is not a direct measurement of disease progression.',
+    },
+    lesion_comparison: {
+      current_available: Boolean(current.lesion_available),
+      previous_available: Boolean(previous.lesion_available),
+      note: 'Lesion-specific comparison unavailable.',
+    },
+    doctor_review_comparison: {
+      current_doctor_status: current.doctorStatus || current.doctor_status || 'pending',
+      current_doctor_reviewed_result: current.doctorReviewedResult || current.doctor_reviewed_result,
+      previous_doctor_status: previous.doctorStatus || previous.doctor_status || 'verified',
+      previous_doctor_reviewed_result: previous.doctorReviewedResult || previous.doctor_reviewed_result,
+    },
+    disclaimer: 'This comparison summarizes AI-assisted screening results across visits. It does not independently establish disease progression or replace clinical assessment.',
+    disclaimer_hi: 'यह तुलना विभिन्न दौरों के एआई-सहायता प्राप्त स्क्रीनिंग परिणामों को संक्षेप में प्रस्तुत करती है। यह स्वतंत्र रूप से बीमारी की प्रगति को स्थापित नहीं करती है और न ही नैदानिक मूल्यांकन का स्थान लेती है।',
+  };
+}
+
+
 
 

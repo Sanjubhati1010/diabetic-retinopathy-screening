@@ -136,6 +136,26 @@ export const AiScreeningAssistant = () => {
 
   const quickActions = [
     {
+      label: assistantLang === 'hi' ? 'पिछली स्क्रीनिंग से क्या बदला?' : 'What changed from previous?',
+      query: assistantLang === 'hi' ? 'पिछली स्क्रीनिंग से क्या बदला?' : 'What changed from the previous screening?',
+      icon: Layers,
+    },
+    {
+      label: assistantLang === 'hi' ? 'रोग प्रगति क्यों नहीं कहते?' : 'Why not disease progression?',
+      query: assistantLang === 'hi' ? 'इसे बीमारी की प्रगति क्यों नहीं कहा जाता?' : 'Why is this not called disease progression?',
+      icon: Info,
+    },
+    {
+      label: assistantLang === 'hi' ? 'अपरिवर्तित का क्या अर्थ है?' : 'What unchanged means?',
+      query: assistantLang === 'hi' ? 'अपरिवर्तित का क्या अर्थ है?' : 'What does unchanged mean?',
+      icon: ShieldCheck,
+    },
+    {
+      label: assistantLang === 'hi' ? 'दो स्क्रीनिंग की तुलना कैसे करें?' : 'How to compare screenings?',
+      query: assistantLang === 'hi' ? 'दो स्क्रीनिंग की तुलना कैसे करें?' : 'How can I compare two screenings?',
+      icon: Sparkles,
+    },
+    {
       label: assistantLang === 'hi' ? 'घाव विश्लेषण क्या है?' : 'What is lesion analysis?',
       query: assistantLang === 'hi' ? 'घाव विश्लेषण (Lesion Analysis) क्या है?' : 'What is lesion analysis?',
       icon: Eye,
@@ -144,26 +164,6 @@ export const AiScreeningAssistant = () => {
       label: assistantLang === 'hi' ? 'Grad-CAM और घाव पहचान में अंतर?' : 'Grad-CAM vs Lesion?',
       query: assistantLang === 'hi' ? 'Grad-CAM और घाव पहचान में क्या अंतर है?' : 'What is the difference between Grad-CAM and lesion detection?',
       icon: Sparkles,
-    },
-    {
-      label: assistantLang === 'hi' ? 'घाव विश्लेषण क्यों अनुपलब्ध?' : 'Why lesion unavailable?',
-      query: assistantLang === 'hi' ? 'घाव विश्लेषण क्यों उपलब्ध नहीं है?' : 'Why is lesion analysis unavailable?',
-      icon: Info,
-    },
-    {
-      label: assistantLang === 'hi' ? 'Grad-CAM ओवरले का क्या मतलब?' : 'What overlay means?',
-      query: assistantLang === 'hi' ? 'Grad-CAM ओवरले का क्या मतलब है?' : 'What does the Grad-CAM overlay mean?',
-      icon: Layers,
-    },
-    {
-      label: assistantLang === 'hi' ? 'AI vs घाव कॉन्फिडेंस में अंतर?' : 'AI vs Lesion Conf.?',
-      query: assistantLang === 'hi' ? 'एआई कॉन्फिडेंस और घाव कॉन्फिडेंस में क्या अंतर है?' : 'What is the difference between AI confidence and lesion confidence?',
-      icon: ShieldCheck,
-    },
-    {
-      label: assistantLang === 'hi' ? 'परिणाम का क्या अर्थ है?' : 'Explain Result',
-      query: assistantLang === 'hi' ? 'इस परिणाम का क्या अर्थ है?' : 'What does this screening result mean?',
-      icon: HelpCircle,
     },
   ];
 

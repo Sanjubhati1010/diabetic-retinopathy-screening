@@ -49,6 +49,7 @@ export const RuralScreeningWizard = ({ onExitWizard }) => {
     addScreening,
     activeScreening,
     setActiveScreening,
+    getLatestComparableScreening,
     speakPrompt,
     voiceGuidanceEnabled,
     networkState,
@@ -882,6 +883,53 @@ export const RuralScreeningWizard = ({ onExitWizard }) => {
                 Screening Record <strong className="text-slate-900">{savedScreening.id}</strong> has been logged. Available for Tele-Ophthalmologist Doctor Review and Bilingual Report Generation.
               </p>
             </div>
+
+            {/* Simplified Longitudinal Comparison for Rural Health Worker */}
+            {(() => {
+              const prev = getLatestComparableScreening
+                ? getLatestComparableScreening(savedScreening.id, savedScreening.patientId)
+                : null;
+
+              const gradeMap = { dr0: 0, dr1: 1, dr2: 2, dr3: 3, dr4: 4 };
+              const currG = gradeMap[savedScreening.overallSeverity] ?? 2;
+              const prevG = prev ? (gradeMap[prev.overallSeverity] ?? 1) : null;
+
+              let summaryText = t('ruralNoHistory') || 'Previous screening not available.';
+              let badgeColor = 'bg-slate-100 text-slate-700 border-slate-300';
+
+              if (prevG !== null) {
+                if (currG > prevG) {
+                  summaryText = t('ruralChangeHigher') || 'Current AI result is higher than the previous screening.';
+                  badgeColor = 'bg-amber-100 text-amber-900 border-amber-300';
+                } else if (currG < prevG) {
+                  summaryText = t('ruralChangeLower') || 'Current AI result is lower than the previous screening.';
+                  badgeColor = 'bg-emerald-100 text-emerald-900 border-emerald-300';
+                } else {
+                  summaryText = t('ruralChangeUnchanged') || 'Current AI result is unchanged from previous screening.';
+                  badgeColor = 'bg-slate-100 text-slate-800 border-slate-300';
+                }
+              }
+
+              return (
+                <div className="max-w-md mx-auto p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px]">
+                      {t('screeningClassificationChange') || 'Screening Classification Change'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${badgeColor}`}>
+                      {prev ? (currG > prevG ? 'Higher' : currG < prevG ? 'Lower' : 'Unchanged') : 'No History'}
+                    </span>
+                  </div>
+                  <p className="font-bold text-slate-900">{summaryText}</p>
+                  <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-600">
+                    <span>Doctor Review Status:</span>
+                    <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                      Pending Tele-Ophthalmologist Review
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
