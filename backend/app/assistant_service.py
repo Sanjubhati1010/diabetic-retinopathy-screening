@@ -653,7 +653,121 @@ def generate_assistant_reply(
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }
 
-    # 10. "How to Use?" / General Screening Flow
+    # 10. Phase 11: "How do I book a doctor appointment?"
+    if any(k in msg_clean for k in [
+        "book a doctor", "book appointment", "appointment kaise", "find a doctor", "doctor khojein",
+        "doctor chunein", "schedule", "अपॉइंटमेंट", "डॉक्टर खोजें", "अपॉइंटमेंट कैसे", "डॉक्टर अपॉइंटमेंट", "बुक करें"
+    ]):
+        if is_hi:
+            reply = (
+                "डॉक्टर टेली-परामर्श (Tele-Ophthalmology) अपॉइंटमेंट बुक करने के चरण:\n\n"
+                "1. साइडबार में 'Tele-Ophthalmology & Appointments' (अपॉइंटमेंट) पर जाएं।\n"
+                "2. 'Find a Doctor' टैब में उपलब्ध नेत्र रोग विशेषज्ञ (जैसे Dr. Arvind Swaminathan) चुनें।\n"
+                "3. 'Book Appointment' पर क्लिक करें।\n"
+                "4. संबंधित मरीज और (वैकल्पिक रूप से) हालिया स्क्रीनिंग चुनें।\n"
+                "5. उपलब्ध तिथि और 30-मिनट का समय स्लॉट चुनें।\n"
+                "6. परामर्श का कारण दर्ज करके 'Confirm Booking' पर क्लिक करें।"
+            )
+        else:
+            reply = (
+                "Steps to book a Tele-Ophthalmology doctor appointment:\n\n"
+                "1. Go to 'Tele-Ophthalmology & Appointments' in the sidebar navigation.\n"
+                "2. In the 'Find a Doctor' tab, browse available tele-ophthalmology specialists.\n"
+                "3. Click 'Book Appointment' on the doctor's profile.\n"
+                "4. Select the patient and optionally link their recent screening record.\n"
+                "5. Choose a convenient date and an available 30-minute time slot.\n"
+                "6. Enter the reason for consultation and confirm your booking."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["How do I join my appointment?", "Can I share a screening?", "How to start video call?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 11. Phase 11: "How do I join my appointment?" / Video Call
+    if any(k in msg_clean for k in [
+        "join appointment", "join consultation", "start video", "video call", "video consultation",
+        "video shuru", "shamil", "वीडियो कॉल", "वीडियो परामर्श", "शामिल", "परामर्श शुरू"
+    ]):
+        if is_hi:
+            reply = (
+                "वीडियो परामर्श में शामिल होने की प्रक्रिया:\n\n"
+                "1. 'My Appointments' सूची में अपनी 'CONFIRMED' अपॉइंटमेंट खोलें।\n"
+                "2. 'Join Video Consultation' बटन पर क्लिक करें।\n"
+                "3. ब्राउज़र में कैमरा और माइक्रोफ़ोन की अनुमति (Allow Permissions) दें।\n"
+                "4. डॉक्टर के जुड़ने पर फेस-टू-फेस वीडियो और ऑडियो शुरू हो जाएगा।\n"
+                "5. कॉल के दौरान आप 'Share Screening' द्वारा मरीज की रेटिना छवियां और Grad-CAM भी दिखा सकते हैं।"
+            )
+        else:
+            reply = (
+                "How to start or join your Tele-Ophthalmology video consultation:\n\n"
+                "1. Open your 'CONFIRMED' appointment from the 'My Appointments' tab.\n"
+                "2. Click the 'Join Video Consultation' button.\n"
+                "3. Allow browser camera and microphone permissions when prompted.\n"
+                "4. The peer-to-peer WebRTC video room connects directly with the doctor.\n"
+                "5. During the call, use 'Share Screening' to inspect fundus scans, AI severity, and Grad-CAM together."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["Can I share a screening?", "What if doctor is unavailable?", "How do I book?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 12. Phase 11: "Can I share a screening with the doctor?"
+    if any(k in msg_clean for k in [
+        "share", "share screening", "share a screening", "screening share", "screening dikhayein", "fundus share", "साझा", "स्क्रीनिंग साझा"
+    ]):
+        if is_hi:
+            reply = (
+                "हाँ, आप टेली-परामर्श के दौरान या अपॉइंटमेंट बुक करते समय मरीज की स्क्रीनिंग साझा कर सकते हैं:\n\n"
+                "• अपॉइंटमेंट बुक करते समय 'Link Screening' से मरीज का फंडस स्कैन जोड़ें।\n"
+                "• वीडियो परामर्श के दौरान स्क्रीन पर 'Screening File' ड्रॉर खोलकर डॉक्टर तुरंत दोनों आंखों की छवियां, AI ICDR क्लास और Grad-CAM देख सकते हैं।"
+            )
+        else:
+            reply = (
+                "Yes, you can seamlessly share patient screenings with the specialist:\n\n"
+                "• When booking, link the patient's existing screening to the appointment.\n"
+                "• During the live video consultation, open the 'Screening File' drawer to review bilateral fundus images, AI prediction confidence, and Grad-CAM explainability in real-time."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["How do I book a doctor appointment?", "How to start video call?"],
+            "context_used": bool(screening_context),
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 13. Phase 11: "What happens if the doctor is unavailable?"
+    if any(k in msg_clean for k in [
+        "doctor unavailable", "unavailable", "doctor nahi mile", "reschedule", "decline", "busy", "अनुपलब्ध", "व्यस्त"
+    ]):
+        if is_hi:
+            reply = (
+                "यदि डॉक्टर व्यस्त या अनुपलब्ध हैं:\n\n"
+                "• डॉक्टर अपॉइंटमेंट का समय बदलने के लिए 'Reschedule Request' भेज सकते हैं या नया समय प्रस्तावित कर सकते हैं।\n"
+                "• आप निर्देशिका में किसी अन्य उपलब्ध डेमो विशेषज्ञ (जैसे Dr. Meera Nambiar) के साथ नया स्लॉट चुन सकते हैं।\n"
+                "• गंभीर या आपातकालीन मामलों में मरीज को तुरंत निकटतम जिला अस्पताल (District Hospital) रेफर करें।"
+            )
+        else:
+            reply = (
+                "If the requested doctor is unavailable or declines:\n\n"
+                "• The doctor may send a 'Reschedule Request' suggesting an alternate date or time.\n"
+                "• You can choose another available tele-ophthalmology specialist from the directory.\n"
+                "• For urgent or severe diabetic retinopathy symptoms, refer the patient immediately to the District Hospital."
+            )
+        return {
+            "reply": reply,
+            "language": "hi" if is_hi else "en",
+            "suggested_actions": ["How do I book a doctor appointment?", "Why is doctor review recommended?"],
+            "context_used": False,
+            "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
+        }
+
+    # 14. "How to Use?" / General Screening Flow
     if any(k in msg_clean for k in ["how to use", "guide", "madad", "kaise use", "upload", "shuru", "help"]):
         if is_hi:
             reply = (
@@ -676,7 +790,7 @@ def generate_assistant_reply(
         return {
             "reply": reply,
             "language": "hi" if is_hi else "en",
-            "suggested_actions": ["Why did AI give this result?", "What is Grad-CAM?", "Why Rejected?"],
+            "suggested_actions": ["How do I book a doctor appointment?", "Why did AI give this result?", "What is Grad-CAM?"],
             "context_used": False,
             "disclaimer": DISCLAIMER_HI if is_hi else DISCLAIMER_EN,
         }

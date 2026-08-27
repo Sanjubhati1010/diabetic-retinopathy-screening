@@ -3,7 +3,7 @@ import io
 import logging
 from pathlib import Path
 from typing import List, Optional
-from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
@@ -25,12 +25,25 @@ from app.schemas import (
     ScreeningHistoryRecord,
     PatientScreeningHistoryResponse,
     ScreeningComparisonResponse,
+    DoctorRecord,
+    DoctorListResponse,
+    DoctorAvailabilityResponse,
+    AppointmentCreateRequest,
+    AppointmentUpdateRequest,
+    AppointmentResponse,
+    AppointmentListResponse,
+    AppointmentNoteRequest,
+    AppointmentMessageRequest,
+    AppointmentMessageResponse,
+    AppointmentMessageListResponse,
+    VideoSessionResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
 from app.review_service import process_doctor_review, get_audit_history, get_screening_review
 from app.lesion_service import lesion_service
 from app.longitudinal_service import longitudinal_service
+from app.appointment_service import appointment_service
 
 # Setup structured logging
 logging.basicConfig(
@@ -627,5 +640,275 @@ async def get_automated_longitudinal_comparison(screening_id: str, patient_id: O
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to compute longitudinal comparison.",
         )
+
+
+# ==============================================================================
+# Phase 11: Doctor Appointment & Tele-Ophthalmology Endpoints
+# ==============================================================================
+
+@app.get(
+    "/api/doctors",
+    response_model=DoctorListResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="Get List of Verified Demo Doctors",
+)
+async def get_doctor_directory():
+    """Returns list of registered tele-ophthalmology specialists with demo labeling."""
+    doctors = appointment_service.get_doctors()
+    return DoctorListResponse(
+        doctors=[DoctorRecord(**d) for d in doctors],
+        total_count=len(doctors),
+    )
+
+
+@app.get(
+    "/api/doctors/{doctor_id}/availability",
+    response_model=DoctorAvailabilityResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="Get Doctor Available Time Slots for Date",
+)
+async def get_doctor_availability(doctor_id: str, date: str):
+    """
+    Returns 30-min consultation slots for the given date.
+    Validates working hours, past-dates, and prevents double-booking.
+    """
+    try:
+        avail = appointment_service.get_doctor_availability(doctor_id, date)
+        return DoctorAvailabilityResponse(**avail)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error fetching availability for {doctor_id}: {e}", exc_info=False)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to retrieve doctor availability.")
+
+
+@app.post(
+    "/api/appointments",
+    response_model=AppointmentResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Tele-Ophthalmology"],
+    summary="Book a Tele-Ophthalmology Appointment",
+)
+async def book_appointment(req: AppointmentCreateRequest):
+    """
+    Creates an appointment with server-side validation against working hours,
+    past dates, and existing bookings.
+    """
+    try:
+        apt = appointment_service.create_appointment(
+            doctor_id=req.doctor_id,
+            health_worker_id=req.health_worker_id,
+            health_worker_name=req.health_worker_name,
+            health_worker_email=req.health_worker_email,
+            patient_id=req.patient_id,
+            patient_name=req.patient_name,
+            patient_age=req.patient_age,
+            patient_gender=req.patient_gender,
+            village=req.village,
+            screening_id=req.screening_id,
+            screening_summary=req.screening_summary,
+            date_str=req.date,
+            start_time_str=req.start_time,
+            reason=req.reason,
+        )
+        return AppointmentResponse(**apt)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error creating appointment: {e}", exc_info=False)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create appointment.")
+
+
+@app.get(
+    "/api/appointments",
+    response_model=AppointmentListResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="List Appointments with Optional Filters",
+)
+async def list_appointments(
+    doctor_id: Optional[str] = None,
+    health_worker_id: Optional[str] = None,
+    patient_id: Optional[str] = None,
+    status_filter: Optional[str] = None,
+):
+    """Lists appointments with optional doctor, health worker, patient, or status filter."""
+    apts = appointment_service.list_appointments(
+        doctor_id=doctor_id,
+        health_worker_id=health_worker_id,
+        patient_id=patient_id,
+        status=status_filter,
+    )
+    return AppointmentListResponse(
+        appointments=[AppointmentResponse(**a) for a in apts],
+        total_count=len(apts),
+    )
+
+
+@app.get(
+    "/api/appointments/{appointment_id}",
+    response_model=AppointmentResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="Get Single Appointment Details",
+)
+async def get_appointment_details(appointment_id: str):
+    """Returns single appointment by ID."""
+    apt = appointment_service.get_appointment_by_id(appointment_id)
+    if not apt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Appointment '{appointment_id}' not found.")
+    return AppointmentResponse(**apt)
+
+
+@app.patch(
+    "/api/appointments/{appointment_id}/status",
+    response_model=AppointmentResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="Update Appointment Status (Accept, Decline, Reschedule, Cancel, Complete)",
+)
+async def update_appointment_status(appointment_id: str, req: AppointmentUpdateRequest):
+    """Transitions appointment status with role-based validation."""
+    try:
+        updated = appointment_service.update_appointment_status(
+            appointment_id=appointment_id,
+            new_status=req.status,
+            caller_role=req.caller_role,
+            reason_or_comment=req.reason_or_comment,
+            proposed_date=req.proposed_date,
+            proposed_time=req.proposed_time,
+        )
+        return AppointmentResponse(**updated)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except PermissionError as pe:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))
+    except Exception as e:
+        logger.error(f"Error updating appointment status for {appointment_id}: {e}", exc_info=False)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to update appointment status.")
+
+
+@app.post(
+    "/api/appointments/{appointment_id}/notes",
+    response_model=AppointmentResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="Add Doctor Clinical Consultation Notes",
+)
+async def add_doctor_notes(appointment_id: str, req: AppointmentNoteRequest):
+    """Records doctor clinical notes, recommendation, and follow-up plan."""
+    try:
+        updated = appointment_service.add_consultation_notes(
+            appointment_id=appointment_id,
+            doctor_id=req.doctor_id,
+            doctor_notes=req.doctor_notes,
+            recommendations=req.doctor_recommendation,
+            follow_up_date=req.follow_up_date,
+        )
+        return AppointmentResponse(**updated)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except PermissionError as pe:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))
+    except Exception as e:
+        logger.error(f"Error saving doctor notes for {appointment_id}: {e}", exc_info=False)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to save consultation notes.")
+
+
+@app.get(
+    "/api/appointments/{appointment_id}/messages",
+    response_model=AppointmentMessageListResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="Get Appointment Chat Messages",
+)
+async def get_appointment_messages(appointment_id: str):
+    """Retrieves appointment-scoped communication messages."""
+    try:
+        msgs = appointment_service.get_messages(appointment_id)
+        return AppointmentMessageListResponse(
+            appointment_id=appointment_id,
+            messages=[AppointmentMessageResponse(**m) for m in msgs],
+            total_messages=len(msgs),
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
+
+
+@app.post(
+    "/api/appointments/{appointment_id}/messages",
+    response_model=AppointmentMessageResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Tele-Ophthalmology"],
+    summary="Send Message in Appointment Chat",
+)
+async def send_appointment_message(appointment_id: str, req: AppointmentMessageRequest):
+    """Sends a message within the authorized appointment conversation."""
+    try:
+        msg = appointment_service.add_message(
+            appointment_id=appointment_id,
+            sender_id=req.sender_id,
+            sender_name=req.sender_name,
+            sender_role=req.sender_role,
+            message=req.message,
+        )
+        return AppointmentMessageResponse(**msg)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+
+
+@app.get(
+    "/api/appointments/{appointment_id}/video/session",
+    response_model=VideoSessionResponse,
+    tags=["Tele-Ophthalmology"],
+    summary="Authorize and Initialize Video Consultation Session",
+)
+async def get_video_session(appointment_id: str, user_id: str = "DOC-SWAMINATHAN", role: str = "doctor"):
+    """
+    Authorizes participant access to the appointment WebRTC consultation room.
+    Validates room access rights and returns STUN configuration.
+    """
+    try:
+        session_info = appointment_service.authorize_video_session(
+            appointment_id=appointment_id,
+            user_id=user_id,
+            role=role,
+        )
+        return VideoSessionResponse(**session_info)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
+    except PermissionError as pe:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))
+
+
+@app.websocket("/ws/appointments/{appointment_id}/signal")
+async def websocket_signaling_endpoint(websocket: WebSocket, appointment_id: str):
+    """
+    Real-time WebRTC Signaling WebSocket endpoint.
+    Exchanges offers, answers, ICE candidates, and peer state between authorized participants.
+    """
+    await websocket.accept()
+    await appointment_service.register_websocket(appointment_id, websocket)
+    logger.info(f"WebSocket client connected to signaling room {appointment_id}")
+
+    try:
+        # Notify existing room peers that a new participant arrived
+        await appointment_service.broadcast_signal(
+            appointment_id,
+            websocket,
+            {"type": "peer_joined", "appointment_id": appointment_id}
+        )
+
+        while True:
+            data = await websocket.receive_json()
+            # Relay signal message (offer, answer, ice_candidate, mute_state, etc.)
+            await appointment_service.broadcast_signal(appointment_id, websocket, data)
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket client disconnected from signaling room {appointment_id}")
+    except Exception as e:
+        logger.warning(f"WebSocket signaling error in {appointment_id}: {e}")
+    finally:
+        await appointment_service.unregister_websocket(appointment_id, websocket)
+        await appointment_service.broadcast_signal(
+            appointment_id,
+            websocket,
+            {"type": "peer_left", "appointment_id": appointment_id}
+        )
+
 
 

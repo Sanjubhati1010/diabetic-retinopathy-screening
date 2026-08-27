@@ -83,6 +83,125 @@ export const AppProvider = ({ children }) => {
     }
   });
 
+  // Phase 11: Appointments & Doctors State
+  const [doctors, setDoctors] = useState([]);
+  const [appointments, setAppointments] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dr_appointments');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: "APT-2026-101",
+        doctor_id: "DOC-SWAMINATHAN",
+        doctor_name: "Dr. Arvind Swaminathan, MS",
+        health_worker_id: "HW-RAMPUR-01",
+        health_worker_name: "Pooja Sharma (ASHA Worker)",
+        health_worker_email: "asha.rampur@phc.in",
+        patient_id: "PAT-2026-081",
+        patient_name: "Ramesh Kumar Verma",
+        patient_age: 58,
+        patient_gender: "male",
+        village: "Rampur Gram Panchayat",
+        screening_id: "SCR-2026-0991",
+        screening_summary: "Moderate DR (AI Confidence 85.0%)",
+        date: "2026-08-28",
+        start_time: "10:00",
+        end_time: "10:30",
+        reason: "Patient has moderate NPDR detected by AI screening. Diabetic for 8 years, complains of occasional blurriness.",
+        status: "CONFIRMED",
+        created_at: "2026-08-22T09:30:00Z",
+        updated_at: "2026-08-22T10:00:00Z",
+        doctor_notes: null,
+        doctor_recommendation: null,
+      },
+      {
+        id: "APT-2026-102",
+        doctor_id: "DOC-SWAMINATHAN",
+        doctor_name: "Dr. Arvind Swaminathan, MS",
+        health_worker_id: "HW-RAMPUR-01",
+        health_worker_name: "Pooja Sharma (ASHA Worker)",
+        health_worker_email: "asha.rampur@phc.in",
+        patient_id: "PAT-2026-082",
+        patient_name: "Sunita Devi",
+        patient_age: 52,
+        patient_gender: "female",
+        village: "Shivpuri Taluk",
+        screening_id: "SCR-2026-0992",
+        screening_summary: "Severe DR (AI Confidence 92.1%)",
+        date: "2026-08-28",
+        start_time: "11:00",
+        end_time: "11:30",
+        reason: "Severe NPDR AI alert with multiple microaneurysms. Specialist urgent consultation requested.",
+        status: "CONFIRMED",
+        created_at: "2026-08-23T11:15:00Z",
+        updated_at: "2026-08-23T11:15:00Z",
+        doctor_notes: null,
+        doctor_recommendation: null,
+      },
+      {
+        id: "APT-2026-103",
+        doctor_id: "DOC-NAMBIAR",
+        doctor_name: "Dr. Meera Nambiar, MD, DNB",
+        health_worker_id: "HW-RAMPUR-01",
+        health_worker_name: "Pooja Sharma (ASHA Worker)",
+        health_worker_email: "asha.rampur@phc.in",
+        patient_id: "PAT-2026-083",
+        patient_name: "Balwinder Singh",
+        patient_age: 64,
+        patient_gender: "male",
+        village: "Kalyanpur Camp",
+        screening_id: "SCR-2026-0993",
+        screening_summary: "Proliferative DR (AI Confidence 94.8%)",
+        date: "2026-08-20",
+        start_time: "15:00",
+        end_time: "15:30",
+        reason: "High risk neovascularization suspected in left eye.",
+        status: "COMPLETED",
+        created_at: "2026-08-19T14:00:00Z",
+        updated_at: "2026-08-20T15:35:00Z",
+        doctor_notes: "Doctor-entered consultation note: Tele-examination confirms active proliferative DR features. Immediate tertiary referral for panretinal photocoagulation (PRP) scheduled.",
+        doctor_recommendation: "Emergency referral to District Hospital Ophthalmology dept for laser intervention.",
+        follow_up_date: "2026-09-05",
+      },
+      {
+        id: "APT-2026-104",
+        doctor_id: "DOC-RAO",
+        doctor_name: "Dr. K. Srinivas Rao, DO, FRCS",
+        health_worker_id: "HW-RAMPUR-01",
+        health_worker_name: "Pooja Sharma (ASHA Worker)",
+        health_worker_email: "asha.rampur@phc.in",
+        patient_id: "PAT-2026-084",
+        patient_name: "Lakshmi Patel",
+        patient_age: 49,
+        patient_gender: "female",
+        village: "Gopalpur Village",
+        screening_id: "SCR-2026-0994",
+        screening_summary: "Mild NPDR (AI Confidence 78.4%)",
+        date: "2026-08-29",
+        start_time: "14:00",
+        end_time: "14:30",
+        reason: "Routine tele-ophthalmology screening review for newly diagnosed diabetic patient.",
+        status: "PENDING",
+        created_at: "2026-08-24T16:20:00Z",
+        updated_at: "2026-08-24T16:20:00Z",
+        doctor_notes: null,
+        doctor_recommendation: null,
+      }
+    ];
+  });
+
+  // Save appointments to local storage
+  useEffect(() => {
+    try {
+      localStorage.setItem('dr_appointments', JSON.stringify(appointments));
+    } catch (e) {
+      console.warn('Failed to save appointments to localStorage', e);
+    }
+  }, [appointments]);
+
   // Offline mode state for rural connectivity simulation
   const [isOnline, setIsOnline] = useState(true);
   const [offlineSyncCount, setOfflineSyncCount] = useState(3);
@@ -508,6 +627,25 @@ export const AppProvider = ({ children }) => {
     return true;
   };
 
+  // Phase 11: Appointments Helper Methods
+  const addAppointment = (newApt) => {
+    setAppointments((prev) => [newApt, ...prev.filter((a) => a.id !== newApt.id)]);
+  };
+
+  const updateAppointment = (appointmentId, updates) => {
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? { ...a, ...updates, updated_at: new Date().toISOString() } : a))
+    );
+  };
+
+  const getAppointmentById = (appointmentId) => {
+    return appointments.find((a) => a.id === appointmentId) || null;
+  };
+
+  const getAppointmentsForPatient = (patientId) => {
+    return appointments.filter((a) => a.patient_id === patientId || a.patientId === patientId);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -529,6 +667,15 @@ export const AppProvider = ({ children }) => {
         updateScreeningReview,
         activeScreening,
         setActiveScreening,
+        // Phase 11 Appointments & Tele-Ophthalmology
+        doctors,
+        setDoctors,
+        appointments,
+        setAppointments,
+        addAppointment,
+        updateAppointment,
+        getAppointmentById,
+        getAppointmentsForPatient,
         isOnline,
         setIsOnline,
         offlineSyncCount,

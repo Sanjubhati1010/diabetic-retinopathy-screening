@@ -32,10 +32,9 @@ import {
   AlertOctagon,
   Loader2,
   FileText,
-  HelpCircle,
-  AlertTriangle,
   UploadCloud,
   Info,
+  Video,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
 import { getScreeningReview, formatConfidence, calculateLongitudinalComparison } from '../services/api';
@@ -241,6 +240,14 @@ const PatientReportContent = () => {
             <Share2 className="w-4 h-4 text-teal-600" />
             <span>{shareSuccess ? 'SMS Link Sent!' : t('btnShareWhatsApp')}</span>
           </button>
+
+          <Link
+            to="/appointments"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md transition"
+          >
+            <Video className="w-4 h-4" />
+            <span>{t('scheduleConsultation') || 'Book Tele-Consultation'}</span>
+          </Link>
 
           <button
             type="button"

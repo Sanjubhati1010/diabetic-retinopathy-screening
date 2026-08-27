@@ -254,3 +254,152 @@ class ScreeningComparisonResponse(BaseModel):
     disclaimer_hi: str = Field(..., description="Hindi mandatory clinical disclaimer")
 
 
+# ==============================================================================
+# Phase 11: Doctor Appointment & Tele-Ophthalmology Schemas
+# ==============================================================================
+
+class DoctorRecord(BaseModel):
+    id: str = Field(..., description="Unique doctor identifier")
+    name: str = Field(..., description="Doctor full name")
+    title: str = Field(..., description="Professional title")
+    specialization: str = Field(..., description="Clinical specialization")
+    hospital: str = Field(..., description="Affiliated tele-center / hospital")
+    location: str = Field(..., description="District and state location")
+    languages: List[str] = Field(default_factory=list, description="Consultation languages supported")
+    experience_years: int = Field(..., description="Years of clinical experience")
+    is_demo: bool = Field(default=True, description="Clearly marked demo doctor label")
+    status: str = Field(default="Available", description="Current status: Available, Busy, Offline")
+    avatar_badge: str = Field(..., description="2-letter avatar initials")
+    working_days: List[str] = Field(default_factory=list, description="Days of week on duty")
+    working_hours_start: str = Field(..., description="Shift start time (HH:MM)")
+    working_hours_end: str = Field(..., description="Shift end time (HH:MM)")
+    slot_duration_minutes: int = Field(default=30, description="Consultation slot duration")
+    rating: float = Field(default=4.9, description="Tele-consultation quality rating")
+    total_consultations: int = Field(default=0, description="Total completed consultations count")
+
+
+class DoctorListResponse(BaseModel):
+    doctors: List[DoctorRecord] = Field(default_factory=list, description="List of verified demo doctors")
+    total_count: int = Field(..., description="Total doctors count")
+
+
+class DoctorAvailabilitySlot(BaseModel):
+    start_time: str = Field(..., description="Slot start time (HH:MM)")
+    end_time: str = Field(..., description="Slot end time (HH:MM)")
+    available: bool = Field(..., description="Whether slot is available for booking")
+    reason: str = Field(..., description="Slot availability status reason")
+
+
+class DoctorAvailabilityResponse(BaseModel):
+    doctor_id: str = Field(..., description="Doctor identifier")
+    doctor_name: str = Field(..., description="Doctor full name")
+    date: str = Field(..., description="Selected query date (YYYY-MM-DD)")
+    day_name: str = Field(..., description="Day of week")
+    is_working_day: bool = Field(..., description="Whether doctor is scheduled on this day")
+    slots: List[DoctorAvailabilitySlot] = Field(default_factory=list, description="Generated 30-min time slots")
+    total_slots: int = Field(default=0, description="Total slots count")
+    available_slots_count: int = Field(default=0, description="Available slots count")
+    message: Optional[str] = Field(default=None, description="Optional informational notice")
+
+
+class AppointmentCreateRequest(BaseModel):
+    doctor_id: str = Field(..., description="Assigned doctor identifier")
+    health_worker_id: str = Field(default="HW-RAMPUR-01", description="Health worker PHC ID")
+    health_worker_name: str = Field(default="Pooja Sharma (ASHA Worker)", description="Health worker display name")
+    health_worker_email: str = Field(default="asha.rampur@phc.in", description="Health worker contact email")
+    patient_id: str = Field(..., description="Patient ID")
+    patient_name: str = Field(..., description="Patient Name")
+    patient_age: Optional[int] = Field(default=None, ge=1, le=120, description="Patient age")
+    patient_gender: Optional[str] = Field(default=None, description="Patient gender")
+    village: Optional[str] = Field(default=None, description="Patient village")
+    screening_id: Optional[str] = Field(default=None, description="Linked screening ID (optional)")
+    screening_summary: Optional[str] = Field(default=None, description="Linked screening AI summary")
+    date: str = Field(..., description="Scheduled appointment date (YYYY-MM-DD)")
+    start_time: str = Field(..., description="Slot start time (HH:MM)")
+    reason: str = Field(..., min_length=3, description="Clinical reason for tele-consultation request")
+
+
+class AppointmentUpdateRequest(BaseModel):
+    status: str = Field(..., description="Target status: CONFIRMED, DECLINED, RESCHEDULE_REQUESTED, CANCELLED, COMPLETED")
+    caller_role: str = Field(default="doctor", description="Role of requesting caller: doctor, health_worker, admin")
+    reason_or_comment: Optional[str] = Field(default=None, description="Clinical note or reason for change")
+    proposed_date: Optional[str] = Field(default=None, description="New proposed date for reschedule")
+    proposed_time: Optional[str] = Field(default=None, description="New proposed time for reschedule")
+
+
+class AppointmentNoteRequest(BaseModel):
+    doctor_id: str = Field(..., description="Reviewing doctor ID")
+    doctor_notes: str = Field(..., min_length=5, description="Doctor-entered clinical consultation notes")
+    doctor_recommendation: str = Field(..., min_length=3, description="Doctor clinical recommendation")
+    follow_up_date: Optional[str] = Field(default=None, description="Optional suggested follow-up date")
+
+
+class AppointmentResponse(BaseModel):
+    id: str = Field(..., description="Appointment identifier")
+    doctor_id: str = Field(..., description="Doctor identifier")
+    doctor_name: str = Field(..., description="Doctor name")
+    health_worker_id: str = Field(..., description="Health worker identifier")
+    health_worker_name: str = Field(..., description="Health worker name")
+    health_worker_email: str = Field(..., description="Health worker email")
+    patient_id: str = Field(..., description="Patient identifier")
+    patient_name: str = Field(..., description="Patient name")
+    patient_age: int = Field(..., description="Patient age")
+    patient_gender: str = Field(..., description="Patient gender")
+    village: str = Field(..., description="Patient village")
+    screening_id: Optional[str] = Field(default=None, description="Linked screening ID")
+    screening_summary: Optional[str] = Field(default=None, description="Linked screening summary")
+    date: str = Field(..., description="Appointment date (YYYY-MM-DD)")
+    start_time: str = Field(..., description="Start time (HH:MM)")
+    end_time: str = Field(..., description="End time (HH:MM)")
+    reason: str = Field(..., description="Reason for consultation")
+    status: str = Field(..., description="Current status")
+    created_at: str = Field(..., description="Creation ISO timestamp")
+    updated_at: str = Field(..., description="Update ISO timestamp")
+    doctor_notes: Optional[str] = Field(default=None, description="Doctor-entered consultation note")
+    doctor_recommendation: Optional[str] = Field(default=None, description="Doctor clinical recommendation")
+    follow_up_date: Optional[str] = Field(default=None, description="Suggested follow-up date")
+    reschedule_proposed_date: Optional[str] = Field(default=None, description="Reschedule proposed date")
+    reschedule_proposed_time: Optional[str] = Field(default=None, description="Reschedule proposed time")
+
+
+class AppointmentListResponse(BaseModel):
+    appointments: List[AppointmentResponse] = Field(default_factory=list, description="Appointments list")
+    total_count: int = Field(..., description="Total appointments matching query")
+
+
+class AppointmentMessageRequest(BaseModel):
+    sender_id: str = Field(..., description="Message sender ID")
+    sender_name: str = Field(..., description="Message sender display name")
+    sender_role: str = Field(..., description="Message sender role: doctor, health_worker, system")
+    message: str = Field(..., min_length=1, description="Message text content")
+
+
+class AppointmentMessageResponse(BaseModel):
+    id: str = Field(..., description="Unique message ID")
+    appointment_id: str = Field(..., description="Associated appointment ID")
+    sender_id: str = Field(..., description="Message sender ID")
+    sender_name: str = Field(..., description="Message sender display name")
+    sender_role: str = Field(..., description="Sender role")
+    message: str = Field(..., description="Message text content")
+    created_at: str = Field(..., description="Creation ISO timestamp")
+
+
+class AppointmentMessageListResponse(BaseModel):
+    appointment_id: str = Field(..., description="Associated appointment ID")
+    messages: List[AppointmentMessageResponse] = Field(default_factory=list, description="Chat messages history")
+    total_messages: int = Field(..., description="Total message count")
+
+
+class VideoSessionResponse(BaseModel):
+    appointment_id: str = Field(..., description="Appointment identifier")
+    room_id: str = Field(..., description="WebRTC session room identifier")
+    authorized: bool = Field(..., description="Whether participant is authorized")
+    participant_id: str = Field(..., description="Participant user ID")
+    participant_role: str = Field(..., description="Participant role")
+    doctor_name: str = Field(..., description="Assigned doctor name")
+    patient_name: str = Field(..., description="Patient name")
+    screening_id: Optional[str] = Field(default=None, description="Linked screening ID")
+    ice_servers: List[Dict[str, Any]] = Field(default_factory=list, description="STUN / TURN server configuration")
+
+
+

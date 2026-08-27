@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import {
@@ -37,6 +38,7 @@ import {
   Inbox,
   FileCheck,
   GitCompare,
+  Video,
 } from 'lucide-react';
 import { submitDoctorReview, getScreeningReviewHistory, getFullResultUrl } from '../services/api';
 
@@ -236,17 +238,17 @@ const DoctorDashboardContent = () => {
       {toastMessage && (
         <div className="fixed top-20 right-6 z-50 p-4 rounded-2xl bg-slate-900 text-white shadow-2xl border border-emerald-500/50 flex items-center gap-3 animate-fade-in text-xs font-bold">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
+          <span>Review submitted successfully.</span>
         </div>
       )}
 
-      {/* Human-in-the-Loop Clinical Oversight Banner */}
-      <div className="p-4 rounded-3xl bg-gradient-to-r from-teal-900 via-slate-900 to-teal-950 text-white border border-teal-700/50 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-teal-900 via-slate-900 to-teal-950 border border-teal-500/30 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-400/30">
-              <Stethoscope className="w-5 h-5" />
-            </span>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-teal-500/20 border border-teal-400/30 rounded-xl">
+              <Stethoscope className="w-5 h-5 text-teal-300" />
+            </div>
             <h1 className="text-xl font-extrabold tracking-tight">{t('doctorReviewTitle') || 'Doctor Review & Clinical Verification'}</h1>
           </div>
           <p className="text-xs text-teal-200/90 font-medium">
@@ -261,7 +263,7 @@ const DoctorDashboardContent = () => {
       </div>
 
       {/* Triage Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title={t('urgentQueue')}
           value={pendingCount}
@@ -276,6 +278,15 @@ const DoctorDashboardContent = () => {
           icon={CheckCircle2}
           variant="emerald"
         />
+        <Link to="/appointments" className="block transition transform hover:scale-[1.02]">
+          <MetricCard
+            title={t('teleOphthalmologyTitle') || 'Tele-Consultations'}
+            value={teleAppointmentsCount}
+            subtitle="Scheduled tele-ophthalmology sessions"
+            icon={Video}
+            variant="indigo"
+          />
+        </Link>
         <MetricCard
           title="Clinical Safety Layer"
           value="Active"

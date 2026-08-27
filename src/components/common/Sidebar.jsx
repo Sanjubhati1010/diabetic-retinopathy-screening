@@ -20,6 +20,7 @@ import {
   Home,
   X,
   Radio,
+  Video,
 } from 'lucide-react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
@@ -67,6 +68,11 @@ export const Sidebar = ({ isOpen, onClose }) => {
     {
       groupTitle: 'Tele-Ophthalmology & Insights',
       items: [
+        {
+          name: t('teleOphthalmologyTitle') || 'Appointments & Tele-Consult',
+          path: '/appointments',
+          icon: Video,
+        },
         {
           name: t('navDoctor'),
           path: '/doctor',

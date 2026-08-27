@@ -21,6 +21,9 @@ import { PatientReportPage } from './pages/PatientReportPage';
 import { DoctorDashboardPage } from './pages/DoctorDashboardPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import AppointmentsPage from './pages/AppointmentsPage';
+import AppointmentDetailsPage from './pages/AppointmentDetailsPage';
+import VideoConsultationPage from './pages/VideoConsultationPage';
 
 // Protected Route Component to require explicit login
 const ProtectedDashboardLayout = () => {
@@ -81,6 +84,11 @@ function AppRoutes() {
         <Route path="/screenings/:id/report" element={<PatientReportPage />} />
         <Route path="/screenings/report" element={<PatientReportPage />} />
         <Route path="/history" element={<ScreeningHistoryPage />} />
+
+        {/* Phase 11: Specialist Tele-Ophthalmology & Appointments */}
+        <Route path="/appointments" element={<AppointmentsPage />} />
+        <Route path="/appointments/:id" element={<AppointmentDetailsPage />} />
+        <Route path="/appointments/:id/video" element={<VideoConsultationPage />} />
 
         {/* Specialist Tele-Ophthalmology & Insights */}
         <Route path="/doctor" element={<DoctorDashboardPage />} />
