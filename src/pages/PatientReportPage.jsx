@@ -45,7 +45,13 @@ import { History, GitCompare } from 'lucide-react';
 const PatientReportContent = () => {
   const { id } = useParams();
   const { t } = useLanguage();
-  const { getScreeningById, screenings, getPatientById, activeScreening } = useApp();
+  const {
+    getScreeningById,
+    screenings,
+    getPatientById,
+    activeScreening,
+    getLatestComparableScreening,
+  } = useApp();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -189,7 +195,7 @@ const PatientReportContent = () => {
   }
 
   // Resolve patient details safely
-  const patient = getPatientById(screening.patientId);
+  const patient = getPatientById(screening?.patientId) || {};
 
   // Load cached or live review state
   const storedReviewJson = localStorage.getItem(`madocs_review_${screening.id}`);

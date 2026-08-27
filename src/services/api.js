@@ -4,7 +4,7 @@
  */
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8000';
 
 /**
  * Constructs the absolute URL for static backend assets such as Grad-CAM heatmaps.
