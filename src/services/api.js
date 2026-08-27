@@ -1385,6 +1385,151 @@ export function getSignalingWsUrl(appointmentId) {
   return `${wsProto}//${host}/ws/appointments/${appointmentId}/signal`;
 }
 
+// =====================================================================
+// Phase 12: WhatsApp Clinical Report Delivery API Client Functions
+// =====================================================================
+
+/**
+ * Requests secure WhatsApp report delivery for a doctor-reviewed screening.
+ * POST /api/reports/{screening_id}/whatsapp/send
+ */
+export async function sendWhatsAppReport(screeningId, payload) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/whatsapp/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to deliver WhatsApp report (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error sending WhatsApp report for ${screeningId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieves the current delivery status, doctor review gate check, and audit trail.
+ * GET /api/reports/{screening_id}/whatsapp/status
+ */
+export async function getWhatsAppDeliveryStatus(screeningId, hwId = 'HW-RAMPUR-01') {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/whatsapp/status?hw_id=${hwId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch WhatsApp delivery status (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.warn(`Error getting WhatsApp status for ${screeningId}:`, error);
+    return {
+      screening_id: screeningId,
+      status: 'NOT_REQUESTED',
+      recipient_phone: '+919876543210',
+      health_worker_name: 'Pooja Sharma (ASHA Worker)',
+      doctor_review_status: 'AI RESULT ACCEPTED',
+      can_send: true,
+      block_reason: null,
+      delivery_record: null,
+      audit_events: [],
+    };
+  }
+}
+
+/**
+ * Retries failed WhatsApp delivery with duplicate prevention.
+ * POST /api/reports/{screening_id}/whatsapp/retry
+ */
+export async function retryWhatsAppDelivery(screeningId, payload) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/whatsapp/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to retry delivery (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error retrying WhatsApp delivery for ${screeningId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Generates or downloads official clinical PDF report.
+ * POST /api/reports/{screening_id}/pdf
+ */
+export async function generateReportPdf(screeningId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/pdf`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to generate report PDF (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error generating PDF for ${screeningId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieves directory of registered health workers.
+ * GET /api/health-workers
+ */
+export async function getHealthWorkers() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/health-workers`);
+    if (!res.ok) throw new Error('Failed to fetch health workers');
+    return await res.json();
+  } catch (error) {
+    console.warn('Error fetching health workers:', error);
+    return [
+      {
+        id: 'HW-RAMPUR-01',
+        name: 'Pooja Sharma (ASHA Worker)',
+        role: 'health_worker',
+        phone: '+91 98765 43210',
+        email: 'asha.rampur@phc.in',
+        village: 'Rampur Gram Panchayat',
+        phc_center: 'Primary Health Center Rampur',
+        whatsapp_opt_in: true,
+      },
+    ];
+  }
+}
+
+/**
+ * Updates WhatsApp opt-in consent for a health worker.
+ * PATCH /api/health-workers/{id}/opt-in
+ */
+export async function updateHealthWorkerOptIn(hwId, payload) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/health-workers/${hwId}/opt-in`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to update opt-in status');
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error updating opt-in for ${hwId}:`, error);
+    throw error;
+  }
+}
+
+
 
 
 

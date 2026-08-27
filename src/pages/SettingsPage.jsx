@@ -222,6 +222,57 @@ export const SettingsPage = () => {
           </div>
         </div>
 
+        {/* Section 5: Phase 12 WhatsApp Health Worker Profile & Opt-in Consent */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-200 shadow-card space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+            <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700">📱</span>
+            <span>{t('whatsappConfigSection') || 'WhatsApp Health Worker Profile & Opt-In Settings'}</span>
+          </h2>
+
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Registered Health Worker Name
+                </label>
+                <input
+                  type="text"
+                  defaultValue="Pooja Sharma (ASHA Worker)"
+                  readOnly
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Registered WhatsApp Mobile (+91)
+                </label>
+                <input
+                  type="text"
+                  defaultValue="+91 98765 43210"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center justify-between p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 cursor-pointer">
+              <div className="pr-4">
+                <p className="text-xs font-bold text-emerald-950">
+                  {t('whatsappOptInConsent') || 'WhatsApp Clinical Report Opt-In Consent'}
+                </p>
+                <p className="text-[11px] text-emerald-800/80 mt-0.5">
+                  {t('whatsappOptInDesc') || 'Allow clinical screening reports to be delivered directly to the health worker\'s registered WhatsApp number.'}
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                defaultChecked={true}
+                className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 w-5 h-5 cursor-pointer shrink-0"
+              />
+            </label>
+          </div>
+        </div>
+
         {/* Action Save Bar */}
         <div className="flex items-center justify-between pt-2">
           {saveToast ? (

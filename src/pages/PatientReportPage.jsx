@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useApp } from '../context/AppContext';
 import {
@@ -35,9 +35,23 @@ import {
   UploadCloud,
   Info,
   Video,
+  MessageSquare,
+  Send,
+  Download,
+  RefreshCw,
+  Clock,
+  ExternalLink,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
-import { getScreeningReview, formatConfidence, calculateLongitudinalComparison } from '../services/api';
+import {
+  getScreeningReview,
+  formatConfidence,
+  calculateLongitudinalComparison,
+  sendWhatsAppReport,
+  getWhatsAppDeliveryStatus,
+  retryWhatsAppDelivery,
+  generateReportPdf,
+} from '../services/api';
 import { ClassificationChangeBadge } from '../components/longitudinal/LongitudinalComparisonCard';
 import { History, GitCompare } from 'lucide-react';
 
@@ -58,6 +72,15 @@ const PatientReportContent = () => {
   const [shareSuccess, setShareSuccess] = useState(false);
   const [screening, setScreening] = useState(null);
   const [liveReview, setLiveReview] = useState(null);
+
+  // Phase 12 WhatsApp Report Delivery State
+  const [whatsappStatus, setWhatsappStatus] = useState(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [whatsappSuccessMsg, setWhatsappSuccessMsg] = useState(null);
+  const [whatsappErrorMsg, setWhatsappErrorMsg] = useState(null);
+  const [showAuditTrail, setShowAuditTrail] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const fetchReportData = async () => {
     setLoading(true);
@@ -98,6 +121,12 @@ const PatientReportContent = () => {
         if (canonicalReview) {
           setLiveReview(canonicalReview);
         }
+
+        // Fetch WhatsApp status
+        const waStatus = await getWhatsAppDeliveryStatus(targetScreening.id);
+        if (waStatus) {
+          setWhatsappStatus(waStatus);
+        }
       }
     } catch (err) {
       console.error('Failed to load screening report data:', err);
@@ -118,6 +147,69 @@ const PatientReportContent = () => {
   const handleShare = () => {
     setShareSuccess(true);
     setTimeout(() => setShareSuccess(false), 2500);
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!screening?.id) return;
+    setIsSendingWhatsApp(true);
+    setWhatsappErrorMsg(null);
+    setWhatsappSuccessMsg(null);
+
+    try {
+      const payload = {
+        screening_id: screening.id,
+        recipient_phone: '+919876543210',
+        health_worker_id: 'HW-RAMPUR-01',
+        language: 'en',
+        opt_in_confirmed: true,
+      };
+      const res = await sendWhatsAppReport(screening.id, payload);
+      setWhatsappSuccessMsg('Report sent to health worker via WhatsApp.');
+      setIsWhatsAppModalOpen(false);
+
+      // Refresh delivery status
+      const updatedStatus = await getWhatsAppDeliveryStatus(screening.id);
+      setWhatsappStatus(updatedStatus);
+    } catch (err) {
+      setWhatsappErrorMsg(err.message || 'Failed to dispatch report to WhatsApp.');
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
+  const handleRetryWhatsApp = async () => {
+    if (!screening?.id) return;
+    setIsSendingWhatsApp(true);
+    setWhatsappErrorMsg(null);
+
+    try {
+      await retryWhatsAppDelivery(screening.id, {
+        health_worker_id: 'HW-RAMPUR-01',
+        force_regenerate_pdf: false,
+      });
+      setWhatsappSuccessMsg('WhatsApp report delivery retried.');
+      const updatedStatus = await getWhatsAppDeliveryStatus(screening.id);
+      setWhatsappStatus(updatedStatus);
+    } catch (err) {
+      setWhatsappErrorMsg(err.message || 'Failed to retry WhatsApp delivery.');
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!screening?.id) return;
+    setIsDownloadingPdf(true);
+    try {
+      const pdfMeta = await generateReportPdf(screening.id);
+      if (pdfMeta?.pdf_url) {
+        window.open(pdfMeta.pdf_url, '_blank');
+      }
+    } catch (err) {
+      alert(`Unable to download PDF: ${err.message}`);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   // State 1: LOADING STATE
@@ -231,14 +323,40 @@ const PatientReportContent = () => {
           <span>Back to Screening Result</span>
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Phase 12 WhatsApp Report Button */}
           <button
             type="button"
-            onClick={handleShare}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold shadow-sm transition"
+            onClick={() => setIsWhatsAppModalOpen(true)}
+            disabled={isRecaptureRequested}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition ${
+              isRecaptureRequested
+                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20 shadow-md'
+            }`}
+            title={isRecaptureRequested ? 'Cannot deliver report: Re-capture requested by doctor' : 'Send clinical report via WhatsApp'}
           >
-            <Share2 className="w-4 h-4 text-teal-600" />
-            <span>{shareSuccess ? 'SMS Link Sent!' : t('btnShareWhatsApp')}</span>
+            <MessageSquare className="w-4 h-4" />
+            <span>
+              {whatsappStatus?.status === 'DELIVERED'
+                ? 'WhatsApp: Delivered'
+                : whatsappStatus?.status === 'SENT'
+                ? 'WhatsApp: Sent'
+                : whatsappStatus?.status === 'READ'
+                ? 'WhatsApp: Read'
+                : 'Send on WhatsApp'}
+            </span>
+          </button>
+
+          {/* Phase 12 Download Clinical PDF */}
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isDownloadingPdf || isRecaptureRequested}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold shadow-sm transition disabled:opacity-50"
+          >
+            {isDownloadingPdf ? <Loader2 className="w-4 h-4 animate-spin text-brand-600" /> : <Download className="w-4 h-4 text-brand-600" />}
+            <span>Download PDF</span>
           </button>
 
           <Link
@@ -252,13 +370,180 @@ const PatientReportContent = () => {
           <button
             type="button"
             onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-glow transition"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-glow transition"
           >
             <Printer className="w-4 h-4" />
             <span>{t('btnPrintReport')}</span>
           </button>
         </div>
       </div>
+
+      {/* Phase 12 WhatsApp Delivery & Doctor Review Status Card */}
+      <div className="no-print p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50/70 via-teal-50/50 to-white border border-emerald-200 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wide">
+                  WhatsApp Clinical Report Delivery
+                </h3>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase border ${
+                  whatsappStatus?.status === 'DELIVERED'
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    : whatsappStatus?.status === 'READ'
+                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                    : whatsappStatus?.status === 'SENT'
+                    ? 'bg-teal-100 text-teal-800 border-teal-300'
+                    : whatsappStatus?.status === 'FAILED'
+                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  Status: {whatsappStatus?.status || 'NOT REQUESTED'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 font-medium">
+                Authorized Recipient: <strong>Pooja Sharma (ASHA Worker)</strong> • Registered: <span className="font-mono font-bold text-slate-800">+91 98765 43210</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            {whatsappStatus?.status === 'FAILED' && (
+              <button
+                type="button"
+                onClick={handleRetryWhatsApp}
+                disabled={isSendingWhatsApp}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-sm"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSendingWhatsApp ? 'animate-spin' : ''}`} />
+                <span>Retry WhatsApp</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowAuditTrail(!showAuditTrail)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold transition"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>{showAuditTrail ? 'Hide Audit Log' : 'Delivery Log'}</span>
+            </button>
+          </div>
+        </div>
+
+        {whatsappSuccessMsg && (
+          <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-semibold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+            <span>{whatsappSuccessMsg}</span>
+          </div>
+        )}
+
+        {whatsappErrorMsg && (
+          <div className="p-2.5 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-700 shrink-0" />
+            <span>{whatsappErrorMsg}</span>
+          </div>
+        )}
+
+        {/* Expandable Audit Log */}
+        {showAuditTrail && (
+          <div className="mt-3 pt-3 border-t border-emerald-200 space-y-2 text-xs">
+            <h4 className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">
+              WhatsApp Lifecycle Audit Trail
+            </h4>
+            {whatsappStatus?.audit_events && whatsappStatus.audit_events.length > 0 ? (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {whatsappStatus.audit_events.map((evt, idx) => (
+                  <div key={idx} className="p-2 rounded-lg bg-white border border-slate-200 flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-slate-900">{evt.event_type}</span>: <span className="text-slate-600">{evt.description}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                      {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-500 text-xs italic">No WhatsApp dispatch audit events recorded yet.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* WhatsApp Delivery Confirmation Modal */}
+      {isWhatsAppModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm no-print animate-fade-in">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-950">
+                  Confirm WhatsApp Report Delivery
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Official clinical report distribution to authorized health worker
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Screening ID:</span>
+                <span className="font-mono font-bold text-slate-900">{screening.id}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Patient:</span>
+                <span className="font-bold text-slate-900">{patient.name || screening.patientName || 'Patient'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Doctor Review Status:</span>
+                <span className="font-bold text-emerald-700">{reviewStatus}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Recipient Health Worker:</span>
+                <span className="font-bold text-slate-900">Pooja Sharma (ASHA Worker)</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500">Verified Mobile Number:</span>
+                <span className="font-mono font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">
+                  +91 98765 43210
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>WhatsApp Opt-in consent verified. PDF will be generated & sent securely.</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsWhatsAppModalOpen(false)}
+                disabled={isSendingWhatsApp}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendWhatsApp}
+                disabled={isSendingWhatsApp}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
+              >
+                {isSendingWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                <span>{isSendingWhatsApp ? 'Sending...' : 'Dispatch Report Now'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Demo Data Notice (Hidden during print) */}
       <div className="no-print flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">

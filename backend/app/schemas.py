@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Dict, Optional, List, Any
 from pydantic import BaseModel, Field
 
@@ -400,6 +401,102 @@ class VideoSessionResponse(BaseModel):
     patient_name: str = Field(..., description="Patient name")
     screening_id: Optional[str] = Field(default=None, description="Linked screening ID")
     ice_servers: List[Dict[str, Any]] = Field(default_factory=list, description="STUN / TURN server configuration")
+
+
+# Phase 12: WhatsApp Clinical Report Delivery Schemas
+class WhatsAppDeliveryStatus(str, Enum):
+    NOT_REQUESTED = "NOT_REQUESTED"
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    READ = "READ"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class WhatsAppSendRequest(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    recipient_phone: str = Field(..., description="Authorized recipient WhatsApp phone number with country code (e.g. +919876543210)")
+    health_worker_id: str = Field(..., description="Health worker identifier requesting delivery")
+    language: str = Field(default="en", description="Language preference: 'en' or 'hi'")
+    opt_in_confirmed: bool = Field(default=True, description="Explicit recipient WhatsApp opt-in verification")
+
+
+class WhatsAppAuditEvent(BaseModel):
+    event_type: str = Field(..., description="Audit event type")
+    timestamp: str = Field(..., description="ISO 8601 event timestamp")
+    screening_id: str = Field(..., description="Screening identifier")
+    actor: str = Field(..., description="Actor performing or triggering the event")
+    delivery_status: str = Field(..., description="Status at time of event")
+    provider_message_id: Optional[str] = Field(default=None, description="WhatsApp provider message ID if available")
+    details: Optional[Dict[str, Any]] = Field(default=None, description="Additional non-sensitive audit metadata")
+
+
+class WhatsAppDeliveryRecord(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    recipient_phone: str = Field(..., description="Recipient phone number")
+    health_worker_id: str = Field(..., description="Authorized health worker ID")
+    health_worker_name: Optional[str] = Field(default=None, description="Health worker name")
+    status: WhatsAppDeliveryStatus = Field(default=WhatsAppDeliveryStatus.NOT_REQUESTED, description="Current delivery status")
+    provider_message_id: Optional[str] = Field(default=None, description="Provider message tracking ID")
+    provider_status: Optional[str] = Field(default=None, description="Raw provider status string")
+    sent_at: Optional[str] = Field(default=None, description="Timestamp message was accepted by provider")
+    delivered_at: Optional[str] = Field(default=None, description="Timestamp confirmed delivered")
+    read_at: Optional[str] = Field(default=None, description="Timestamp confirmed read")
+    error_message: Optional[str] = Field(default=None, description="Error reason if delivery failed")
+    retry_count: int = Field(default=0, description="Number of delivery retries performed")
+    pdf_filename: Optional[str] = Field(default=None, description="Generated PDF filename")
+    pdf_download_url: Optional[str] = Field(default=None, description="Secure tokenized document download URL")
+    template_name: str = Field(default="clinical_report_delivery_v1", description="WhatsApp template name")
+    language: str = Field(default="en", description="Template language: en / hi")
+    is_demo: bool = Field(default=True, description="Whether delivery ran in demo/development mode")
+    audit_events: List[WhatsAppAuditEvent] = Field(default_factory=list, description="Delivery lifecycle audit trail")
+
+
+class WhatsAppStatusResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    status: WhatsAppDeliveryStatus = Field(..., description="Current delivery status")
+    recipient_phone: Optional[str] = Field(default=None, description="Authorized recipient phone")
+    health_worker_name: Optional[str] = Field(default=None, description="Authorized health worker name")
+    doctor_review_status: str = Field(..., description="Current doctor review status")
+    can_send: bool = Field(..., description="Whether doctor-review gate and consent permit delivery")
+    block_reason: Optional[str] = Field(default=None, description="Reason why sending is blocked if can_send is false")
+    delivery_record: Optional[WhatsAppDeliveryRecord] = Field(default=None, description="Latest delivery record")
+    audit_events: List[WhatsAppAuditEvent] = Field(default_factory=list, description="Audit trail history")
+
+
+class WhatsAppRetryRequest(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    health_worker_id: str = Field(..., description="Health worker identifier")
+    force_regenerate_pdf: bool = Field(default=False, description="Whether to regenerate PDF before retrying")
+
+
+class HealthWorkerProfile(BaseModel):
+    id: str = Field(..., description="Health worker ID")
+    name: str = Field(..., description="Full name")
+    role: str = Field(default="health_worker", description="User role")
+    phone: str = Field(..., description="Registered mobile number (e.g. +91 98765 43210)")
+    email: str = Field(..., description="Email / PHC user identifier")
+    village: str = Field(..., description="Assigned village / sub-center")
+    phc_center: str = Field(..., description="Primary Health Center name")
+    whatsapp_opt_in: bool = Field(default=True, description="Explicit WhatsApp report delivery consent")
+    whatsapp_opt_in_date: Optional[str] = Field(default=None, description="Timestamp when consent was recorded")
+
+
+class HealthWorkerOptInRequest(BaseModel):
+    whatsapp_opt_in: bool = Field(..., description="Opt-in consent flag")
+    phone: Optional[str] = Field(default=None, description="Updated phone number if changing")
+
+
+class ReportPdfResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    pdf_filename: str = Field(..., description="PDF filename")
+    pdf_url: str = Field(..., description="Secure tokenized document download URL")
+    file_size_bytes: int = Field(..., description="File size in bytes")
+    generated_at: str = Field(..., description="ISO 8601 timestamp of generation")
+    is_final_doctor_approved: bool = Field(..., description="Whether report has completed doctor review sign-off")
+
 
 
 

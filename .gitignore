@@ -43,3 +43,6 @@ backend/uploads/*.jpeg
 
 # Local backup directory
 .backup/
+scratch/
+backend/results/reports/*.pdf
+!backend/results/reports/.gitkeep

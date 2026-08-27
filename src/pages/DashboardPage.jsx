@@ -20,6 +20,7 @@ import {
   ArrowUpRight,
   MapPin,
   Video,
+  MessageSquare,
 } from 'lucide-react';
 import { MOCK_UPCOMING_CAMPS } from '../data/mockData';
 
@@ -336,6 +337,43 @@ export const DashboardPage = () => {
               className="w-full py-2.5 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-xs font-bold text-indigo-700 transition block text-center"
             >
               + {t('scheduleConsultation') || 'Schedule Tele-Consultation'}
+            </Link>
+          </div>
+
+          {/* Phase 12: WhatsApp Report Delivery Widget */}
+          <div className="bg-white rounded-3xl p-6 border border-emerald-200 shadow-card space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  {t('whatsappReportTitle') || 'WhatsApp Reports'}
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                Verified Opt-in
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 border border-emerald-100 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium">Health Worker:</span>
+                <span className="font-bold text-slate-900">Pooja Sharma (ASHA)</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium">Recipient Mobile:</span>
+                <span className="font-mono font-bold text-emerald-800">+91 98765 43210</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-emerald-200/60">
+                <span className="text-slate-600 font-medium">Doctor Verified Reports:</span>
+                <span className="font-extrabold text-emerald-700">{reportsReadyCount} Ready</span>
+              </div>
+            </div>
+
+            <Link
+              to="/patients"
+              className="w-full py-2.5 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 text-xs font-bold text-emerald-800 transition block text-center"
+            >
+              View Reports & WhatsApp Dispatch →
             </Link>
           </div>
 

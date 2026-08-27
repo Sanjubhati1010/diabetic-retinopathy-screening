@@ -1,12 +1,13 @@
 import os
 import io
 import logging
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
-from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header, WebSocket, WebSocketDisconnect
+from typing import List, Optional, Dict, Any
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header, WebSocket, WebSocketDisconnect, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, PlainTextResponse
 from PIL import Image
 
 from app.schemas import (
@@ -37,6 +38,15 @@ from app.schemas import (
     AppointmentMessageResponse,
     AppointmentMessageListResponse,
     VideoSessionResponse,
+    WhatsAppDeliveryStatus,
+    WhatsAppSendRequest,
+    WhatsAppAuditEvent,
+    WhatsAppDeliveryRecord,
+    WhatsAppStatusResponse,
+    WhatsAppRetryRequest,
+    HealthWorkerProfile,
+    HealthWorkerOptInRequest,
+    ReportPdfResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
@@ -44,6 +54,8 @@ from app.review_service import process_doctor_review, get_audit_history, get_scr
 from app.lesion_service import lesion_service
 from app.longitudinal_service import longitudinal_service
 from app.appointment_service import appointment_service
+from app.pdf_service import pdf_service, verify_secure_pdf_token, generate_secure_pdf_token
+from app.whatsapp_service import whatsapp_service, normalize_phone_number
 
 # Setup structured logging
 logging.basicConfig(
@@ -909,6 +921,193 @@ async def websocket_signaling_endpoint(websocket: WebSocket, appointment_id: str
             websocket,
             {"type": "peer_left", "appointment_id": appointment_id}
         )
+
+
+# =====================================================================
+# Phase 12: WhatsApp Clinical Report Delivery & Health Worker Endpoints
+# =====================================================================
+
+@app.get("/api/health-workers", response_model=List[HealthWorkerProfile], tags=["Phase 12: WhatsApp"])
+async def list_health_workers():
+    """Returns directory of registered community health workers."""
+    return whatsapp_service.get_all_health_workers()
+
+
+@app.get("/api/health-workers/{hw_id}/profile", response_model=HealthWorkerProfile, tags=["Phase 12: WhatsApp"])
+async def get_health_worker_profile(hw_id: str):
+    """Returns profile and WhatsApp opt-in consent for a specific health worker."""
+    hw = whatsapp_service.get_health_worker(hw_id)
+    if not hw:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Health worker '{hw_id}' not found.")
+    return hw
+
+
+@app.patch("/api/health-workers/{hw_id}/opt-in", response_model=HealthWorkerProfile, tags=["Phase 12: WhatsApp"])
+async def update_health_worker_opt_in(hw_id: str, req: HealthWorkerOptInRequest):
+    """Updates WhatsApp consent opt-in status and registered phone number."""
+    updated = whatsapp_service.update_health_worker_opt_in(hw_id, req.whatsapp_opt_in, req.phone)
+    return updated
+
+
+@app.post("/api/reports/{screening_id}/pdf", response_model=ReportPdfResponse, tags=["Phase 12: WhatsApp"])
+async def generate_screening_pdf_report(screening_id: str):
+    """
+    Generates or retrieves the official clinical PDF report for a screening.
+    Ensures doctor-review gate has been completed before generating final report.
+    """
+    can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id)
+    if not can_proceed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+
+    pdf_path = pdf_service.generate_clinical_report(
+        screening_data={"id": screening_id, "screeningDate": datetime.utcnow().strftime("%Y-%m-%d")},
+        doctor_review=review,
+    )
+    token = generate_secure_pdf_token(screening_id)
+    file_size = pdf_path.stat().st_size if pdf_path.exists() else 0
+
+    return ReportPdfResponse(
+        screening_id=screening_id,
+        pdf_filename=pdf_path.name,
+        pdf_url=f"/api/reports/{screening_id}/document?token={token}",
+        file_size_bytes=file_size,
+        generated_at=datetime.utcnow().isoformat(),
+        is_final_doctor_approved=True,
+    )
+
+
+@app.get("/api/reports/{screening_id}/document", tags=["Phase 12: WhatsApp"])
+async def download_secure_screening_pdf(screening_id: str, token: str = Query(..., description="Secure access token")):
+    """
+    Secure authenticated download endpoint for the clinical PDF report.
+    Requires a valid cryptographically generated token.
+    """
+    if not verify_secure_pdf_token(screening_id, token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: Invalid or expired document access token.",
+        )
+
+    pdf_path = pdf_service.output_dir / f"{screening_id}_clinical_report.pdf"
+    if not pdf_path.exists():
+        # Generate on the fly if verified
+        can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id)
+        if not can_proceed:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+        pdf_path = pdf_service.generate_clinical_report(
+            screening_data={"id": screening_id, "screeningDate": datetime.utcnow().strftime("%Y-%m-%d")},
+            doctor_review=review,
+        )
+
+    return FileResponse(
+        path=str(pdf_path),
+        filename=pdf_path.name,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={pdf_path.name}"},
+    )
+
+
+@app.post("/api/reports/{screening_id}/whatsapp/send", response_model=WhatsAppDeliveryRecord, tags=["Phase 12: WhatsApp"])
+async def send_whatsapp_report_endpoint(screening_id: str, req: WhatsAppSendRequest):
+    """
+    Requests secure WhatsApp delivery of the doctor-reviewed clinical PDF report.
+    Enforces:
+    1. Doctor Review Gate (must be approved / accepted, re-capture requests blocked)
+    2. Health Worker Phone Verification (must match registered HW record)
+    3. Explicit Opt-in Consent Verification
+    4. Duplicate-send prevention
+    """
+    try:
+        delivery_record = await whatsapp_service.send_whatsapp_report(
+            screening_id=screening_id,
+            recipient_phone=req.recipient_phone,
+            health_worker_id=req.health_worker_id,
+            language=req.language,
+            opt_in_confirmed=req.opt_in_confirmed,
+        )
+        return delivery_record
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        logger.error("Failed to send WhatsApp report for %s: %s", screening_id, e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/reports/{screening_id}/whatsapp/status", response_model=WhatsAppStatusResponse, tags=["Phase 12: WhatsApp"])
+async def get_whatsapp_status_endpoint(screening_id: str, hw_id: Optional[str] = Query("HW-RAMPUR-01")):
+    """
+    Returns the current WhatsApp delivery status, doctor gate evaluation, and complete audit trail.
+    """
+    can_send, gate_reason, review = whatsapp_service.check_doctor_review_gate(screening_id)
+    delivery_rec = whatsapp_service.get_delivery_status(screening_id)
+    hw = whatsapp_service.get_health_worker(hw_id or "HW-RAMPUR-01")
+
+    rev_status = review.get("review_status", "PENDING DOCTOR REVIEW") if review else "PENDING DOCTOR REVIEW"
+
+    return WhatsAppStatusResponse(
+        screening_id=screening_id,
+        status=delivery_rec.status if delivery_rec else WhatsAppDeliveryStatus.NOT_REQUESTED,
+        recipient_phone=delivery_rec.recipient_phone if delivery_rec else (hw.phone if hw else None),
+        health_worker_name=delivery_rec.health_worker_name if delivery_rec else (hw.name if hw else None),
+        doctor_review_status=rev_status,
+        can_send=can_send,
+        block_reason=None if can_send else gate_reason,
+        delivery_record=delivery_rec,
+        audit_events=delivery_rec.audit_events if delivery_rec else [],
+    )
+
+
+@app.post("/api/reports/{screening_id}/whatsapp/retry", response_model=WhatsAppDeliveryRecord, tags=["Phase 12: WhatsApp"])
+async def retry_whatsapp_report_endpoint(screening_id: str, req: WhatsAppRetryRequest):
+    """
+    Retries failed report delivery for a screening with duplicate protection.
+    """
+    try:
+        delivery_record = await whatsapp_service.retry_whatsapp_report(
+            screening_id=screening_id,
+            health_worker_id=req.health_worker_id,
+            force_regenerate_pdf=req.force_regenerate_pdf,
+        )
+        return delivery_record
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/whatsapp/webhook", tags=["Phase 12: WhatsApp"])
+async def whatsapp_webhook_verification(
+    hub_mode: str = Query(None, alias="hub.mode"),
+    hub_verify_token: str = Query(None, alias="hub.verify_token"),
+    hub_challenge: str = Query(None, alias="hub.challenge"),
+):
+    """
+    Meta WhatsApp Cloud API Webhook verification endpoint.
+    Responds to hub.challenge during initial webhook subscription handshake.
+    """
+    if not hub_mode or not hub_verify_token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing webhook parameters.")
+
+    challenge = whatsapp_service.verify_webhook_challenge(hub_mode, hub_verify_token, hub_challenge)
+    if challenge:
+        return PlainTextResponse(content=challenge, status_code=status.HTTP_200_OK)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification token mismatch.")
+
+
+@app.post("/api/whatsapp/webhook", tags=["Phase 12: WhatsApp"])
+async def whatsapp_webhook_event(request: Request):
+    """
+    Meta WhatsApp Cloud API incoming webhook for message delivery status updates.
+    Handles 'sent', 'delivered', 'read', and 'failed' statuses securely.
+    """
+    try:
+        payload = await request.json()
+        updates = whatsapp_service.process_webhook_status_update(payload)
+        return {"status": "success", "processed_updates": len(updates), "updates": updates}
+    except Exception as e:
+        logger.warning("Error processing WhatsApp webhook payload: %s", e)
+        return {"status": "error", "detail": str(e)}
+
 
 
 
