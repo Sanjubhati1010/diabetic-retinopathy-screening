@@ -461,6 +461,7 @@ class WhatsAppStatusResponse(BaseModel):
     screening_id: str = Field(..., description="Screening identifier")
     status: WhatsAppDeliveryStatus = Field(..., description="Current delivery status")
     recipient_phone: Optional[str] = Field(default=None, description="Authorized recipient phone")
+    health_worker_id: Optional[str] = Field(default=None, description="Authorized health worker ID")
     health_worker_name: Optional[str] = Field(default=None, description="Authorized health worker name")
     doctor_review_status: str = Field(..., description="Current doctor review status")
     can_send: bool = Field(..., description="Whether doctor-review gate and consent permit delivery")

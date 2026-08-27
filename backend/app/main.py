@@ -1427,22 +1427,31 @@ async def send_whatsapp_report_endpoint(screening_id: str, req: WhatsAppSendRequ
 
 
 @app.get("/api/reports/{screening_id}/whatsapp/status", response_model=WhatsAppStatusResponse, tags=["Phase 12: WhatsApp"])
-async def get_whatsapp_status_endpoint(screening_id: str, hw_id: Optional[str] = Query("HW-RAMPUR-01"), db: Session = Depends(get_db)):
+async def get_whatsapp_status_endpoint(screening_id: str, hw_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """Returns WhatsApp delivery status, doctor gate evaluation, and complete audit trail from DB."""
     can_send, gate_reason, review = whatsapp_service.check_doctor_review_gate(screening_id, db=db)
     delivery_rec = whatsapp_service.get_delivery_status(screening_id, db=db)
-    hw = whatsapp_service.get_health_worker(hw_id or "HW-RAMPUR-01", db=db)
+    hw = whatsapp_service.resolve_health_worker_for_screening(screening_id=screening_id, hw_id=hw_id, db=db)
 
     rev_status = review.get("review_status", "PENDING DOCTOR REVIEW") if review else "PENDING DOCTOR REVIEW"
+
+    # Enforce Requirement 8: If health worker is missing or mobile is unverified, block sending
+    has_valid_recipient = bool(hw and hw.phone and hw.phone.strip())
+    if not has_valid_recipient:
+        can_send = False
+        block_reason = "Health worker mobile number not available/verified."
+    else:
+        block_reason = None if can_send else gate_reason
 
     return WhatsAppStatusResponse(
         screening_id=screening_id,
         status=delivery_rec.status if delivery_rec else WhatsAppDeliveryStatus.NOT_REQUESTED,
         recipient_phone=delivery_rec.recipient_phone if delivery_rec else (hw.phone if hw else None),
+        health_worker_id=delivery_rec.health_worker_id if delivery_rec else (hw.id if hw else None),
         health_worker_name=delivery_rec.health_worker_name if delivery_rec else (hw.name if hw else None),
         doctor_review_status=rev_status,
         can_send=can_send,
-        block_reason=None if can_send else gate_reason,
+        block_reason=block_reason,
         delivery_record=delivery_rec,
         audit_events=delivery_rec.audit_events if delivery_rec else [],
     )

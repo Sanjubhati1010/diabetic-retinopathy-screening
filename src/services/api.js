@@ -1455,9 +1455,12 @@ export async function sendWhatsAppReport(screeningId, payload) {
  * Retrieves the current delivery status, doctor review gate check, and audit trail.
  * GET /api/reports/{screening_id}/whatsapp/status
  */
-export async function getWhatsAppDeliveryStatus(screeningId, hwId = 'HW-RAMPUR-01') {
+export async function getWhatsAppDeliveryStatus(screeningId, hwId = null) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/whatsapp/status?hw_id=${hwId}`);
+    const url = hwId
+      ? `${API_BASE_URL}/api/reports/${screeningId}/whatsapp/status?hw_id=${encodeURIComponent(hwId)}`
+      : `${API_BASE_URL}/api/reports/${screeningId}/whatsapp/status`;
+    const res = await fetch(url);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch WhatsApp delivery status (${res.status})`);
@@ -1465,17 +1468,7 @@ export async function getWhatsAppDeliveryStatus(screeningId, hwId = 'HW-RAMPUR-0
     return await res.json();
   } catch (error) {
     console.warn(`Error getting WhatsApp status for ${screeningId}:`, error);
-    return {
-      screening_id: screeningId,
-      status: 'NOT_REQUESTED',
-      recipient_phone: '+919876543210',
-      health_worker_name: 'Pooja Sharma (ASHA Worker)',
-      doctor_review_status: 'AI RESULT ACCEPTED',
-      can_send: true,
-      block_reason: null,
-      delivery_record: null,
-      audit_events: [],
-    };
+    return null;
   }
 }
 

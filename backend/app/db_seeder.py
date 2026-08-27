@@ -407,9 +407,9 @@ DEMO_APPOINTMENTS = [
         "id": "APT-2026-102",
         "doctor_id": "DOC-SWAMINATHAN",
         "doctor_name": "Dr. Arvind Swaminathan, MS",
-        "health_worker_id": "HW-RAMPUR-01",
-        "health_worker_name": "Pooja Sharma (ASHA Worker)",
-        "health_worker_email": "asha.rampur@phc.in",
+        "health_worker_id": "HW-SHIVPURI-02",
+        "health_worker_name": "Sarita Devi (Vision Tech)",
+        "health_worker_email": "sarita.vision@phc.in",
         "patient_id": "PAT-2026-082",
         "patient_name": "Sunita Devi",
         "patient_age": 52,
@@ -432,9 +432,9 @@ DEMO_APPOINTMENTS = [
         "id": "APT-2026-103",
         "doctor_id": "DOC-NAMBIAR",
         "doctor_name": "Dr. Meera Nambiar, MD",
-        "health_worker_id": "HW-RAMPUR-01",
-        "health_worker_name": "Pooja Sharma (ASHA Worker)",
-        "health_worker_email": "asha.rampur@phc.in",
+        "health_worker_id": "HW-KOLAR-03",
+        "health_worker_name": "Sunil Gowda (Vision Tech)",
+        "health_worker_email": "sunil.gowda@phc.in",
         "patient_id": "PAT-2026-083",
         "patient_name": "Balwinder Singh",
         "patient_age": 46,
@@ -574,6 +574,9 @@ def seed_database_if_empty(db: Session):
             if not existing:
                 db.add(AppointmentModel(**apt_data))
             else:
+                existing.health_worker_id = apt_data["health_worker_id"]
+                existing.health_worker_name = apt_data["health_worker_name"]
+                existing.health_worker_email = apt_data.get("health_worker_email")
                 existing.date = apt_data["date"]
                 existing.start_time = apt_data["start_time"]
                 existing.end_time = apt_data["end_time"]

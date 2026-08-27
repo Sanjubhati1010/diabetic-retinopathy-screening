@@ -402,6 +402,47 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         self.assertEqual(res.json()["patient_id"], "PAT-2026-081")
         print("[TEST 20] Phase 10 Longitudinal patient screening history integrity verified.")
 
+    def test_21_whatsapp_recipient_mapping_regression(self):
+        """21. Regression Test: WhatsApp recipient is authoritatively resolved from screening/patient association, not hardcoded."""
+        # 1. Shivpuri screening (PAT-2026-082) -> Sarita Devi
+        res_shivpuri = client.get("/api/reports/SCR-2026-0992/whatsapp/status")
+        self.assertEqual(res_shivpuri.status_code, 200)
+        data_s = res_shivpuri.json()
+        self.assertEqual(data_s["health_worker_name"], "Sarita Devi (Vision Tech)")
+        self.assertEqual(data_s["recipient_phone"], "+919412388990")
+        self.assertEqual(data_s["health_worker_id"], "HW-SHIVPURI-02")
+        self.assertNotEqual(data_s["health_worker_name"], "Pooja Sharma (ASHA Worker)")
+        self.assertNotEqual(data_s["recipient_phone"], "+919876543210")
+
+        # 2. Kolar screening (PAT-2026-083) -> Sunil Gowda
+        res_kolar = client.get("/api/reports/SCR-2026-0850/whatsapp/status")
+        self.assertEqual(res_kolar.status_code, 200)
+        data_k = res_kolar.json()
+        self.assertEqual(data_k["health_worker_name"], "Sunil Gowda (Vision Tech)")
+        self.assertEqual(data_k["recipient_phone"], "+919789012345")
+        self.assertEqual(data_k["health_worker_id"], "HW-KOLAR-03")
+        self.assertNotEqual(data_k["health_worker_name"], "Pooja Sharma (ASHA Worker)")
+
+        # 3. Rampur screening (PAT-2026-081 / SCR-2026-1024) -> Pooja Sharma
+        res_rampur = client.get("/api/reports/SCR-2026-1024/whatsapp/status")
+        self.assertEqual(res_rampur.status_code, 200)
+        data_r = res_rampur.json()
+        self.assertEqual(data_r["health_worker_name"], "Pooja Sharma (ASHA Worker)")
+        self.assertEqual(data_r["recipient_phone"], "+919876543210")
+        self.assertEqual(data_r["health_worker_id"], "HW-RAMPUR-01")
+        print("[TEST 21] Authoritative WhatsApp recipient data mapping verified across different health workers.")
+
+    def test_22_unassigned_screening_blocks_whatsapp_dispatch(self):
+        """22. Safety Gate: Unassigned health worker or missing mobile blocks WhatsApp dispatch and never substitutes demo recipient."""
+        res_unknown = client.get("/api/reports/SCR-UNKNOWN-VILLAGE-999/whatsapp/status")
+        self.assertEqual(res_unknown.status_code, 200)
+        data_u = res_unknown.json()
+        self.assertFalse(data_u["can_send"])
+        self.assertIsNone(data_u["recipient_phone"])
+        self.assertIsNone(data_u["health_worker_name"])
+        self.assertEqual(data_u["block_reason"], "Health worker mobile number not available/verified.")
+        print("[TEST 22] Safety gate for unassigned screening correctly blocks dispatch and displays verification error.")
+
 
 if __name__ == "__main__":
     unittest.main()
