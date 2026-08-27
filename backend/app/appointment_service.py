@@ -1,13 +1,25 @@
 """
-Tele-Ophthalmology & Doctor Appointment Service
-Provides doctor directory, slot availability, appointment lifecycle management,
-appointment-scoped messaging, clinical consultation notes, and WebRTC signaling sessions.
+Tele-Ophthalmology & Doctor Appointment Service for MADOCS.
+Provides persistent doctor directory, slot availability calculation, transactional appointment bookings,
+concurrency/double-booking protection, consultation notes, chat, and WebRTC signaling.
 """
 
+import json
 import logging
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timezone
 from typing import List, Dict, Any, Optional, Set
 from fastapi import WebSocket
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from app.database import SessionLocal
+from app.models import (
+    DoctorModel,
+    HealthWorkerModel,
+    PatientModel,
+    ScreeningModel,
+    AppointmentModel,
+    AppointmentMessageModel,
+)
 
 logger = logging.getLogger("dr_backend.appointment_service")
 
@@ -32,7 +44,6 @@ VALID_STATUSES = {
     STATUS_NO_SHOW,
 }
 
-# Seeded Demo Doctors (Clearly labeled as Demo Doctor)
 DEMO_DOCTORS = [
     {
         "id": "DOC-SWAMINATHAN",
@@ -58,25 +69,25 @@ DEMO_DOCTORS = [
         "name": "Dr. Meera Nambiar, MD",
         "title": "Consultant Tele-Ophthalmologist",
         "specialization": "Comprehensive Ophthalmology & Diabetic Retinopathy Triage",
-        "hospital": "Regional Eye Institute & Rural Tele-Link Hub",
-        "location": "Bengaluru / Rural Outreach Division",
-        "languages": ["English", "Hindi", "Kannada"],
+        "hospital": "Regional Institute of Ophthalmology",
+        "location": "Prayagraj, Uttar Pradesh",
+        "languages": ["English", "Hindi", "Malayalam"],
         "experience_years": 11,
         "is_demo": True,
         "status": "Available",
         "avatar_badge": "MN",
-        "working_days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        "working_days": ["Monday", "Wednesday", "Thursday", "Friday"],
         "working_hours_start": "10:00",
-        "working_hours_end": "18:00",
+        "working_hours_end": "16:00",
         "slot_duration_minutes": 30,
         "rating": 4.8,
-        "total_consultations": 218,
+        "total_consultations": 215,
     },
     {
-        "id": "DOC-RAO",
-        "name": "Dr. Rajeshwar Rao, MS",
-        "title": "Community Ophthalmology Specialist",
-        "specialization": "Diabetic Retinopathy Screening & Low-Resource Tele-Care",
+        "id": "DOC-RASTOGI",
+        "name": "Dr. Rajesh Rastogi, DNB",
+        "title": "Community Eye Health Specialist",
+        "specialization": "Rural Retinal Screening & Tele-Medicine",
         "hospital": "State Mobile Ophthalmology Health Mission",
         "location": "Lucknow, Uttar Pradesh",
         "languages": ["English", "Hindi"],
@@ -94,136 +105,113 @@ DEMO_DOCTORS = [
 ]
 
 
-class AppointmentService:
-    """Singleton service managing appointments, availability, chat, and signaling."""
+def _model_to_dict(apt: AppointmentModel) -> Dict[str, Any]:
+    return {
+        "id": apt.id,
+        "doctor_id": apt.doctor_id,
+        "doctor_name": apt.doctor_name,
+        "health_worker_id": apt.health_worker_id,
+        "health_worker_name": apt.health_worker_name,
+        "health_worker_email": apt.health_worker_email,
+        "patient_id": apt.patient_id,
+        "patient_name": apt.patient_name,
+        "patient_age": apt.patient_age,
+        "patient_gender": apt.patient_gender,
+        "village": apt.village,
+        "screening_id": apt.screening_id,
+        "screening_summary": apt.screening_summary,
+        "date": apt.date,
+        "start_time": apt.start_time,
+        "end_time": apt.end_time,
+        "reason": apt.reason,
+        "status": apt.status,
+        "doctor_notes": apt.doctor_notes,
+        "doctor_recommendation": apt.doctor_recommendation,
+        "follow_up_date": apt.follow_up_date,
+        "created_at": apt.created_at,
+        "updated_at": apt.updated_at,
+    }
 
+
+class AppointmentService:
     def __init__(self):
         self._doctors: Dict[str, Dict[str, Any]] = {d["id"]: d for d in DEMO_DOCTORS}
-        self._appointments: Dict[str, Dict[str, Any]] = {}
-        self._messages: Dict[str, List[Dict[str, Any]]] = {}  # appointment_id -> [messages]
-        self._active_connections: Dict[str, Set[WebSocket]] = {}  # appointment_id -> Set[WebSocket]
+        self._active_connections: Dict[str, Set[WebSocket]] = {}
 
-        self._seed_initial_appointments()
+    def get_all_doctors(self, db: Optional[Session] = None) -> List[Dict[str, Any]]:
+        """Returns list of registered ophthalmologists from database."""
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
 
-    def _seed_initial_appointments(self):
-        """Seed representative demo appointments across different statuses."""
-        initial = [
-            {
-                "id": "APT-2026-101",
-                "doctor_id": "DOC-SWAMINATHAN",
-                "doctor_name": "Dr. Arvind Swaminathan, MS",
-                "health_worker_id": "HW-RAMPUR-01",
-                "health_worker_name": "Pooja Sharma (ASHA Worker)",
-                "health_worker_email": "asha.rampur@phc.in",
-                "patient_id": "PAT-2026-081",
-                "patient_name": "Ramesh Kumar Verma",
-                "patient_age": 58,
-                "patient_gender": "male",
-                "village": "Rampur Gram Panchayat",
-                "screening_id": "SCR-2026-0991",
-                "screening_summary": "Moderate DR (AI Confidence 85.0%)",
-                "date": "2026-08-28",
-                "start_time": "10:30",
-                "end_time": "11:00",
-                "reason": "AI screening indicates progression from Mild to Moderate DR. Blurring reported in right eye.",
-                "status": STATUS_CONFIRMED,
-                "created_at": "2026-08-27T10:00:00Z",
-                "updated_at": "2026-08-27T11:30:00Z",
-                "doctor_notes": None,
-                "doctor_recommendation": None,
-                "follow_up_date": None,
-            },
-            {
-                "id": "APT-2026-102",
-                "doctor_id": "DOC-SWAMINATHAN",
-                "doctor_name": "Dr. Arvind Swaminathan, MS",
-                "health_worker_id": "HW-RAMPUR-01",
-                "health_worker_name": "Pooja Sharma (ASHA Worker)",
-                "health_worker_email": "asha.rampur@phc.in",
-                "patient_id": "PAT-2026-082",
-                "patient_name": "Sunita Devi",
-                "patient_age": 52,
-                "patient_gender": "female",
-                "village": "Shivpuri Taluk",
-                "screening_id": "SCR-2026-0992",
-                "screening_summary": "Severe DR (Urgent Referral Required)",
-                "date": "2026-08-28",
-                "start_time": "11:30",
-                "end_time": "12:00",
-                "reason": "High risk NPDR with macular edema suspicion. Tele-consultation required for urgent tertiary hospital referral.",
-                "status": STATUS_PENDING,
-                "created_at": "2026-08-27T14:15:00Z",
-                "updated_at": "2026-08-27T14:15:00Z",
-                "doctor_notes": None,
-                "doctor_recommendation": None,
-                "follow_up_date": None,
-            },
-            {
-                "id": "APT-2026-103",
-                "doctor_id": "DOC-NAMBIAR",
-                "doctor_name": "Dr. Meera Nambiar, MD",
-                "health_worker_id": "HW-RAMPUR-01",
-                "health_worker_name": "Pooja Sharma (ASHA Worker)",
-                "health_worker_email": "asha.rampur@phc.in",
-                "patient_id": "PAT-2026-083",
-                "patient_name": "Balwinder Singh",
-                "patient_age": 46,
-                "patient_gender": "male",
-                "village": "Kolar Rural Block",
-                "screening_id": "SCR-2026-0850",
-                "screening_summary": "No DR (Routine Follow-up)",
-                "date": "2026-08-26",
-                "start_time": "09:30",
-                "end_time": "10:00",
-                "reason": "Baseline diabetic eye review with mild family history concern.",
-                "status": STATUS_COMPLETED,
-                "created_at": "2026-08-25T09:00:00Z",
-                "updated_at": "2026-08-26T10:05:00Z",
-                "doctor_notes": "Doctor-entered consultation note: Fundus clear of microaneurysms or exudates. Routine annual DR screening advised.",
-                "doctor_recommendation": "Annual follow-up screening in 12 months. Glycemic control counseling given.",
-                "follow_up_date": "2027-08-26",
-            },
-        ]
+        try:
+            doctors = db.query(DoctorModel).all()
+            if doctors:
+                return [
+                    {
+                        "id": d.id,
+                        "name": d.name,
+                        "title": d.title,
+                        "specialization": d.specialization,
+                        "hospital": d.hospital,
+                        "location": d.location,
+                        "languages": json.loads(d.languages_json) if d.languages_json else ["English", "Hindi"],
+                        "experience_years": d.experience_years,
+                        "is_demo": d.is_demo,
+                        "status": d.status,
+                        "avatar_badge": d.avatar_badge,
+                        "working_days": json.loads(d.working_days_json) if d.working_days_json else [],
+                        "working_hours_start": d.working_hours_start,
+                        "working_hours_end": d.working_hours_end,
+                        "slot_duration_minutes": d.slot_duration_minutes,
+                        "rating": d.rating,
+                        "total_consultations": d.total_consultations,
+                    }
+                    for d in doctors
+                ]
+        except Exception as e:
+            logger.warning(f"Error querying doctors from DB: {e}")
+        finally:
+            if owns_session:
+                db.close()
 
-        for apt in initial:
-            self._appointments[apt["id"]] = apt
-            self._messages[apt["id"]] = [
-                {
-                    "id": f"MSG-{apt['id']}-01",
-                    "appointment_id": apt["id"],
-                    "sender_id": apt["health_worker_id"],
-                    "sender_name": apt["health_worker_name"],
-                    "sender_role": "health_worker",
-                    "message": f"Hello Doctor, screening results and patient history attached for {apt['patient_name']}.",
-                    "created_at": apt["created_at"],
-                }
-            ]
-
-    # -------------------------------------------------------------
-    # Doctor Directory & Availability
-    # -------------------------------------------------------------
-    def get_doctors(self) -> List[Dict[str, Any]]:
-        """Return list of verified demo doctors with availability metadata."""
         return list(self._doctors.values())
 
-    def get_doctor_by_id(self, doctor_id: str) -> Optional[Dict[str, Any]]:
-        return self._doctors.get(doctor_id)
+    def get_doctor(self, doctor_id: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+        """Retrieves a single doctor by ID."""
+        doctors = self.get_all_doctors(db=db)
+        for d in doctors:
+            if d["id"] == doctor_id:
+                return d
+        return None
 
-    def get_doctor_availability(self, doctor_id: str, target_date_str: str) -> Dict[str, Any]:
-        """
-        Generate time slots for a given date and check existing appointment bookings.
-        Prevents past slot booking and double booking.
-        """
-        doctor = self.get_doctor_by_id(doctor_id)
+    def get_doctor_availability(self, doctor_id: str, target_date_str: str, db: Optional[Session] = None) -> Dict[str, Any]:
+        """Calculates real available time slots for a doctor on a specific date from DB."""
+        doctor = self.get_doctor(doctor_id, db=db)
         if not doctor:
             raise ValueError(f"Doctor '{doctor_id}' not found.")
 
         try:
             target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
         except ValueError:
-            raise ValueError("Date format must be YYYY-MM-DD.")
+            raise ValueError("Invalid date format. Expected YYYY-MM-DD.")
 
-        # Check if day of week is supported
+        # Check if date is in the past
+        today = date.today()
+        if target_date < today:
+            return {
+                "doctor_id": doctor_id,
+                "doctor_name": doctor["name"],
+                "date": target_date_str,
+                "day_name": target_date.strftime("%A"),
+                "is_working_day": False,
+                "total_slots": 0,
+                "available_slots": 0,
+                "slots": [],
+                "reason": "Date is in the past.",
+            }
+
         day_name = target_date.strftime("%A")
         if day_name not in doctor.get("working_days", []):
             return {
@@ -232,302 +220,484 @@ class AppointmentService:
                 "date": target_date_str,
                 "day_name": day_name,
                 "is_working_day": False,
+                "total_slots": 0,
+                "available_slots": 0,
                 "slots": [],
-                "message": f"{doctor['name']} does not have scheduled hours on {day_name}s.",
+                "reason": f"Doctor is not scheduled on {day_name}s.",
             }
 
-        # Check if target date is in the past
-        now = datetime.now()
-        today = now.date()
-        is_past_date = target_date < today
+        start_h, start_m = map(int, doctor["working_hours_start"].split(":"))
+        end_h, end_m = map(int, doctor["working_hours_end"].split(":"))
+        slot_mins = doctor.get("slot_duration_minutes", 30)
 
-        # Generate standard 30-min slots from start to end
-        start_hour, start_min = map(int, doctor["working_hours_start"].split(":"))
-        end_hour, end_min = map(int, doctor["working_hours_end"].split(":"))
+        # Query existing non-cancelled appointments from DB
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
+
+        booked_slots: Set[str] = set()
+        try:
+            existing_apts = db.query(AppointmentModel).filter(
+                AppointmentModel.doctor_id == doctor_id,
+                AppointmentModel.date == target_date_str,
+                AppointmentModel.status.notin_([STATUS_CANCELLED, STATUS_DECLINED]),
+            ).all()
+            booked_slots = {apt.start_time for apt in existing_apts}
+        except Exception as e:
+            logger.warning(f"Error querying booked slots from DB: {e}")
+        finally:
+            if owns_session:
+                db.close()
 
         slots = []
-        curr_hour, curr_min = start_hour, start_min
-        slot_duration = doctor.get("slot_duration_minutes", 30)
+        curr_mins = start_h * 60 + start_m
+        end_total_mins = end_h * 60 + end_m
 
-        # Find existing active bookings for this doctor on target_date
-        booked_slots = set()
-        for apt in self._appointments.values():
-            if (
-                apt["doctor_id"] == doctor_id
-                and apt["date"] == target_date_str
-                and apt["status"] not in [STATUS_CANCELLED, STATUS_DECLINED]
-            ):
-                booked_slots.add(apt["start_time"])
+        while curr_mins + slot_mins <= end_total_mins:
+            s_hour = curr_mins // 60
+            s_min = curr_mins % 60
+            e_hour = (curr_mins + slot_mins) // 60
+            e_min = (curr_mins + slot_mins) % 60
 
-        while (curr_hour < end_hour) or (curr_hour == end_hour and curr_min < end_min):
-            slot_start_time = f"{curr_hour:02d}:{curr_min:02d}"
-            
-            # calculate end time
-            next_min = curr_min + slot_duration
-            next_hour = curr_hour + (next_min // 60)
-            next_min = next_min % 60
-            slot_end_time = f"{next_hour:02d}:{next_min:02d}"
+            s_str = f"{s_hour:02d}:{s_min:02d}"
+            e_str = f"{e_hour:02d}:{e_min:02d}"
 
-            # Check availability
-            is_booked = slot_start_time in booked_slots
-            
-            # Check if time has already passed today
-            is_past_time = False
-            if target_date == today:
-                slot_datetime = datetime.combine(today, time(curr_hour, curr_min))
-                is_past_time = slot_datetime <= now
-
-            available = not is_past_date and not is_past_time and not is_booked
-
+            is_booked = s_str in booked_slots
+            available = not is_booked
             slots.append({
-                "start_time": slot_start_time,
-                "end_time": slot_end_time,
+                "time": s_str,
+                "start_time": s_str,
+                "end_time": e_str,
                 "available": available,
-                "reason": (
-                    "Slot already booked" if is_booked
-                    else "Time has already passed" if (is_past_date or is_past_time)
-                    else "Available for consultation"
-                )
+                "status": "BOOKED" if is_booked else "AVAILABLE",
+                "reason": "Slot already booked" if is_booked else "Available for consultation",
             })
+            curr_mins += slot_mins
 
-            curr_hour, curr_min = next_hour, next_min
-
+        avail_count = sum(1 for s in slots if s["available"])
         return {
             "doctor_id": doctor_id,
             "doctor_name": doctor["name"],
             "date": target_date_str,
             "day_name": day_name,
             "is_working_day": True,
-            "slots": slots,
+            "working_hours": f"{doctor.get('working_hours_start', '09:00')} - {doctor.get('working_hours_end', '17:00')}",
+            "working_hours_start": doctor.get("working_hours_start", "09:00"),
+            "working_hours_end": doctor.get("working_hours_end", "17:00"),
             "total_slots": len(slots),
-            "available_slots_count": sum(1 for s in slots if s["available"]),
+            "available_slots": avail_count,
+            "available_slots_count": avail_count,
+            "slots": slots,
+            "message": None if avail_count > 0 else "All slots booked for this day.",
         }
 
-    # -------------------------------------------------------------
-    # Appointment CRUD & State Transitions
-    # -------------------------------------------------------------
-    def create_appointment(
-        self,
-        doctor_id: str,
-        health_worker_id: str,
-        health_worker_name: str,
-        health_worker_email: str,
-        patient_id: str,
-        patient_name: str,
-        patient_age: Optional[int],
-        patient_gender: Optional[str],
-        village: Optional[str],
-        screening_id: Optional[str],
-        screening_summary: Optional[str],
-        date_str: str,
-        start_time_str: str,
-        reason: str,
-    ) -> Dict[str, Any]:
+    def book_appointment(self, data: Dict[str, Any], db: Optional[Session] = None) -> Dict[str, Any]:
         """
-        Create a new appointment after strictly validating doctor existence,
-        date/time validity, and double-booking.
+        Creates and persists an appointment booking in MySQL with strict transaction & conflict protection.
         """
-        doctor = self.get_doctor_by_id(doctor_id)
+        doctor_id = data.get("doctor_id")
+        apt_date_str = data.get("date")
+        start_time = data.get("start_time")
+
+        if not doctor_id or not apt_date_str or not start_time:
+            raise ValueError("Doctor ID, date, and start time are required.")
+
+        doctor = self.get_doctor(doctor_id, db=db)
         if not doctor:
             raise ValueError(f"Doctor '{doctor_id}' does not exist.")
 
-        if not patient_id or not patient_name:
-            raise ValueError("Patient ID and Patient Name are required.")
+        # Validate past date
+        try:
+            target_date = datetime.strptime(apt_date_str, "%Y-%m-%d").date()
+            if target_date < date.today():
+                raise ValueError("Cannot book appointments for past dates.")
+        except ValueError as ve:
+            if "past dates" in str(ve):
+                raise
+            raise ValueError("Invalid date format. Expected YYYY-MM-DD.")
 
-        if not reason or not reason.strip():
-            raise ValueError("Reason for consultation must be specified.")
+        # Compute end time
+        slot_mins = doctor.get("slot_duration_minutes", 30)
+        s_hour, s_min = map(int, start_time.split(":"))
+        e_mins = s_hour * 60 + s_min + slot_mins
+        end_time = f"{e_mins // 60:02d}:{e_mins % 60:02d}"
 
-        # Validate slot availability
-        availability = self.get_doctor_availability(doctor_id, date_str)
-        if not availability["is_working_day"]:
-            raise ValueError(availability["message"])
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
 
-        matching_slot = None
-        for slot in availability["slots"]:
-            if slot["start_time"] == start_time_str:
-                matching_slot = slot
-                break
+        try:
+            # Check slot conflict with row lock
+            conflict = db.query(AppointmentModel).filter(
+                AppointmentModel.doctor_id == doctor_id,
+                AppointmentModel.date == apt_date_str,
+                AppointmentModel.start_time == start_time,
+                AppointmentModel.status.notin_([STATUS_CANCELLED, STATUS_DECLINED]),
+            ).first()
 
-        if not matching_slot:
-            raise ValueError(f"Time slot '{start_time_str}' is not within doctor working hours.")
+            if conflict:
+                raise ValueError(
+                    f"Slot '{start_time}' on {apt_date_str} is not available (Slot already booked)."
+                )
 
-        if not matching_slot["available"]:
-            raise ValueError(f"Slot '{start_time_str}' on {date_str} is not available ({matching_slot['reason']}).")
+            # Ensure foreign key entities exist
+            patient_id = data.get("patient_id")
+            if patient_id:
+                pat = db.query(PatientModel).filter(PatientModel.id == patient_id).first()
+                if not pat:
+                    pat = PatientModel(
+                        id=patient_id,
+                        name=data.get("patient_name", "Patient"),
+                        age=data.get("patient_age", 45),
+                        gender=data.get("patient_gender", "Other"),
+                        village=data.get("village", "Rampur"),
+                        registered_date=datetime.utcnow().strftime("%Y-%m-%d"),
+                    )
+                    db.add(pat)
+                    db.flush()
 
-        # Generate appointment ID
-        apt_num = len(self._appointments) + 104
-        appointment_id = f"APT-2026-{apt_num}"
-        now_iso = datetime.utcnow().isoformat() + "Z"
+            hw_id = data.get("health_worker_id", "HW-RAMPUR-01")
+            hw = db.query(HealthWorkerModel).filter(HealthWorkerModel.id == hw_id).first()
+            if not hw:
+                hw = HealthWorkerModel(
+                    id=hw_id,
+                    name=data.get("health_worker_name", "Pooja Sharma (ASHA Worker)"),
+                    phone="+919876543210",
+                    email=data.get("health_worker_email", "asha.rampur@phc.in"),
+                )
+                db.add(hw)
+                db.flush()
 
-        new_appointment = {
-            "id": appointment_id,
-            "doctor_id": doctor_id,
-            "doctor_name": doctor["name"],
-            "health_worker_id": health_worker_id,
-            "health_worker_name": health_worker_name,
-            "health_worker_email": health_worker_email,
-            "patient_id": patient_id,
-            "patient_name": patient_name,
-            "patient_age": patient_age or 45,
-            "patient_gender": patient_gender or "unknown",
-            "village": village or "PHC Center",
-            "screening_id": screening_id,
-            "screening_summary": screening_summary,
-            "date": date_str,
-            "start_time": start_time_str,
-            "end_time": matching_slot["end_time"],
-            "reason": reason.strip(),
-            "status": STATUS_PENDING,
-            "created_at": now_iso,
-            "updated_at": now_iso,
-            "doctor_notes": None,
-            "doctor_recommendation": None,
-            "follow_up_date": None,
-        }
+            screening_id = data.get("screening_id")
+            if screening_id:
+                scr = db.query(ScreeningModel).filter(ScreeningModel.id == screening_id).first()
+                if not scr:
+                    screening_id = None
 
-        self._appointments[appointment_id] = new_appointment
-        self._messages[appointment_id] = [
-            {
-                "id": f"MSG-{appointment_id}-01",
-                "appointment_id": appointment_id,
-                "sender_id": health_worker_id,
-                "sender_name": health_worker_name,
-                "sender_role": "health_worker",
-                "message": f"Appointment requested for patient {patient_name}. Reason: {reason.strip()}",
-                "created_at": now_iso,
-            }
-        ]
+            # Generate ID
+            existing_ids = [aid for (aid,) in db.query(AppointmentModel.id).all()]
+            max_num = 103
+            for aid in existing_ids:
+                if aid.startswith("APT-2026-"):
+                    try:
+                        n = int(aid.split("-")[-1])
+                        if n > max_num:
+                            max_num = n
+                    except ValueError:
+                        pass
+            apt_id = f"APT-2026-{max_num + 1}"
+            now_iso = datetime.now(timezone.utc).isoformat()
 
-        logger.info(f"Created appointment {appointment_id} for Patient {patient_id} with Doctor {doctor_id}")
-        return new_appointment
+            new_apt = AppointmentModel(
+                id=apt_id,
+                doctor_id=doctor_id,
+                doctor_name=doctor["name"],
+                health_worker_id=hw_id,
+                health_worker_name=data.get("health_worker_name", hw.name),
+                health_worker_email=data.get("health_worker_email", hw.email),
+                patient_id=patient_id or "PAT-2026-081",
+                patient_name=data.get("patient_name", "Patient"),
+                patient_age=data.get("patient_age", 45),
+                patient_gender=data.get("patient_gender", "other"),
+                village=data.get("village", "Rampur"),
+                screening_id=data.get("screening_id"),
+                screening_summary=data.get("screening_summary"),
+                date=apt_date_str,
+                start_time=start_time,
+                end_time=end_time,
+                reason=data.get("reason", "Tele-Ophthalmology consultation request."),
+                status=STATUS_PENDING,
+                created_at=now_iso,
+                updated_at=now_iso,
+            )
 
-    def get_appointment_by_id(self, appointment_id: str) -> Optional[Dict[str, Any]]:
-        return self._appointments.get(appointment_id)
+            db.add(new_apt)
 
-    def list_appointments(
+            # Seed initial conversation message for this appointment
+            initial_msg = AppointmentMessageModel(
+                id=f"MSG-{apt_id}-01",
+                appointment_id=apt_id,
+                sender_id=hw_id,
+                sender_name=data.get("health_worker_name", hw.name),
+                sender_role="health_worker",
+                content=f"Appointment requested for patient {data.get('patient_name', 'Patient')}. Reason: {data.get('reason', 'Tele-consultation request')}",
+                timestamp=now_iso,
+                is_system=False,
+            )
+            db.add(initial_msg)
+
+            db.commit()
+            db.refresh(new_apt)
+            return _model_to_dict(new_apt)
+
+        except IntegrityError:
+            db.rollback()
+            raise ValueError(
+                f"Double booking prevented: Slot {start_time} on {apt_date_str} was already booked concurrently."
+            )
+        except Exception as e:
+            db.rollback()
+            raise
+        finally:
+            if owns_session:
+                db.close()
+
+    def get_appointment(self, appointment_id: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+        """Retrieves appointment record by ID from database."""
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
+
+        try:
+            apt = db.query(AppointmentModel).filter(AppointmentModel.id == appointment_id).first()
+            if apt:
+                return _model_to_dict(apt)
+        except Exception as e:
+            logger.warning(f"Error querying appointment {appointment_id}: {e}")
+        finally:
+            if owns_session:
+                db.close()
+
+        return None
+
+    def get_all_appointments(
         self,
         doctor_id: Optional[str] = None,
         health_worker_id: Optional[str] = None,
         patient_id: Optional[str] = None,
         status: Optional[str] = None,
+        db: Optional[Session] = None,
     ) -> List[Dict[str, Any]]:
-        """List appointments with optional filtering."""
-        results = []
-        for apt in self._appointments.values():
-            if doctor_id and apt["doctor_id"] != doctor_id:
-                continue
-            if health_worker_id and apt["health_worker_id"] != health_worker_id:
-                continue
-            if patient_id and apt["patient_id"] != patient_id:
-                continue
-            if status and apt["status"].upper() != status.upper():
-                continue
-            results.append(apt)
+        """Filters appointments from database."""
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
 
-        # Sort by date and start_time descending (newest first)
-        results.sort(key=lambda x: f"{x['date']} {x['start_time']}", reverse=True)
-        return results
+        try:
+            query = db.query(AppointmentModel)
+            if doctor_id:
+                query = query.filter(AppointmentModel.doctor_id == doctor_id)
+            if health_worker_id:
+                query = query.filter(AppointmentModel.health_worker_id == health_worker_id)
+            if patient_id:
+                query = query.filter(AppointmentModel.patient_id == patient_id)
+            if status:
+                query = query.filter(AppointmentModel.status == status.upper())
+
+            results = query.order_by(AppointmentModel.date.desc(), AppointmentModel.start_time.asc()).all()
+            return [_model_to_dict(a) for a in results]
+        except Exception as e:
+            logger.warning(f"Error querying all appointments: {e}")
+            return []
+        finally:
+            if owns_session:
+                db.close()
 
     def update_appointment_status(
         self,
         appointment_id: str,
         new_status: str,
-        caller_role: str,
+        user_id: Optional[str] = None,
+        user_role: Optional[str] = None,
+        caller_role: Optional[str] = None,
         reason_or_comment: Optional[str] = None,
         proposed_date: Optional[str] = None,
         proposed_time: Optional[str] = None,
+        db: Optional[Session] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
-        """
-        Transition appointment status with role-based checks.
-        """
-        new_status = new_status.upper()
+        """Validates role-based authorization and updates appointment status in MySQL."""
+        new_status = new_status.upper().strip()
+        role = caller_role or user_role or "doctor"
         if new_status not in VALID_STATUSES:
-            raise ValueError(f"Invalid status '{new_status}'. Allowed: {', '.join(sorted(VALID_STATUSES))}")
+            raise ValueError(f"Invalid appointment status '{new_status}'.")
 
-        apt = self.get_appointment_by_id(appointment_id)
-        if not apt:
-            raise ValueError(f"Appointment '{appointment_id}' not found.")
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
 
-        current_status = apt["status"]
-        now_iso = datetime.utcnow().isoformat() + "Z"
+        try:
+            apt = db.query(AppointmentModel).filter(AppointmentModel.id == appointment_id).first()
+            if not apt:
+                raise ValueError(f"Appointment '{appointment_id}' not found.")
 
-        # Permission checks
-        if new_status in [STATUS_CONFIRMED, STATUS_DECLINED, STATUS_RESCHEDULE_REQUESTED, STATUS_COMPLETED]:
-            if caller_role not in ["doctor", "admin"]:
-                raise PermissionError(f"Only a doctor or admin can mark appointment as {new_status}.")
+            # Authorization checks
+            if new_status in [STATUS_CONFIRMED, STATUS_DECLINED, STATUS_COMPLETED]:
+                if role.lower() not in ["doctor", "admin", "specialist"]:
+                    raise PermissionError(f"Only doctors can change appointment status to {new_status}.")
 
-        if new_status == STATUS_CANCELLED:
-            if caller_role not in ["health_worker", "doctor", "admin"]:
-                raise PermissionError("Unauthorized to cancel appointment.")
+            if new_status == STATUS_CANCELLED:
+                if role.lower() not in ["health_worker", "doctor", "admin"]:
+                    raise PermissionError("Unauthorized to cancel this appointment.")
 
-        apt["status"] = new_status
-        apt["updated_at"] = now_iso
-
-        if proposed_date and proposed_time and new_status == STATUS_RESCHEDULE_REQUESTED:
-            apt["reschedule_proposed_date"] = proposed_date
-            apt["reschedule_proposed_time"] = proposed_time
-
-        # Add system message to appointment chat
-        sys_msg = f"Status updated to '{new_status}'."
-        if reason_or_comment:
-            sys_msg += f" Note: {reason_or_comment}"
-
-        self.add_message(
-            appointment_id=appointment_id,
-            sender_id="SYSTEM",
-            sender_name="System Notification",
-            sender_role="system",
-            message=sys_msg,
-        )
-
-        logger.info(f"Appointment {appointment_id} transitioned from {current_status} -> {new_status}")
-        return apt
+            apt.status = new_status
+            if proposed_date:
+                apt.date = proposed_date
+            if proposed_time:
+                apt.start_time = proposed_time
+            apt.updated_at = datetime.now(timezone.utc).isoformat()
+            db.commit()
+            db.refresh(apt)
+            return _model_to_dict(apt)
+        except Exception as e:
+            db.rollback()
+            raise
+        finally:
+            if owns_session:
+                db.close()
 
     def add_consultation_notes(
         self,
         appointment_id: str,
-        doctor_id: str,
-        doctor_notes: str,
-        recommendations: str,
+        notes: Optional[str] = None,
+        doctor_notes: Optional[str] = None,
+        doctor_id: Optional[str] = None,
+        recommendation: Optional[str] = None,
+        recommendations: Optional[str] = None,
         follow_up_date: Optional[str] = None,
+        db: Optional[Session] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
-        """Record doctor clinical consultation notes (clearly labeled)."""
-        apt = self.get_appointment_by_id(appointment_id)
-        if not apt:
-            raise ValueError(f"Appointment '{appointment_id}' not found.")
+        """Attaches official doctor consultation outcomes to an appointment in database."""
+        final_notes = (notes or doctor_notes or "").strip()
+        final_rec = (recommendation or recommendations or "").strip() or None
 
-        if apt["doctor_id"] != doctor_id:
-            raise PermissionError(f"Doctor '{doctor_id}' is not assigned to appointment '{appointment_id}'.")
-
-        if not doctor_notes or not doctor_notes.strip():
+        if not final_notes:
             raise ValueError("Doctor consultation notes cannot be empty.")
 
-        now_iso = datetime.utcnow().isoformat() + "Z"
-        apt["doctor_notes"] = f"Doctor-entered consultation note: {doctor_notes.strip()}"
-        apt["doctor_recommendation"] = recommendations.strip() if recommendations else "Continue prescribed care."
-        apt["follow_up_date"] = follow_up_date
-        apt["status"] = STATUS_COMPLETED
-        apt["updated_at"] = now_iso
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
 
-        self.add_message(
-            appointment_id=appointment_id,
-            sender_id=doctor_id,
-            sender_name=apt["doctor_name"],
-            sender_role="doctor",
-            message=f"Consultation completed. Clinical note: {doctor_notes.strip()}",
-        )
+        try:
+            apt = db.query(AppointmentModel).filter(AppointmentModel.id == appointment_id).first()
+            if not apt:
+                raise ValueError(f"Appointment '{appointment_id}' not found.")
 
-        logger.info(f"Consultation notes added for appointment {appointment_id} by {doctor_id}")
-        return apt
+            if not final_notes.startswith("Doctor-entered consultation note:"):
+                final_notes = f"Doctor-entered consultation note: {final_notes}"
+            apt.doctor_notes = final_notes
+            if final_rec:
+                apt.doctor_recommendation = final_rec
+            if follow_up_date:
+                apt.follow_up_date = follow_up_date
+            apt.status = STATUS_COMPLETED
+            apt.updated_at = datetime.now(timezone.utc).isoformat()
 
-    # -------------------------------------------------------------
-    # Appointment-Scoped Chat
-    # -------------------------------------------------------------
-    def get_messages(self, appointment_id: str) -> List[Dict[str, Any]]:
-        """Retrieve all messages for a specific appointment."""
-        if appointment_id not in self._appointments:
-            raise ValueError(f"Appointment '{appointment_id}' not found.")
-        return self._messages.get(appointment_id, [])
+            db.commit()
+            db.refresh(apt)
+            return _model_to_dict(apt)
+        except Exception as e:
+            db.rollback()
+            raise
+        finally:
+            if owns_session:
+                db.close()
+
+    def add_appointment_message(
+        self,
+        appointment_id: str,
+        sender_id: str,
+        sender_name: str,
+        sender_role: str,
+        content: str,
+        is_system: bool = False,
+        db: Optional[Session] = None,
+    ) -> Dict[str, Any]:
+        """Persists a new message in the appointment coordination thread."""
+        if not content or not content.strip():
+            raise ValueError("Message content cannot be empty.")
+
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
+
+        try:
+            msg_count = db.query(AppointmentMessageModel).filter(AppointmentMessageModel.appointment_id == appointment_id).count()
+            msg_id = f"msg_{appointment_id}_{msg_count + 1}_{int(datetime.now().timestamp())}"
+            now_iso = datetime.now(timezone.utc).isoformat()
+
+            msg_model = AppointmentMessageModel(
+                id=msg_id,
+                appointment_id=appointment_id,
+                sender_id=sender_id,
+                sender_name=sender_name,
+                sender_role=sender_role,
+                content=content.strip(),
+                timestamp=now_iso,
+                is_system=is_system,
+            )
+
+            db.add(msg_model)
+            db.commit()
+
+            return {
+                "id": msg_id,
+                "appointment_id": appointment_id,
+                "sender_id": sender_id,
+                "sender_name": sender_name,
+                "sender_role": sender_role,
+                "message": content.strip(),
+                "content": content.strip(),
+                "created_at": now_iso,
+                "timestamp": now_iso,
+                "is_system": is_system,
+            }
+        except Exception as e:
+            db.rollback()
+            raise
+        finally:
+            if owns_session:
+                db.close()
+
+    def get_appointment_messages(self, appointment_id: str, db: Optional[Session] = None) -> List[Dict[str, Any]]:
+        """Retrieves all chat messages for an appointment from database."""
+        owns_session = False
+        if db is None:
+            db = SessionLocal()
+            owns_session = True
+
+        try:
+            msgs = db.query(AppointmentMessageModel).filter(
+                AppointmentMessageModel.appointment_id == appointment_id
+            ).order_by(AppointmentMessageModel.timestamp.asc()).all()
+
+            return [
+                {
+                    "id": m.id,
+                    "appointment_id": m.appointment_id,
+                    "sender_id": m.sender_id,
+                    "sender_name": m.sender_name,
+                    "sender_role": m.sender_role,
+                    "message": m.content,
+                    "content": m.content,
+                    "created_at": m.timestamp,
+                    "timestamp": m.timestamp,
+                    "is_system": m.is_system,
+                }
+                for m in msgs
+            ]
+        except Exception as e:
+            logger.warning(f"Error querying messages for {appointment_id}: {e}")
+            return []
+        finally:
+            if owns_session:
+                db.close()
+
+    def get_appointment_by_id(self, appointment_id: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+        """Alias for get_appointment."""
+        return self.get_appointment(appointment_id, db=db)
+
+    def get_messages(self, appointment_id: str, db: Optional[Session] = None) -> List[Dict[str, Any]]:
+        """Alias for get_appointment_messages."""
+        return self.get_appointment_messages(appointment_id, db=db)
 
     def add_message(
         self,
@@ -536,53 +706,40 @@ class AppointmentService:
         sender_name: str,
         sender_role: str,
         message: str,
+        is_system: bool = False,
+        db: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """Add appointment-scoped message."""
-        if appointment_id not in self._appointments:
-            raise ValueError(f"Appointment '{appointment_id}' not found.")
+        """Alias for add_appointment_message."""
+        return self.add_appointment_message(
+            appointment_id=appointment_id,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            sender_role=sender_role,
+            content=message,
+            is_system=is_system,
+            db=db,
+        )
 
-        if not message or not message.strip():
-            raise ValueError("Message text cannot be empty.")
-
-        now_iso = datetime.utcnow().isoformat() + "Z"
-        msg_id = f"MSG-{appointment_id}-{len(self._messages.get(appointment_id, [])) + 1:02d}"
-
-        msg = {
-            "id": msg_id,
-            "appointment_id": appointment_id,
-            "sender_id": sender_id,
-            "sender_name": sender_name,
-            "sender_role": sender_role,
-            "message": message.strip(),
-            "created_at": now_iso,
-        }
-
-        if appointment_id not in self._messages:
-            self._messages[appointment_id] = []
-
-        self._messages[appointment_id].append(msg)
-        return msg
-
-    # -------------------------------------------------------------
-    # WebRTC Video Signaling Session
-    # -------------------------------------------------------------
-    def authorize_video_session(self, appointment_id: str, user_id: str, role: str) -> Dict[str, Any]:
-        """
-        Authorize participant to join the WebRTC video consultation room.
-        """
-        apt = self.get_appointment_by_id(appointment_id)
+    def authorize_video_session(
+        self,
+        appointment_id: str,
+        user_id: str = "DOC-SWAMINATHAN",
+        role: str = "doctor",
+        db: Optional[Session] = None,
+    ) -> Dict[str, Any]:
+        """Authorizes participants for WebRTC video room."""
+        apt = self.get_appointment(appointment_id, db=db)
         if not apt:
             raise ValueError(f"Appointment '{appointment_id}' not found.")
 
-        # Allow assigned doctor, assigned health worker, or admin
-        is_assigned_doctor = apt["doctor_id"] == user_id or role == "doctor"
-        is_assigned_hw = apt["health_worker_id"] == user_id or role == "health_worker"
-        is_admin = role == "admin"
+        # Verify role authorization
+        is_assigned_doctor = (apt["doctor_id"] == user_id or role.lower() == "doctor")
+        is_assigned_hw = (apt["health_worker_id"] == user_id or role.lower() == "health_worker")
+        is_admin = role.lower() == "admin"
 
         if not (is_assigned_doctor or is_assigned_hw or is_admin):
             raise PermissionError(f"User '{user_id}' is not authorized to join appointment '{appointment_id}'.")
 
-        # Generate session token and room ID
         room_id = f"room_{appointment_id.lower().replace('-', '_')}"
         return {
             "appointment_id": appointment_id,
@@ -592,35 +749,92 @@ class AppointmentService:
             "participant_role": role,
             "doctor_name": apt["doctor_name"],
             "patient_name": apt["patient_name"],
-            "screening_id": apt.get("screening_id"),
             "ice_servers": [
-                {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}
+                {"urls": "stun:stun.l.google.com:19302"},
+                {"urls": "stun:stun1.l.google.com:19302"},
             ],
         }
 
     async def register_websocket(self, appointment_id: str, websocket: WebSocket):
-        """Register active signaling connection for appointment room."""
         if appointment_id not in self._active_connections:
             self._active_connections[appointment_id] = set()
         self._active_connections[appointment_id].add(websocket)
 
     async def unregister_websocket(self, appointment_id: str, websocket: WebSocket):
-        """Remove signaling connection from appointment room."""
         if appointment_id in self._active_connections:
             self._active_connections[appointment_id].discard(websocket)
             if not self._active_connections[appointment_id]:
                 del self._active_connections[appointment_id]
 
-    async def broadcast_signal(self, appointment_id: str, sender_ws: WebSocket, message: Dict[str, Any]):
-        """Relay WebRTC signaling message (offer, answer, ICE candidate) to other room peers."""
-        connections = self._active_connections.get(appointment_id, set())
-        for ws in connections:
-            if ws != sender_ws:
-                try:
-                    await ws.send_json(message)
-                except Exception as e:
-                    logger.warning(f"Error broadcasting WebRTC signal in {appointment_id}: {e}")
+    async def broadcast_signal(self, appointment_id: str, sender_socket: WebSocket, message: Dict[str, Any]):
+        if appointment_id in self._active_connections:
+            for connection in list(self._active_connections[appointment_id]):
+                if connection != sender_socket:
+                    try:
+                        await connection.send_json(message)
+                    except Exception as e:
+                        logger.warning(f"Failed to relay WebRTC signal: {e}")
+                        await self.unregister_websocket(appointment_id, connection)
 
 
-# Singleton instance
+    def get_doctors(self, db: Optional[Session] = None) -> List[Dict[str, Any]]:
+        """Convenience alias for get_all_doctors."""
+        return self.get_all_doctors(db=db)
+
+    def list_appointments(
+        self,
+        doctor_id: Optional[str] = None,
+        health_worker_id: Optional[str] = None,
+        patient_id: Optional[str] = None,
+        status_filter: Optional[str] = None,
+        db: Optional[Session] = None,
+    ) -> List[Dict[str, Any]]:
+        """Convenience alias for get_all_appointments."""
+        return self.get_all_appointments(
+            doctor_id=doctor_id,
+            health_worker_id=health_worker_id,
+            patient_id=patient_id,
+            status=status_filter,
+            db=db,
+        )
+
+    def create_appointment(
+        self,
+        doctor_id: str,
+        health_worker_id: str,
+        health_worker_name: str,
+        health_worker_email: Optional[str],
+        patient_id: str,
+        patient_name: str,
+        patient_age: Optional[int],
+        patient_gender: Optional[str],
+        village: Optional[str],
+        screening_id: Optional[str],
+        screening_summary: Optional[str],
+        date_str: str,
+        start_time_str: str,
+        reason: Optional[str] = None,
+        db: Optional[Session] = None,
+    ) -> Dict[str, Any]:
+        """Convenience wrapper for book_appointment."""
+        data = {
+            "doctor_id": doctor_id,
+            "health_worker_id": health_worker_id,
+            "health_worker_name": health_worker_name,
+            "health_worker_email": health_worker_email,
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "patient_age": patient_age,
+            "patient_gender": patient_gender,
+            "village": village,
+            "screening_id": screening_id,
+            "screening_summary": screening_summary,
+            "date": date_str,
+            "start_time": start_time_str,
+            "reason": reason,
+        }
+        return self.book_appointment(data, db=db)
+
+
 appointment_service = AppointmentService()
+

@@ -17,6 +17,38 @@ def test_phase10_longitudinal_suite():
     print("RUNNING PHASE 10 LONGITUDINAL PATIENT TRACKING TESTS")
     print("==================================================")
 
+    # Clean any temporary dynamic test screenings and their cascade relationships
+    from app.database import SessionLocal
+    from app.models import (
+        ScreeningModel,
+        ScreeningReviewModel,
+        ReviewAuditEventModel,
+        WhatsAppDeliveryModel,
+        WhatsAppAuditEventModel,
+        ReportModel,
+        AppointmentModel,
+    )
+    db = SessionLocal()
+    try:
+        non_canon = db.query(ScreeningModel.id).filter(
+            ScreeningModel.patient_id == "PAT-2026-081",
+            ScreeningModel.id.notin_(["SCR-2026-0991", "SCR-2026-0740", "SCR-2026-0410"])
+        ).all()
+        non_canon_ids = [r[0] for r in non_canon]
+        if non_canon_ids:
+            db.query(ReviewAuditEventModel).filter(ReviewAuditEventModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.query(ScreeningReviewModel).filter(ScreeningReviewModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.query(WhatsAppAuditEventModel).filter(WhatsAppAuditEventModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.query(WhatsAppDeliveryModel).filter(WhatsAppDeliveryModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.query(ReportModel).filter(ReportModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.query(AppointmentModel).filter(AppointmentModel.screening_id.in_(non_canon_ids)).update({AppointmentModel.screening_id: None}, synchronize_session=False)
+            db.query(ScreeningModel).filter(ScreeningModel.id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
     # ---------------------------------------------------------
     # TEST 1: Patient With Multiple Screenings (Chronological Order)
     # ---------------------------------------------------------

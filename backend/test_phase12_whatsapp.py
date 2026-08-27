@@ -23,6 +23,22 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         print("RUNNING PHASE 12 WHATSAPP CLINICAL REPORT TESTS")
         print("==================================================")
 
+        # Clean existing test deliveries to ensure fresh test runs
+        from app.database import SessionLocal
+        from app.models import WhatsAppDeliveryModel, WhatsAppAuditEventModel, ScreeningReviewModel, ReviewAuditEventModel
+        db = SessionLocal()
+        try:
+            test_sids = ["SCR-PHASE12-ACCEPTED", "SCR-PHASE12-RECAPTURE", "SCR-FAILED-001", "SCR-UNREVIEWED-999", "SCR-UNREVIEWED-888"]
+            db.query(WhatsAppAuditEventModel).filter(WhatsAppAuditEventModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
+            db.query(WhatsAppDeliveryModel).filter(WhatsAppDeliveryModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
+            db.query(ReviewAuditEventModel).filter(ReviewAuditEventModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
+            db.query(ScreeningReviewModel).filter(ScreeningReviewModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
+            db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
+
         # Pre-seed a doctor-reviewed accepted screening
         process_doctor_review(
             request=DoctorReviewRequest(
@@ -189,7 +205,37 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
 
     def test_10_provider_failure_handling(self):
         """10. Provider failure handling: Status response indicates failure correctly."""
-        # Create a mock failed record to verify error serialization
+        from app.database import SessionLocal
+        from app.models import WhatsAppDeliveryModel
+        from datetime import timezone
+        db = SessionLocal()
+        try:
+            del_rec = db.query(WhatsAppDeliveryModel).filter(WhatsAppDeliveryModel.screening_id == "SCR-FAILED-001").first()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            if not del_rec:
+                del_rec = WhatsAppDeliveryModel(
+                    id="DEL-SCR-FAILED-001",
+                    screening_id="SCR-FAILED-001",
+                    recipient_phone="+919876543210",
+                    health_worker_id="HW-RAMPUR-01",
+                    health_worker_name="Pooja Sharma (ASHA Worker)",
+                    language="en",
+                    status="FAILED",
+                    error_message="Recipient phone number not registered on WhatsApp.",
+                    retry_count=0,
+                    created_at=now_iso,
+                    sent_at=now_iso,
+                )
+                db.add(del_rec)
+            else:
+                del_rec.status = "FAILED"
+                del_rec.error_message = "Recipient phone number not registered on WhatsApp."
+                del_rec.retry_count = 0
+            db.commit()
+        finally:
+            db.close()
+
+        # Also set in in-memory store for fallback
         whatsapp_service._delivery_records["SCR-FAILED-001"] = WhatsAppDeliveryRecord(
             screening_id="SCR-FAILED-001",
             recipient_phone="+919876543210",

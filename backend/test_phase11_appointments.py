@@ -375,6 +375,20 @@ def test_17_ai_assistant_screening_sharing_qa():
 
 
 if __name__ == "__main__":
+    from app.database import SessionLocal
+    from app.models import AppointmentModel, AppointmentMessageModel
+    from app.db_seeder import seed_database_if_empty
+    db_clean = SessionLocal()
+    try:
+        db_clean.query(AppointmentMessageModel).delete()
+        db_clean.query(AppointmentModel).filter(AppointmentModel.id > "APT-2026-103").delete()
+        db_clean.commit()
+        seed_database_if_empty(db_clean)
+    except Exception:
+        db_clean.rollback()
+    finally:
+        db_clean.close()
+
     print("==================================================")
     print("RUNNING PHASE 11 TELE-OPHTHALMOLOGY TESTS")
     print("==================================================")

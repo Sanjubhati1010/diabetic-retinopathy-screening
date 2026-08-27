@@ -1,15 +1,32 @@
 import os
 import io
+import json
+import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header, WebSocket, WebSocketDisconnect, Query, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header, WebSocket, WebSocketDisconnect, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse, PlainTextResponse
 from PIL import Image
+from sqlalchemy.orm import Session
 
+from app.database import get_db, SessionLocal, Base, engine, check_db_health
+from app.models import (
+    PatientModel,
+    ScreeningModel,
+    DoctorModel,
+    HealthWorkerModel,
+    AppointmentModel,
+    ScreeningReviewModel,
+    ReviewAuditEventModel,
+    ReportModel,
+    WhatsAppDeliveryModel,
+    WhatsAppAuditEventModel,
+)
+from app.db_seeder import seed_database_if_empty
 from app.schemas import (
     HealthResponse,
     PredictionResponse,
@@ -47,6 +64,13 @@ from app.schemas import (
     HealthWorkerProfile,
     HealthWorkerOptInRequest,
     ReportPdfResponse,
+    PatientCreateRequest,
+    PatientUpdateRequest,
+    PatientResponse,
+    PatientListResponse,
+    ScreeningCreateRequest,
+    ScreeningRecordResponse,
+    ScreeningListResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
@@ -82,13 +106,38 @@ MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 15 MB
 app = FastAPI(
     title="Explainable AI for Diabetic Retinopathy Screening in Rural India",
     description=(
-        "FastAPI Backend providing deep learning EfficientNet-B0 inference and "
-        "Grad-CAM visual explainability maps for Diabetic Retinopathy community screening."
+        "FastAPI Backend providing deep learning EfficientNet-B0 inference, "
+        "Grad-CAM visual explainability maps, and persistent MySQL/SQLAlchemy clinical storage."
     ),
-    version="1.0.0",
+    version="1.13.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Ensure tables and seed exist at import time
+try:
+    Base.metadata.create_all(bind=engine)
+    _db_init = SessionLocal()
+    try:
+        seed_database_if_empty(_db_init)
+    finally:
+        _db_init.close()
+except Exception as e:
+    logger.warning(f"Initial DB seed warning: {e}")
+
+# Startup Hook: Initialize DB & Seed Demo Records
+@app.on_event("startup")
+async def startup_event():
+    try:
+        Base.metadata.create_all(bind=engine)
+        db = SessionLocal()
+        try:
+            seed_database_if_empty(db)
+        finally:
+            db.close()
+        logger.info("Database initialized and verified on startup.")
+    except Exception as e:
+        logger.error(f"Database initialization error on startup: {e}")
 
 # CORS Configuration
 default_origins = [
@@ -132,7 +181,6 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
             detail="Please upload a valid image file. No file was provided."
         )
 
-    # Check extension
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -140,7 +188,6 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
             detail="Please upload a valid image file (.jpg, .jpeg, .png)."
         )
 
-    # Read and check size
     try:
         content = await file.read()
     except Exception as e:
@@ -162,7 +209,6 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
             detail=f"File size exceeds the maximum limit of {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB. Please upload a smaller image file."
         )
 
-    # Verify PIL image integrity
     try:
         image = Image.open(io.BytesIO(content))
         image.verify()
@@ -181,6 +227,7 @@ async def root():
     return {
         "service": "Explainable AI for Diabetic Retinopathy Screening in Rural India",
         "status": "operational",
+        "database": "connected" if check_db_health() else "degraded",
         "docs": "/docs",
         "health": "/api/health",
     }
@@ -217,19 +264,18 @@ async def validate_image(file: UploadFile = File(...)):
     - Verifies file format, integrity & resolution (>= 224x224)
     - Verifies retinal fundus spectral & hue domain signature
     - Evaluates sharpness/focus (Laplacian blur score), illumination & visible coverage
-    - Assigns structured screening status ('Ready for Screening', 'Image Quality Warning', or 'Image Re-capture Required')
     """
     image_bytes = await validate_and_read_image(file)
 
     try:
         pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        result = model_service.validate_image_quality(pil_image)
-        return ImageValidationResponse(**result)
+        validation_result = model_service.validate_image_quality(pil_image)
+        return ImageValidationResponse(**validation_result)
     except Exception as e:
-        logger.error(f"Image validation gate encountered an error: {e}", exc_info=False)
+        logger.error(f"Image validation processing failed: {e}", exc_info=False)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please upload a valid image file."
+            detail="Invalid or corrupt image content. Please upload a valid retinal fundus scan."
         )
 
 
@@ -245,9 +291,6 @@ async def validate_image(file: UploadFile = File(...)):
     summary="Predict Diabetic Retinopathy Severity",
 )
 async def predict_retinopathy(file: UploadFile = File(...)):
-    """
-    Accepts a retinal fundus scan and outputs predicted ICDR severity and probability scores across all 5 classes.
-    """
     image_bytes = await validate_and_read_image(file)
 
     try:
@@ -256,22 +299,12 @@ async def predict_retinopathy(file: UploadFile = File(...)):
     except ValueError as e:
         error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
         logger.warning(f"Validation rejected image: {error_msg}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
     except RuntimeError as e:
-        logger.warning(f"Prediction requested while model not loaded: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI screening is temporarily unavailable. Please try again."
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI screening is temporarily unavailable. Please try again.")
     except Exception as e:
         logger.error(f"Inference execution failed: {e}", exc_info=False)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI screening is temporarily unavailable. Please try again."
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="AI screening is temporarily unavailable. Please try again.")
 
 
 @app.post(
@@ -285,12 +318,7 @@ async def predict_retinopathy(file: UploadFile = File(...)):
     tags=["Explainability"],
     summary="Generate Grad-CAM Visual Explainability Heatmap",
 )
-async def explain_prediction(
-    file: UploadFile = File(...),
-):
-    """
-    Computes a Grad-CAM localization heatmap for the input fundus scan.
-    """
+async def explain_prediction(file: UploadFile = File(...)):
     image_bytes = await validate_and_read_image(file)
 
     try:
@@ -298,23 +326,12 @@ async def explain_prediction(
         return ExplainResponse(**result)
     except ValueError as e:
         error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
-        logger.warning(f"Validation rejected image during explain: {error_msg}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
     except RuntimeError as e:
-        logger.warning(f"Explain requested while model not loaded: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI screening is temporarily unavailable. Please try again."
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI screening is temporarily unavailable. Please try again.")
     except Exception as e:
         logger.error(f"Grad-CAM generation failed: {e}", exc_info=False)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI screening is temporarily unavailable. Please try again."
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="AI screening is temporarily unavailable. Please try again.")
 
 
 @app.post(
@@ -328,9 +345,7 @@ async def explain_prediction(
     tags=["Screening"],
     summary="Complete Retinal Screening: AI Prediction + Explainable Grad-CAM",
 )
-async def analyze_screening(
-    file: UploadFile = File(...),
-):
+async def analyze_screening(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Combined Phase 2 Screening Pipeline:
     - Pre-inference validation & quality assessment
@@ -346,24 +361,421 @@ async def analyze_screening(
         return ScreeningAnalysisResponse(**result)
     except ValueError as e:
         error_msg = str(e) if str(e) else "Invalid retinal image. Please upload a valid fundus image."
-        logger.warning(f"Validation rejected image in screening analysis: {error_msg}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
     except RuntimeError as e:
-        logger.warning(f"Analysis requested while model not loaded: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI screening is temporarily unavailable. Please try again."
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI screening is temporarily unavailable. Please try again.")
     except Exception as e:
         logger.error(f"Screening analysis pipeline failed: {e}", exc_info=False)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI screening is temporarily unavailable. Please try again."
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="AI screening is temporarily unavailable. Please try again.")
 
+
+# =====================================================================
+# Phase 13: Persistent Patient Management Endpoints
+# =====================================================================
+
+@app.get(
+    "/api/patients",
+    response_model=PatientListResponse,
+    tags=["Patients"],
+    summary="Get List of Registered Patients",
+)
+async def list_patients(db: Session = Depends(get_db)):
+    """Returns all registered patients from MySQL database."""
+    try:
+        patients = db.query(PatientModel).order_by(PatientModel.created_at.desc()).all()
+        result = []
+        for p in patients:
+            symptoms = json.loads(p.symptoms_json) if p.symptoms_json else []
+            result.append(
+                PatientResponse(
+                    id=p.id,
+                    abha_id=p.abha_id,
+                    name=p.name,
+                    age=p.age,
+                    gender=p.gender,
+                    phone=p.phone,
+                    village=p.village,
+                    district=p.district,
+                    diabetes_duration=p.diabetes_duration,
+                    last_hba1c=p.last_hba1c,
+                    insulin_use=p.insulin_use,
+                    visual_acuity_od=p.visual_acuity_od,
+                    visual_acuity_os=p.visual_acuity_os,
+                    symptoms=symptoms,
+                    registered_date=p.registered_date,
+                    last_screened=p.last_screened,
+                    latest_status=p.latest_status,
+                    referral_urgency=p.referral_urgency,
+                    doctor_verified=p.doctor_verified,
+                )
+            )
+        return PatientListResponse(total=len(result), patients=result)
+    except Exception as e:
+        logger.error(f"Error fetching patients from DB: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to fetch patients.")
+
+
+@app.post(
+    "/api/patients",
+    response_model=PatientResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Patients"],
+    summary="Register a New Patient",
+)
+async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db)):
+    """Registers and persists a new patient into MySQL database."""
+    try:
+        count = db.query(PatientModel).count()
+        pat_id = f"PAT-2026-{count + 81:03d}"
+        now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        new_pat = PatientModel(
+            id=pat_id,
+            abha_id=req.abha_id,
+            name=req.name,
+            age=req.age,
+            gender=req.gender,
+            phone=req.phone,
+            village=req.village,
+            district=req.district,
+            diabetes_duration=req.diabetes_duration,
+            last_hba1c=req.last_hba1c,
+            insulin_use=req.insulin_use,
+            visual_acuity_od=req.visual_acuity_od or "6/6",
+            visual_acuity_os=req.visual_acuity_os or "6/6",
+            symptoms_json=json.dumps(req.symptoms or []),
+            registered_date=now_date,
+            last_screened="-",
+            latest_status="drUncertain",
+            referral_urgency="routine",
+            doctor_verified=False,
+        )
+        db.add(new_pat)
+        db.commit()
+        db.refresh(new_pat)
+
+        return PatientResponse(
+            id=new_pat.id,
+            abha_id=new_pat.abha_id,
+            name=new_pat.name,
+            age=new_pat.age,
+            gender=new_pat.gender,
+            phone=new_pat.phone,
+            village=new_pat.village,
+            district=new_pat.district,
+            diabetes_duration=new_pat.diabetes_duration,
+            last_hba1c=new_pat.last_hba1c,
+            insulin_use=new_pat.insulin_use,
+            visual_acuity_od=new_pat.visual_acuity_od,
+            visual_acuity_os=new_pat.visual_acuity_os,
+            symptoms=req.symptoms or [],
+            registered_date=new_pat.registered_date,
+            last_screened=new_pat.last_screened,
+            latest_status=new_pat.latest_status,
+            referral_urgency=new_pat.referral_urgency,
+            doctor_verified=new_pat.doctor_verified,
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving patient to database: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to save data. Please try again.")
+
+
+@app.get(
+    "/api/patients/{patient_id}",
+    response_model=PatientResponse,
+    tags=["Patients"],
+    summary="Get Specific Patient by ID",
+)
+async def get_patient_detail(patient_id: str, db: Session = Depends(get_db)):
+    pat = db.query(PatientModel).filter(PatientModel.id == patient_id).first()
+    if not pat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Patient '{patient_id}' not found.")
+    symptoms = json.loads(pat.symptoms_json) if pat.symptoms_json else []
+    return PatientResponse(
+        id=pat.id,
+        abha_id=pat.abha_id,
+        name=pat.name,
+        age=pat.age,
+        gender=pat.gender,
+        phone=pat.phone,
+        village=pat.village,
+        district=pat.district,
+        diabetes_duration=pat.diabetes_duration,
+        last_hba1c=pat.last_hba1c,
+        insulin_use=pat.insulin_use,
+        visual_acuity_od=pat.visual_acuity_od,
+        visual_acuity_os=pat.visual_acuity_os,
+        symptoms=symptoms,
+        registered_date=pat.registered_date,
+        last_screened=pat.last_screened,
+        latest_status=pat.latest_status,
+        referral_urgency=pat.referral_urgency,
+        doctor_verified=pat.doctor_verified,
+    )
+
+
+@app.patch(
+    "/api/patients/{patient_id}",
+    response_model=PatientResponse,
+    tags=["Patients"],
+    summary="Update Patient Record",
+)
+async def update_patient(patient_id: str, req: PatientUpdateRequest, db: Session = Depends(get_db)):
+    pat = db.query(PatientModel).filter(PatientModel.id == patient_id).first()
+    if not pat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Patient '{patient_id}' not found.")
+    try:
+        if req.name is not None: pat.name = req.name
+        if req.age is not None: pat.age = req.age
+        if req.gender is not None: pat.gender = req.gender
+        if req.phone is not None: pat.phone = req.phone
+        if req.village is not None: pat.village = req.village
+        if req.district is not None: pat.district = req.district
+        if req.abha_id is not None: pat.abha_id = req.abha_id
+        if req.diabetes_duration is not None: pat.diabetes_duration = req.diabetes_duration
+        if req.last_hba1c is not None: pat.last_hba1c = req.last_hba1c
+        if req.insulin_use is not None: pat.insulin_use = req.insulin_use
+        if req.visual_acuity_od is not None: pat.visual_acuity_od = req.visual_acuity_od
+        if req.visual_acuity_os is not None: pat.visual_acuity_os = req.visual_acuity_os
+        if req.symptoms is not None: pat.symptoms_json = json.dumps(req.symptoms)
+        if req.last_screened is not None: pat.last_screened = req.last_screened
+        if req.latest_status is not None: pat.latest_status = req.latest_status
+        if req.referral_urgency is not None: pat.referral_urgency = req.referral_urgency
+        if req.doctor_verified is not None: pat.doctor_verified = req.doctor_verified
+
+        db.commit()
+        db.refresh(pat)
+        symptoms = json.loads(pat.symptoms_json) if pat.symptoms_json else []
+        return PatientResponse(
+            id=pat.id,
+            abha_id=pat.abha_id,
+            name=pat.name,
+            age=pat.age,
+            gender=pat.gender,
+            phone=pat.phone,
+            village=pat.village,
+            district=pat.district,
+            diabetes_duration=pat.diabetes_duration,
+            last_hba1c=pat.last_hba1c,
+            insulin_use=pat.insulin_use,
+            visual_acuity_od=pat.visual_acuity_od,
+            visual_acuity_os=pat.visual_acuity_os,
+            symptoms=symptoms,
+            registered_date=pat.registered_date,
+            last_screened=pat.last_screened,
+            latest_status=pat.latest_status,
+            referral_urgency=pat.referral_urgency,
+            doctor_verified=pat.doctor_verified,
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating patient {patient_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to save data. Please try again.")
+
+
+# =====================================================================
+# Phase 13: Screening Storage & Retrieval Endpoints
+# =====================================================================
+
+@app.post(
+    "/api/screenings",
+    response_model=ScreeningRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Screening"],
+    summary="Save a Completed Screening Record",
+)
+async def create_screening_record(req: ScreeningCreateRequest, db: Session = Depends(get_db)):
+    """Persists a full screening session into MySQL."""
+    try:
+        count = db.query(ScreeningModel).count()
+        sid = req.id or f"SCR-2026-{count + 991:04d}"
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %I:%M %p")
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        scr = ScreeningModel(
+            id=sid,
+            patient_id=req.patient_id,
+            patient_name=req.patient_name,
+            village=req.village,
+            screening_date=req.screening_date or now_str,
+            timestamp_iso=req.timestamp_iso or now_iso,
+            predicted_class=req.predicted_class,
+            class_name=req.class_name,
+            confidence=req.confidence,
+            probabilities_json=json.dumps(req.probabilities or {}),
+            dr_severity_od=req.dr_severity_od or "drUncertain",
+            dr_severity_os=req.dr_severity_os or "drUncertain",
+            overall_severity=req.overall_severity or "drUncertain",
+            safety_status=req.safety_status or "READY_FOR_AI",
+            screening_status=req.screening_status or "RELIABLE AI SCREENING",
+            risk_category=req.risk_category or "MODERATE",
+            referral_priority=req.referral_priority or "EYE SPECIALIST REVIEW RECOMMENDED",
+            risk_explanation=req.risk_explanation,
+            referral_guidance=req.referral_guidance,
+            safety_message=req.safety_message,
+            gradcam_url=req.gradcam_url,
+            heatmap_url=req.heatmap_url,
+            image_od_path=req.image_od_path,
+            image_os_path=req.image_os_path,
+            doctor_status=req.doctor_status or "pending",
+            review_status=req.review_status or "PENDING DOCTOR REVIEW",
+        )
+        db.add(scr)
+
+        # Update patient record
+        pat = db.query(PatientModel).filter(PatientModel.id == req.patient_id).first()
+        if pat:
+            pat.last_screened = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            pat.latest_status = req.overall_severity or "drUncertain"
+            pat.referral_urgency = req.risk_category or "routine"
+
+        db.commit()
+        db.refresh(scr)
+
+        # Mirror to longitudinal service
+        longitudinal_service.register_or_update_screening({
+            "id": scr.id,
+            "patient_id": scr.patient_id,
+            "patient_name": scr.patient_name,
+            "village": scr.village,
+            "screening_date": scr.screening_date,
+            "timestamp_iso": scr.timestamp_iso,
+            "predicted_class": scr.predicted_class,
+            "class_name": scr.class_name,
+            "confidence": scr.confidence,
+            "dr_severity_od": scr.dr_severity_od,
+            "dr_severity_os": scr.dr_severity_os,
+            "overall_severity": scr.overall_severity,
+            "safety_status": scr.safety_status,
+            "screening_status": scr.screening_status,
+            "risk_category": scr.risk_category,
+            "referral_priority": scr.referral_priority,
+            "gradcam_url": scr.gradcam_url,
+            "heatmap_url": scr.heatmap_url,
+            "image_od_path": scr.image_od_path,
+            "image_os_path": scr.image_os_path,
+        }, db=db)
+
+        probs = json.loads(scr.probabilities_json) if scr.probabilities_json else None
+        return ScreeningRecordResponse(
+            id=scr.id,
+            patient_id=scr.patient_id,
+            patient_name=scr.patient_name,
+            village=scr.village,
+            screening_date=scr.screening_date,
+            timestamp_iso=scr.timestamp_iso,
+            predicted_class=scr.predicted_class,
+            class_name=scr.class_name,
+            confidence=scr.confidence,
+            probabilities=probs,
+            dr_severity_od=scr.dr_severity_od,
+            dr_severity_os=scr.dr_severity_os,
+            overall_severity=scr.overall_severity,
+            safety_status=scr.safety_status,
+            screening_status=scr.screening_status,
+            risk_category=scr.risk_category,
+            referral_priority=scr.referral_priority,
+            gradcam_url=scr.gradcam_url,
+            heatmap_url=scr.heatmap_url,
+            image_od_path=scr.image_od_path,
+            image_os_path=scr.image_os_path,
+            doctor_status=scr.doctor_status,
+            review_status=scr.review_status,
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving screening to DB: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to save screening data.")
+
+
+@app.get(
+    "/api/screenings",
+    response_model=ScreeningListResponse,
+    tags=["Screening"],
+    summary="Get List of All Screenings",
+)
+async def list_screenings(patient_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """Returns all screening records from database with optional patient filter."""
+    query = db.query(ScreeningModel)
+    if patient_id:
+        query = query.filter(ScreeningModel.patient_id == patient_id)
+    scrs = query.order_by(ScreeningModel.created_at.desc()).all()
+
+    result = []
+    for s in scrs:
+        probs = json.loads(s.probabilities_json) if s.probabilities_json else None
+        result.append(
+            ScreeningRecordResponse(
+                id=s.id,
+                patient_id=s.patient_id,
+                patient_name=s.patient_name,
+                village=s.village,
+                screening_date=s.screening_date,
+                timestamp_iso=s.timestamp_iso,
+                predicted_class=s.predicted_class,
+                class_name=s.class_name,
+                confidence=s.confidence,
+                probabilities=probs,
+                dr_severity_od=s.dr_severity_od,
+                dr_severity_os=s.dr_severity_os,
+                overall_severity=s.overall_severity,
+                safety_status=s.safety_status,
+                screening_status=s.screening_status,
+                risk_category=s.risk_category,
+                referral_priority=s.referral_priority,
+                gradcam_url=s.gradcam_url,
+                heatmap_url=s.heatmap_url,
+                image_od_path=s.image_od_path,
+                image_os_path=s.image_os_path,
+                doctor_status=s.doctor_status,
+                review_status=s.review_status,
+            )
+        )
+    return ScreeningListResponse(total=len(result), screenings=result)
+
+
+@app.get(
+    "/api/screenings/{screening_id}",
+    response_model=ScreeningRecordResponse,
+    tags=["Screening"],
+    summary="Get Specific Screening by ID",
+)
+async def get_screening_detail(screening_id: str, db: Session = Depends(get_db)):
+    scr = db.query(ScreeningModel).filter(ScreeningModel.id == screening_id).first()
+    if not scr:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Screening '{screening_id}' not found.")
+    probs = json.loads(scr.probabilities_json) if scr.probabilities_json else None
+    return ScreeningRecordResponse(
+        id=scr.id,
+        patient_id=scr.patient_id,
+        patient_name=scr.patient_name,
+        village=scr.village,
+        screening_date=scr.screening_date,
+        timestamp_iso=scr.timestamp_iso,
+        predicted_class=scr.predicted_class,
+        class_name=scr.class_name,
+        confidence=scr.confidence,
+        probabilities=probs,
+        dr_severity_od=scr.dr_severity_od,
+        dr_severity_os=scr.dr_severity_os,
+        overall_severity=scr.overall_severity,
+        safety_status=scr.safety_status,
+        screening_status=scr.screening_status,
+        risk_category=scr.risk_category,
+        referral_priority=scr.referral_priority,
+        gradcam_url=scr.gradcam_url,
+        heatmap_url=scr.heatmap_url,
+        image_od_path=scr.image_od_path,
+        image_os_path=scr.image_os_path,
+        doctor_status=scr.doctor_status,
+        review_status=scr.review_status,
+    )
+
+
+# =====================================================================
+# Phase 5: Contextual AI Assistant
+# =====================================================================
 
 @app.post(
     "/api/assistant/chat",
@@ -375,9 +787,8 @@ async def assistant_chat(request: AssistantChatRequest):
     """
     Phase 5 Contextual AI Screening Assistant:
     - Provides bilingual decision support (English & Hindi)
-    - Interprets active screening context (Prediction, Confidence, Safety Gate, Risk, Referral, Grad-CAM)
-    - Explains image validation failures, quality rules, and Grad-CAM visualizations
-    - Guardrails against unauthorized medical prescribing or clinical certainty
+    - Interprets active screening context
+    - Guardrails against unauthorized prescribing
     """
     try:
         reply_dict = generate_assistant_reply(
@@ -397,6 +808,10 @@ async def assistant_chat(request: AssistantChatRequest):
         )
 
 
+# =====================================================================
+# Phase 6: Doctor Review & Human-in-the-Loop Oversight
+# =====================================================================
+
 @app.post(
     "/api/screenings/{screening_id}/review",
     response_model=DoctorReviewResponse,
@@ -409,11 +824,12 @@ async def submit_doctor_review(
     x_user_role: Optional[str] = Header(default="doctor", alias="X-User-Role"),
     original_ai_result: str = "Moderate",
     original_confidence: Optional[float] = 0.85,
+    db: Session = Depends(get_db),
 ):
     """
     Phase 6 Human-in-the-Loop Doctor Review:
     - Allows verified doctor to ACCEPT, MODIFY, or REQUEST RE-CAPTURE
-    - Preserves original AI prediction permanently
+    - Preserves original AI prediction permanently in MySQL
     - Requires review comment on MODIFY action
     - Logs an immutable event to the audit trail
     """
@@ -423,26 +839,18 @@ async def submit_doctor_review(
             original_ai_result=original_ai_result,
             original_confidence=original_confidence,
             role=x_user_role,
+            db=db,
         )
         return response
     except PermissionError as e:
         logger.warning(f"Unauthorized doctor review attempt: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         logger.warning(f"Invalid doctor review submission: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Doctor review submission failed: {e}", exc_info=False)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unable to save the review. Please try again.",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to save the review. Please try again.")
 
 
 @app.get(
@@ -451,11 +859,9 @@ async def submit_doctor_review(
     tags=["Doctor Review"],
     summary="Get Screening Audit Trail History",
 )
-async def get_screening_history(screening_id: str):
-    """
-    Retrieves the complete chronological audit history for a screening record.
-    """
-    events = get_audit_history(screening_id)
+async def get_screening_history(screening_id: str, db: Session = Depends(get_db)):
+    """Retrieves the complete chronological audit history for a screening record from DB."""
+    events = get_audit_history(screening_id, db=db)
     return ReviewHistoryResponse(
         screening_id=screening_id,
         events=events,
@@ -468,17 +874,18 @@ async def get_screening_history(screening_id: str):
     tags=["Doctor Review"],
     summary="Get Canonical Screening Review Status",
 )
-async def get_canonical_screening_review(screening_id: str):
-    """
-    Retrieves the canonical review state for a screening record.
-    """
-    review_data = get_screening_review(screening_id)
+async def get_canonical_screening_review(screening_id: str, db: Session = Depends(get_db)):
+    """Retrieves the canonical review state for a screening record from DB."""
+    review_data = get_screening_review(screening_id, db=db)
     if not review_data:
         return None
     return DoctorReviewResponse(**review_data)
 
 
+# =====================================================================
 # Phase 9: Lesion Intelligence Layer Endpoints
+# =====================================================================
+
 @app.get(
     "/api/screenings/{screening_id}/lesions",
     response_model=LesionEvidenceResponse,
@@ -486,12 +893,6 @@ async def get_canonical_screening_review(screening_id: str):
     summary="Get Lesion Intelligence & Evidence for Screening",
 )
 async def get_lesion_evidence(screening_id: str, eye: str = "OD"):
-    """
-    Phase 9 Lesion Intelligence Layer:
-    - Provides dedicated lesion evidence abstraction
-    - Distinct from DR Classification and Grad-CAM Attention
-    - Honest non-fabricated state when no dedicated lesion model is connected
-    """
     analysis = lesion_service.get_lesion_analysis(screening_id=screening_id, eye=eye)
     return LesionEvidenceResponse(**analysis)
 
@@ -503,34 +904,34 @@ async def get_lesion_evidence(screening_id: str, eye: str = "OD"):
     summary="Analyze Retinal Image for Lesions",
 )
 async def analyze_lesions(screening_id: str = "SCR-DIRECT", eye: str = "OD"):
-    """
-    Direct lesion analysis endpoint for future validated model inference.
-    """
     analysis = lesion_service.get_lesion_analysis(screening_id=screening_id, eye=eye)
     return LesionEvidenceResponse(**analysis)
 
 
-# Phase 10: Longitudinal Patient Tracking & Progression Intelligence Endpoints
+# =====================================================================
+# Phase 10: Longitudinal Patient Tracking & Progression Intelligence
+# =====================================================================
+
 @app.get(
     "/api/patients/{patient_id}/screening-history",
     response_model=PatientScreeningHistoryResponse,
     tags=["Longitudinal Intelligence"],
     summary="Get Patient Chronological Screening History",
 )
-async def get_patient_screening_history(patient_id: str):
+async def get_patient_screening_history(patient_id: str, db: Session = Depends(get_db)):
     """
     Phase 10 Longitudinal Tracking:
     - Retrieves complete chronological screening sessions for a specific patient (newest first).
     - Preserves data isolation across patients.
     """
-    history = longitudinal_service.get_patient_screening_history(patient_id)
+    history = longitudinal_service.get_patient_screening_history(patient_id, db=db)
     patient_name = history[0].get("patient_name") if history else "Patient"
-    
+
     formatted_screenings = [
         ScreeningHistoryRecord(**longitudinal_service._format_screening_summary(scr))
         for scr in history
     ]
-    
+
     return PatientScreeningHistoryResponse(
         patient_id=patient_id,
         patient_name=patient_name,
@@ -545,17 +946,16 @@ async def get_patient_screening_history(patient_id: str):
     tags=["Longitudinal Intelligence"],
     summary="Compare Current vs Specific Previous Screening",
 )
-async def compare_specific_screenings(screening_id: str, previous_screening_id: str):
+async def compare_specific_screenings(screening_id: str, previous_screening_id: str, db: Session = Depends(get_db)):
     """
     Phase 10 Longitudinal Comparison:
-    - Compares current screening with a manually selected historical screening.
+    - Compares current screening with a manually selected historical screening from database.
     - Evaluates safe screening classification change without claiming autonomous disease progression.
     - Strictly prevents cross-patient comparisons.
     """
-    current_scr = longitudinal_service.get_screening(screening_id)
+    current_scr = longitudinal_service.get_screening(screening_id, db=db)
     if not current_scr:
-        # Fallback to reviewing active cache if exists
-        rev = get_screening_review(screening_id)
+        rev = get_screening_review(screening_id, db=db)
         if rev:
             current_scr = {
                 "screening_id": screening_id,
@@ -569,7 +969,7 @@ async def compare_specific_screenings(screening_id: str, previous_screening_id: 
                 "doctor_status": "verified" if rev.get("review_status") == "AI RESULT ACCEPTED" else "pending",
                 "review_status": rev.get("review_status"),
                 "doctor_reviewed_result": rev.get("doctor_reviewed_result"),
-                "reviewer_name": rev.get("reviewer_name"),
+                "reviewer_name": rev.get("doctor_name"),
             }
         else:
             raise HTTPException(
@@ -577,7 +977,7 @@ async def compare_specific_screenings(screening_id: str, previous_screening_id: 
                 detail=f"Current screening '{screening_id}' not found.",
             )
 
-    previous_scr = longitudinal_service.get_screening(previous_screening_id)
+    previous_scr = longitudinal_service.get_screening(previous_screening_id, db=db)
     if not previous_scr:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -592,16 +992,10 @@ async def compare_specific_screenings(screening_id: str, previous_screening_id: 
         return ScreeningComparisonResponse(**comparison)
     except ValueError as e:
         logger.warning(f"Longitudinal comparison rejected: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Longitudinal comparison failed: {e}", exc_info=False)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unable to compare screenings at this time.",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to compare screenings at this time.")
 
 
 @app.get(
@@ -610,13 +1004,13 @@ async def compare_specific_screenings(screening_id: str, previous_screening_id: 
     tags=["Longitudinal Intelligence"],
     summary="Get Automated Longitudinal Comparison for Screening",
 )
-async def get_automated_longitudinal_comparison(screening_id: str, patient_id: Optional[str] = None):
+async def get_automated_longitudinal_comparison(screening_id: str, patient_id: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Phase 10 Automated Comparison:
     - Automatically finds the most recent comparable historical screening for the patient.
-    - Returns structured classification change status or 'HISTORY UNAVAILABLE' if none exists.
+    - Returns structured classification change status.
     """
-    current_scr = longitudinal_service.get_screening(screening_id)
+    current_scr = longitudinal_service.get_screening(screening_id, db=db)
     if not current_scr:
         current_scr = {
             "screening_id": screening_id,
@@ -638,6 +1032,7 @@ async def get_automated_longitudinal_comparison(screening_id: str, patient_id: O
     previous_scr = longitudinal_service.get_latest_comparable_screening(
         current_screening_id=screening_id,
         patient_id=pid,
+        db=db,
     )
 
     try:
@@ -648,10 +1043,7 @@ async def get_automated_longitudinal_comparison(screening_id: str, patient_id: O
         return ScreeningComparisonResponse(**comparison)
     except Exception as e:
         logger.error(f"Automated comparison failed: {e}", exc_info=False)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unable to compute longitudinal comparison.",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to compute longitudinal comparison.")
 
 
 # ==============================================================================
@@ -664,9 +1056,9 @@ async def get_automated_longitudinal_comparison(screening_id: str, patient_id: O
     tags=["Tele-Ophthalmology"],
     summary="Get List of Verified Demo Doctors",
 )
-async def get_doctor_directory():
-    """Returns list of registered tele-ophthalmology specialists with demo labeling."""
-    doctors = appointment_service.get_doctors()
+async def get_doctor_directory(db: Session = Depends(get_db)):
+    """Returns list of registered tele-ophthalmology specialists from database."""
+    doctors = appointment_service.get_doctors(db=db)
     return DoctorListResponse(
         doctors=[DoctorRecord(**d) for d in doctors],
         total_count=len(doctors),
@@ -679,13 +1071,13 @@ async def get_doctor_directory():
     tags=["Tele-Ophthalmology"],
     summary="Get Doctor Available Time Slots for Date",
 )
-async def get_doctor_availability(doctor_id: str, date: str):
+async def get_doctor_availability(doctor_id: str, date: str, db: Session = Depends(get_db)):
     """
     Returns 30-min consultation slots for the given date.
     Validates working hours, past-dates, and prevents double-booking.
     """
     try:
-        avail = appointment_service.get_doctor_availability(doctor_id, date)
+        avail = appointment_service.get_doctor_availability(doctor_id, date, db=db)
         return DoctorAvailabilityResponse(**avail)
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
@@ -701,10 +1093,10 @@ async def get_doctor_availability(doctor_id: str, date: str):
     tags=["Tele-Ophthalmology"],
     summary="Book a Tele-Ophthalmology Appointment",
 )
-async def book_appointment(req: AppointmentCreateRequest):
+async def book_appointment(req: AppointmentCreateRequest, db: Session = Depends(get_db)):
     """
     Creates an appointment with server-side validation against working hours,
-    past dates, and existing bookings.
+    past dates, and existing bookings using MySQL transactions.
     """
     try:
         apt = appointment_service.create_appointment(
@@ -722,6 +1114,7 @@ async def book_appointment(req: AppointmentCreateRequest):
             date_str=req.date,
             start_time_str=req.start_time,
             reason=req.reason,
+            db=db,
         )
         return AppointmentResponse(**apt)
     except ValueError as ve:
@@ -742,13 +1135,15 @@ async def list_appointments(
     health_worker_id: Optional[str] = None,
     patient_id: Optional[str] = None,
     status_filter: Optional[str] = None,
+    db: Session = Depends(get_db),
 ):
-    """Lists appointments with optional doctor, health worker, patient, or status filter."""
+    """Lists appointments with optional doctor, health worker, patient, or status filter from DB."""
     apts = appointment_service.list_appointments(
         doctor_id=doctor_id,
         health_worker_id=health_worker_id,
         patient_id=patient_id,
-        status=status_filter,
+        status_filter=status_filter,
+        db=db,
     )
     return AppointmentListResponse(
         appointments=[AppointmentResponse(**a) for a in apts],
@@ -762,9 +1157,9 @@ async def list_appointments(
     tags=["Tele-Ophthalmology"],
     summary="Get Single Appointment Details",
 )
-async def get_appointment_details(appointment_id: str):
-    """Returns single appointment by ID."""
-    apt = appointment_service.get_appointment_by_id(appointment_id)
+async def get_appointment_details(appointment_id: str, db: Session = Depends(get_db)):
+    """Returns single appointment by ID from DB."""
+    apt = appointment_service.get_appointment_by_id(appointment_id, db=db)
     if not apt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Appointment '{appointment_id}' not found.")
     return AppointmentResponse(**apt)
@@ -776,8 +1171,8 @@ async def get_appointment_details(appointment_id: str):
     tags=["Tele-Ophthalmology"],
     summary="Update Appointment Status (Accept, Decline, Reschedule, Cancel, Complete)",
 )
-async def update_appointment_status(appointment_id: str, req: AppointmentUpdateRequest):
-    """Transitions appointment status with role-based validation."""
+async def update_appointment_status_endpoint(appointment_id: str, req: AppointmentUpdateRequest, db: Session = Depends(get_db)):
+    """Transitions appointment status with role-based validation in DB."""
     try:
         updated = appointment_service.update_appointment_status(
             appointment_id=appointment_id,
@@ -786,6 +1181,7 @@ async def update_appointment_status(appointment_id: str, req: AppointmentUpdateR
             reason_or_comment=req.reason_or_comment,
             proposed_date=req.proposed_date,
             proposed_time=req.proposed_time,
+            db=db,
         )
         return AppointmentResponse(**updated)
     except ValueError as ve:
@@ -803,8 +1199,8 @@ async def update_appointment_status(appointment_id: str, req: AppointmentUpdateR
     tags=["Tele-Ophthalmology"],
     summary="Add Doctor Clinical Consultation Notes",
 )
-async def add_doctor_notes(appointment_id: str, req: AppointmentNoteRequest):
-    """Records doctor clinical notes, recommendation, and follow-up plan."""
+async def add_doctor_notes(appointment_id: str, req: AppointmentNoteRequest, db: Session = Depends(get_db)):
+    """Records doctor clinical notes, recommendation, and follow-up plan in DB."""
     try:
         updated = appointment_service.add_consultation_notes(
             appointment_id=appointment_id,
@@ -812,6 +1208,7 @@ async def add_doctor_notes(appointment_id: str, req: AppointmentNoteRequest):
             doctor_notes=req.doctor_notes,
             recommendations=req.doctor_recommendation,
             follow_up_date=req.follow_up_date,
+            db=db,
         )
         return AppointmentResponse(**updated)
     except ValueError as ve:
@@ -829,10 +1226,10 @@ async def add_doctor_notes(appointment_id: str, req: AppointmentNoteRequest):
     tags=["Tele-Ophthalmology"],
     summary="Get Appointment Chat Messages",
 )
-async def get_appointment_messages(appointment_id: str):
-    """Retrieves appointment-scoped communication messages."""
+async def get_appointment_messages_endpoint(appointment_id: str, db: Session = Depends(get_db)):
+    """Retrieves appointment-scoped communication messages from DB."""
     try:
-        msgs = appointment_service.get_messages(appointment_id)
+        msgs = appointment_service.get_messages(appointment_id, db=db)
         return AppointmentMessageListResponse(
             appointment_id=appointment_id,
             messages=[AppointmentMessageResponse(**m) for m in msgs],
@@ -849,8 +1246,8 @@ async def get_appointment_messages(appointment_id: str):
     tags=["Tele-Ophthalmology"],
     summary="Send Message in Appointment Chat",
 )
-async def send_appointment_message(appointment_id: str, req: AppointmentMessageRequest):
-    """Sends a message within the authorized appointment conversation."""
+async def send_appointment_message_endpoint(appointment_id: str, req: AppointmentMessageRequest, db: Session = Depends(get_db)):
+    """Sends a message within the authorized appointment conversation in DB."""
     try:
         msg = appointment_service.add_message(
             appointment_id=appointment_id,
@@ -858,6 +1255,7 @@ async def send_appointment_message(appointment_id: str, req: AppointmentMessageR
             sender_name=req.sender_name,
             sender_role=req.sender_role,
             message=req.message,
+            db=db,
         )
         return AppointmentMessageResponse(**msg)
     except ValueError as ve:
@@ -870,7 +1268,7 @@ async def send_appointment_message(appointment_id: str, req: AppointmentMessageR
     tags=["Tele-Ophthalmology"],
     summary="Authorize and Initialize Video Consultation Session",
 )
-async def get_video_session(appointment_id: str, user_id: str = "DOC-SWAMINATHAN", role: str = "doctor"):
+async def get_video_session(appointment_id: str, user_id: str = "DOC-SWAMINATHAN", role: str = "doctor", db: Session = Depends(get_db)):
     """
     Authorizes participant access to the appointment WebRTC consultation room.
     Validates room access rights and returns STUN configuration.
@@ -880,6 +1278,7 @@ async def get_video_session(appointment_id: str, user_id: str = "DOC-SWAMINATHAN
             appointment_id=appointment_id,
             user_id=user_id,
             role=role,
+            db=db,
         )
         return VideoSessionResponse(**session_info)
     except ValueError as ve:
@@ -899,7 +1298,6 @@ async def websocket_signaling_endpoint(websocket: WebSocket, appointment_id: str
     logger.info(f"WebSocket client connected to signaling room {appointment_id}")
 
     try:
-        # Notify existing room peers that a new participant arrived
         await appointment_service.broadcast_signal(
             appointment_id,
             websocket,
@@ -908,7 +1306,6 @@ async def websocket_signaling_endpoint(websocket: WebSocket, appointment_id: str
 
         while True:
             data = await websocket.receive_json()
-            # Relay signal message (offer, answer, ice_candidate, mute_state, etc.)
             await appointment_service.broadcast_signal(appointment_id, websocket, data)
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected from signaling room {appointment_id}")
@@ -928,39 +1325,39 @@ async def websocket_signaling_endpoint(websocket: WebSocket, appointment_id: str
 # =====================================================================
 
 @app.get("/api/health-workers", response_model=List[HealthWorkerProfile], tags=["Phase 12: WhatsApp"])
-async def list_health_workers():
-    """Returns directory of registered community health workers."""
-    return whatsapp_service.get_all_health_workers()
+async def list_health_workers(db: Session = Depends(get_db)):
+    """Returns directory of registered community health workers from DB."""
+    return whatsapp_service.get_all_health_workers(db=db)
 
 
 @app.get("/api/health-workers/{hw_id}/profile", response_model=HealthWorkerProfile, tags=["Phase 12: WhatsApp"])
-async def get_health_worker_profile(hw_id: str):
-    """Returns profile and WhatsApp opt-in consent for a specific health worker."""
-    hw = whatsapp_service.get_health_worker(hw_id)
+async def get_health_worker_profile(hw_id: str, db: Session = Depends(get_db)):
+    """Returns profile and WhatsApp opt-in consent for a specific health worker from DB."""
+    hw = whatsapp_service.get_health_worker(hw_id, db=db)
     if not hw:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Health worker '{hw_id}' not found.")
     return hw
 
 
 @app.patch("/api/health-workers/{hw_id}/opt-in", response_model=HealthWorkerProfile, tags=["Phase 12: WhatsApp"])
-async def update_health_worker_opt_in(hw_id: str, req: HealthWorkerOptInRequest):
-    """Updates WhatsApp consent opt-in status and registered phone number."""
-    updated = whatsapp_service.update_health_worker_opt_in(hw_id, req.whatsapp_opt_in, req.phone)
+async def update_health_worker_opt_in(hw_id: str, req: HealthWorkerOptInRequest, db: Session = Depends(get_db)):
+    """Updates WhatsApp consent opt-in status and registered phone number in DB."""
+    updated = whatsapp_service.update_health_worker_opt_in(hw_id, req.whatsapp_opt_in, req.phone, db=db)
     return updated
 
 
 @app.post("/api/reports/{screening_id}/pdf", response_model=ReportPdfResponse, tags=["Phase 12: WhatsApp"])
-async def generate_screening_pdf_report(screening_id: str):
+async def generate_screening_pdf_report(screening_id: str, db: Session = Depends(get_db)):
     """
     Generates or retrieves the official clinical PDF report for a screening.
     Ensures doctor-review gate has been completed before generating final report.
     """
-    can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id)
+    can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id, db=db)
     if not can_proceed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
     pdf_path = pdf_service.generate_clinical_report(
-        screening_data={"id": screening_id, "screeningDate": datetime.utcnow().strftime("%Y-%m-%d")},
+        screening_data={"id": screening_id, "screeningDate": datetime.now(timezone.utc).strftime("%Y-%m-%d")},
         doctor_review=review,
     )
     token = generate_secure_pdf_token(screening_id)
@@ -971,13 +1368,13 @@ async def generate_screening_pdf_report(screening_id: str):
         pdf_filename=pdf_path.name,
         pdf_url=f"/api/reports/{screening_id}/document?token={token}",
         file_size_bytes=file_size,
-        generated_at=datetime.utcnow().isoformat(),
+        generated_at=datetime.now(timezone.utc).isoformat(),
         is_final_doctor_approved=True,
     )
 
 
 @app.get("/api/reports/{screening_id}/document", tags=["Phase 12: WhatsApp"])
-async def download_secure_screening_pdf(screening_id: str, token: str = Query(..., description="Secure access token")):
+async def download_secure_screening_pdf(screening_id: str, token: str = Query(..., description="Secure access token"), db: Session = Depends(get_db)):
     """
     Secure authenticated download endpoint for the clinical PDF report.
     Requires a valid cryptographically generated token.
@@ -990,12 +1387,11 @@ async def download_secure_screening_pdf(screening_id: str, token: str = Query(..
 
     pdf_path = pdf_service.output_dir / f"{screening_id}_clinical_report.pdf"
     if not pdf_path.exists():
-        # Generate on the fly if verified
-        can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id)
+        can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id, db=db)
         if not can_proceed:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
         pdf_path = pdf_service.generate_clinical_report(
-            screening_data={"id": screening_id, "screeningDate": datetime.utcnow().strftime("%Y-%m-%d")},
+            screening_data={"id": screening_id, "screeningDate": datetime.now(timezone.utc).strftime("%Y-%m-%d")},
             doctor_review=review,
         )
 
@@ -1008,14 +1404,10 @@ async def download_secure_screening_pdf(screening_id: str, token: str = Query(..
 
 
 @app.post("/api/reports/{screening_id}/whatsapp/send", response_model=WhatsAppDeliveryRecord, tags=["Phase 12: WhatsApp"])
-async def send_whatsapp_report_endpoint(screening_id: str, req: WhatsAppSendRequest):
+async def send_whatsapp_report_endpoint(screening_id: str, req: WhatsAppSendRequest, db: Session = Depends(get_db)):
     """
     Requests secure WhatsApp delivery of the doctor-reviewed clinical PDF report.
-    Enforces:
-    1. Doctor Review Gate (must be approved / accepted, re-capture requests blocked)
-    2. Health Worker Phone Verification (must match registered HW record)
-    3. Explicit Opt-in Consent Verification
-    4. Duplicate-send prevention
+    Enforces Doctor Review Gate, recipient phone verification, and opt-in consent.
     """
     try:
         delivery_record = await whatsapp_service.send_whatsapp_report(
@@ -1024,23 +1416,22 @@ async def send_whatsapp_report_endpoint(screening_id: str, req: WhatsAppSendRequ
             health_worker_id=req.health_worker_id,
             language=req.language,
             opt_in_confirmed=req.opt_in_confirmed,
+            db=db,
         )
         return delivery_record
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        logger.error("Failed to send WhatsApp report for %s: %s", screening_id, e)
+        logger.error(f"Failed to send WhatsApp report for {screening_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @app.get("/api/reports/{screening_id}/whatsapp/status", response_model=WhatsAppStatusResponse, tags=["Phase 12: WhatsApp"])
-async def get_whatsapp_status_endpoint(screening_id: str, hw_id: Optional[str] = Query("HW-RAMPUR-01")):
-    """
-    Returns the current WhatsApp delivery status, doctor gate evaluation, and complete audit trail.
-    """
-    can_send, gate_reason, review = whatsapp_service.check_doctor_review_gate(screening_id)
-    delivery_rec = whatsapp_service.get_delivery_status(screening_id)
-    hw = whatsapp_service.get_health_worker(hw_id or "HW-RAMPUR-01")
+async def get_whatsapp_status_endpoint(screening_id: str, hw_id: Optional[str] = Query("HW-RAMPUR-01"), db: Session = Depends(get_db)):
+    """Returns WhatsApp delivery status, doctor gate evaluation, and complete audit trail from DB."""
+    can_send, gate_reason, review = whatsapp_service.check_doctor_review_gate(screening_id, db=db)
+    delivery_rec = whatsapp_service.get_delivery_status(screening_id, db=db)
+    hw = whatsapp_service.get_health_worker(hw_id or "HW-RAMPUR-01", db=db)
 
     rev_status = review.get("review_status", "PENDING DOCTOR REVIEW") if review else "PENDING DOCTOR REVIEW"
 
@@ -1058,15 +1449,14 @@ async def get_whatsapp_status_endpoint(screening_id: str, hw_id: Optional[str] =
 
 
 @app.post("/api/reports/{screening_id}/whatsapp/retry", response_model=WhatsAppDeliveryRecord, tags=["Phase 12: WhatsApp"])
-async def retry_whatsapp_report_endpoint(screening_id: str, req: WhatsAppRetryRequest):
-    """
-    Retries failed report delivery for a screening with duplicate protection.
-    """
+async def retry_whatsapp_report_endpoint(screening_id: str, req: WhatsAppRetryRequest, db: Session = Depends(get_db)):
+    """Retries failed report delivery for a screening in DB."""
     try:
         delivery_record = await whatsapp_service.retry_whatsapp_report(
             screening_id=screening_id,
             health_worker_id=req.health_worker_id,
             force_regenerate_pdf=req.force_regenerate_pdf,
+            db=db,
         )
         return delivery_record
     except ValueError as ve:
@@ -1081,10 +1471,6 @@ async def whatsapp_webhook_verification(
     hub_verify_token: str = Query(None, alias="hub.verify_token"),
     hub_challenge: str = Query(None, alias="hub.challenge"),
 ):
-    """
-    Meta WhatsApp Cloud API Webhook verification endpoint.
-    Responds to hub.challenge during initial webhook subscription handshake.
-    """
     if not hub_mode or not hub_verify_token:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing webhook parameters.")
 
@@ -1095,19 +1481,11 @@ async def whatsapp_webhook_verification(
 
 
 @app.post("/api/whatsapp/webhook", tags=["Phase 12: WhatsApp"])
-async def whatsapp_webhook_event(request: Request):
-    """
-    Meta WhatsApp Cloud API incoming webhook for message delivery status updates.
-    Handles 'sent', 'delivered', 'read', and 'failed' statuses securely.
-    """
+async def whatsapp_webhook_event(request: Request, db: Session = Depends(get_db)):
     try:
         payload = await request.json()
-        updates = whatsapp_service.process_webhook_status_update(payload)
+        updates = whatsapp_service.process_webhook_status_update(payload, db=db)
         return {"status": "success", "processed_updates": len(updates), "updates": updates}
     except Exception as e:
-        logger.warning("Error processing WhatsApp webhook payload: %s", e)
+        logger.warning(f"Error processing WhatsApp webhook payload: {e}")
         return {"status": "error", "detail": str(e)}
-
-
-
-

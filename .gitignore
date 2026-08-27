@@ -46,3 +46,4 @@ backend/uploads/*.jpeg
 scratch/
 backend/results/reports/*.pdf
 !backend/results/reports/.gitkeep
+*.db

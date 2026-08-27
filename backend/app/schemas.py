@@ -166,8 +166,8 @@ class DoctorReviewResponse(BaseModel):
     review_comment: Optional[str] = Field(default=None, description="Doctor review notes")
     reviewer_name: str = Field(..., description="Reviewing doctor name")
     review_timestamp: str = Field(..., description="Review completion timestamp")
-    audit_record: ReviewAuditRecord = Field(..., description="Generated audit trail record")
-    message: str = Field(..., description="Confirmation message")
+    audit_record: Optional[ReviewAuditRecord] = Field(default=None, description="Generated audit trail record")
+    message: str = Field(default="Screening review processed successfully.", description="Confirmation message")
 
 
 class ReviewHistoryResponse(BaseModel):
@@ -300,7 +300,9 @@ class DoctorAvailabilityResponse(BaseModel):
     slots: List[DoctorAvailabilitySlot] = Field(default_factory=list, description="Generated 30-min time slots")
     total_slots: int = Field(default=0, description="Total slots count")
     available_slots_count: int = Field(default=0, description="Available slots count")
+    available_slots: Optional[int] = Field(default=0, description="Available slots count alias")
     message: Optional[str] = Field(default=None, description="Optional informational notice")
+    reason: Optional[str] = Field(default=None, description="Optional informational notice alias")
 
 
 class AppointmentCreateRequest(BaseModel):
@@ -344,9 +346,9 @@ class AppointmentResponse(BaseModel):
     health_worker_email: str = Field(..., description="Health worker email")
     patient_id: str = Field(..., description="Patient identifier")
     patient_name: str = Field(..., description="Patient name")
-    patient_age: int = Field(..., description="Patient age")
-    patient_gender: str = Field(..., description="Patient gender")
-    village: str = Field(..., description="Patient village")
+    patient_age: Optional[int] = Field(default=None, description="Patient age")
+    patient_gender: Optional[str] = Field(default=None, description="Patient gender")
+    village: Optional[str] = Field(default=None, description="Patient village")
     screening_id: Optional[str] = Field(default=None, description="Linked screening ID")
     screening_summary: Optional[str] = Field(default=None, description="Linked screening summary")
     date: str = Field(..., description="Appointment date (YYYY-MM-DD)")
@@ -427,10 +429,11 @@ class WhatsAppAuditEvent(BaseModel):
     event_type: str = Field(..., description="Audit event type")
     timestamp: str = Field(..., description="ISO 8601 event timestamp")
     screening_id: str = Field(..., description="Screening identifier")
-    actor: str = Field(..., description="Actor performing or triggering the event")
-    delivery_status: str = Field(..., description="Status at time of event")
+    actor: str = Field(default="system", description="Actor performing or triggering the event")
+    delivery_status: str = Field(default="PROCESSING", description="Status at time of event")
     provider_message_id: Optional[str] = Field(default=None, description="WhatsApp provider message ID if available")
     details: Optional[Dict[str, Any]] = Field(default=None, description="Additional non-sensitive audit metadata")
+
 
 
 class WhatsAppDeliveryRecord(BaseModel):
@@ -496,6 +499,131 @@ class ReportPdfResponse(BaseModel):
     file_size_bytes: int = Field(..., description="File size in bytes")
     generated_at: str = Field(..., description="ISO 8601 timestamp of generation")
     is_final_doctor_approved: bool = Field(..., description="Whether report has completed doctor review sign-off")
+
+
+class PatientCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=128, description="Patient full name")
+    age: int = Field(..., ge=1, le=120, description="Patient age")
+    gender: str = Field(..., description="Gender (male, female, other)")
+    phone: Optional[str] = Field(default=None, description="Contact phone number")
+    village: Optional[str] = Field(default=None, description="Village or neighborhood")
+    district: Optional[str] = Field(default=None, description="District / Location")
+    abha_id: Optional[str] = Field(default=None, description="Ayushman Bharat Health Account ID")
+    diabetes_duration: Optional[int] = Field(default=None, ge=0, description="Duration of diabetes in years")
+    last_hba1c: Optional[float] = Field(default=None, ge=3.0, le=20.0, description="Most recent HbA1c level")
+    insulin_use: bool = Field(default=False, description="Whether patient is taking insulin")
+    visual_acuity_od: Optional[str] = Field(default="6/6", description="Visual acuity right eye")
+    visual_acuity_os: Optional[str] = Field(default="6/6", description="Visual acuity left eye")
+    symptoms: Optional[List[str]] = Field(default_factory=list, description="Reported visual symptoms")
+
+
+class PatientUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    phone: Optional[str] = None
+    village: Optional[str] = None
+    district: Optional[str] = None
+    abha_id: Optional[str] = None
+    diabetes_duration: Optional[int] = None
+    last_hba1c: Optional[float] = None
+    insulin_use: Optional[bool] = None
+    visual_acuity_od: Optional[str] = None
+    visual_acuity_os: Optional[str] = None
+    symptoms: Optional[List[str]] = None
+    last_screened: Optional[str] = None
+    latest_status: Optional[str] = None
+    referral_urgency: Optional[str] = None
+    doctor_verified: Optional[bool] = None
+
+
+class PatientResponse(BaseModel):
+    id: str
+    abha_id: Optional[str] = None
+    name: str
+    age: int
+    gender: str
+    phone: Optional[str] = None
+    village: Optional[str] = None
+    district: Optional[str] = None
+    diabetes_duration: Optional[int] = None
+    last_hba1c: Optional[float] = None
+    insulin_use: bool = False
+    visual_acuity_od: Optional[str] = "6/6"
+    visual_acuity_os: Optional[str] = "6/6"
+    symptoms: List[str] = Field(default_factory=list)
+    registered_date: str
+    last_screened: str = "-"
+    latest_status: str = "drUncertain"
+    referral_urgency: str = "routine"
+    doctor_verified: bool = False
+
+
+class PatientListResponse(BaseModel):
+    total: int
+    patients: List[PatientResponse]
+
+
+class ScreeningCreateRequest(BaseModel):
+    id: Optional[str] = None
+    patient_id: str
+    patient_name: str
+    village: Optional[str] = None
+    screening_date: Optional[str] = None
+    timestamp_iso: Optional[str] = None
+    predicted_class: int = Field(default=0, ge=0, le=4)
+    class_name: str = "No DR"
+    confidence: float = 0.85
+    probabilities: Optional[Dict[str, float]] = None
+    dr_severity_od: Optional[str] = "drUncertain"
+    dr_severity_os: Optional[str] = "drUncertain"
+    overall_severity: Optional[str] = "drUncertain"
+    safety_status: Optional[str] = "READY_FOR_AI"
+    screening_status: Optional[str] = "RELIABLE AI SCREENING"
+    risk_category: Optional[str] = "MODERATE"
+    referral_priority: Optional[str] = "EYE SPECIALIST REVIEW RECOMMENDED"
+    risk_explanation: Optional[str] = None
+    referral_guidance: Optional[str] = None
+    safety_message: Optional[str] = None
+    gradcam_url: Optional[str] = None
+    heatmap_url: Optional[str] = None
+    image_od_path: Optional[str] = None
+    image_os_path: Optional[str] = None
+    doctor_status: Optional[str] = "pending"
+    review_status: Optional[str] = "PENDING DOCTOR REVIEW"
+
+
+class ScreeningRecordResponse(BaseModel):
+    id: str
+    patient_id: str
+    patient_name: str
+    village: Optional[str] = None
+    screening_date: str
+    timestamp_iso: str
+    predicted_class: int
+    class_name: str
+    confidence: float
+    probabilities: Optional[Dict[str, float]] = None
+    dr_severity_od: Optional[str] = "drUncertain"
+    dr_severity_os: Optional[str] = "drUncertain"
+    overall_severity: Optional[str] = "drUncertain"
+    safety_status: str
+    screening_status: str
+    risk_category: str
+    referral_priority: str
+    gradcam_url: Optional[str] = None
+    heatmap_url: Optional[str] = None
+    image_od_path: Optional[str] = None
+    image_os_path: Optional[str] = None
+    doctor_status: str = "pending"
+    review_status: str = "PENDING DOCTOR REVIEW"
+
+
+class ScreeningListResponse(BaseModel):
+    total: int
+    screenings: List[ScreeningRecordResponse]
+
+
 
 
 
