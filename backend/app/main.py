@@ -26,8 +26,11 @@ from app.models import (
     ReportModel,
     WhatsAppDeliveryModel,
     WhatsAppAuditEventModel,
+    EmailDeliveryModel,
+    EmailAuditEventModel,
 )
 from app.db_seeder import seed_database_if_empty
+from app.email_service import email_service
 from app.schemas import (
     HealthResponse,
     PredictionResponse,
@@ -72,6 +75,12 @@ from app.schemas import (
     ScreeningCreateRequest,
     ScreeningRecordResponse,
     ScreeningListResponse,
+    EmailDeliveryStatus,
+    EmailSendRequest,
+    EmailAuditEvent,
+    EmailDeliveryRecord,
+    EmailStatusResponse,
+    EmailRetryRequest,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
@@ -426,6 +435,13 @@ async def list_patients(db: Session = Depends(get_db)):
 async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db)):
     """Registers and persists a new patient into MySQL database."""
     try:
+        # Validate email if provided
+        clean_email = None
+        if req.email and req.email.strip():
+            clean_email = email_service.normalize_email(req.email)
+            if not clean_email:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address format.")
+
         count = db.query(PatientModel).count()
         pat_id = f"PAT-2026-{count + 81:03d}"
         now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -437,6 +453,7 @@ async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db
             age=req.age,
             gender=req.gender,
             phone=req.phone,
+            email=clean_email,
             village=req.village,
             district=req.district,
             diabetes_duration=req.diabetes_duration,
@@ -462,6 +479,7 @@ async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db
             age=new_pat.age,
             gender=new_pat.gender,
             phone=new_pat.phone,
+            email=new_pat.email,
             village=new_pat.village,
             district=new_pat.district,
             diabetes_duration=new_pat.diabetes_duration,
@@ -476,6 +494,8 @@ async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db
             referral_urgency=new_pat.referral_urgency,
             doctor_verified=new_pat.doctor_verified,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Error saving patient to database: {e}")
@@ -500,6 +520,7 @@ async def get_patient_detail(patient_id: str, db: Session = Depends(get_db)):
         age=pat.age,
         gender=pat.gender,
         phone=pat.phone,
+        email=pat.email,
         village=pat.village,
         district=pat.district,
         diabetes_duration=pat.diabetes_duration,
@@ -527,6 +548,15 @@ async def update_patient(patient_id: str, req: PatientUpdateRequest, db: Session
     if not pat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Patient '{patient_id}' not found.")
     try:
+        if req.email is not None:
+            if req.email and req.email.strip():
+                clean_email = email_service.normalize_email(req.email)
+                if not clean_email:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address format.")
+                pat.email = clean_email
+            else:
+                pat.email = None
+
         if req.name is not None: pat.name = req.name
         if req.age is not None: pat.age = req.age
         if req.gender is not None: pat.gender = req.gender
@@ -555,6 +585,7 @@ async def update_patient(patient_id: str, req: PatientUpdateRequest, db: Session
             age=pat.age,
             gender=pat.gender,
             phone=pat.phone,
+            email=pat.email,
             village=pat.village,
             district=pat.district,
             diabetes_duration=pat.diabetes_duration,
@@ -569,6 +600,8 @@ async def update_patient(patient_id: str, req: PatientUpdateRequest, db: Session
             referral_urgency=pat.referral_urgency,
             doctor_verified=pat.doctor_verified,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Error updating patient {patient_id}: {e}")
@@ -1512,3 +1545,86 @@ async def whatsapp_webhook_event(request: Request, db: Session = Depends(get_db)
     except Exception as e:
         logger.warning(f"Error processing WhatsApp webhook payload: {e}")
         return {"status": "error", "detail": str(e)}
+
+
+# =====================================================================
+# Phase 14: Clinical Report Email Delivery Endpoints
+# =====================================================================
+
+@app.post("/api/reports/{screening_id}/email/send", response_model=EmailDeliveryRecord, tags=["Phase 14: Email Delivery"])
+async def send_email_report_endpoint(screening_id: str, req: EmailSendRequest, db: Session = Depends(get_db)):
+    """
+    Requests secure Email delivery of the doctor-reviewed clinical PDF report to the patient.
+    Enforces Doctor Review Gate, recipient email validation, and opt-in consent.
+    """
+    try:
+        delivery_record = await email_service.send_email_report(
+            screening_id=screening_id,
+            recipient_email=req.recipient_email,
+            language=req.language,
+            opt_in_confirmed=req.opt_in_confirmed,
+            db=db,
+        )
+        return delivery_record
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Failed to send email report for {screening_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/reports/{screening_id}/email/status", response_model=EmailStatusResponse, tags=["Phase 14: Email Delivery"])
+async def get_email_status_endpoint(screening_id: str, db: Session = Depends(get_db)):
+    """Returns Email delivery status, doctor gate evaluation, patient recipient resolution, and audit trail."""
+    can_send, gate_reason, review = email_service.check_doctor_review_gate(screening_id, db=db)
+    delivery_rec = email_service.get_delivery_status(screening_id, db=db)
+    patient = email_service.resolve_patient_for_screening(screening_id=screening_id, db=db)
+
+    rev_status = review.get("review_status", "PENDING DOCTOR REVIEW") if review else "PENDING DOCTOR REVIEW"
+
+    # Enforce: The recipient is the Patient. If patient is missing or email is missing/invalid, block sending.
+    patient_email = getattr(patient, "email", None) if patient else None
+    norm_patient_email = email_service.normalize_email(patient_email)
+
+    if not norm_patient_email:
+        can_send = False
+        block_reason = "Patient email address not available."
+        resolved_recipient_email = None
+    else:
+        resolved_recipient_email = norm_patient_email
+        block_reason = None if can_send else gate_reason
+
+    patient_id = delivery_rec.patient_id if (delivery_rec and delivery_rec.patient_id) else (getattr(patient, "id", None))
+    patient_name = delivery_rec.patient_name if (delivery_rec and delivery_rec.patient_name) else (getattr(patient, "name", None))
+    recipient_name = delivery_rec.recipient_name if (delivery_rec and delivery_rec.recipient_name) else patient_name
+
+    return EmailStatusResponse(
+        screening_id=screening_id,
+        status=delivery_rec.status if delivery_rec else EmailDeliveryStatus.NOT_REQUESTED,
+        recipient_email=delivery_rec.recipient_email if delivery_rec else resolved_recipient_email,
+        patient_id=patient_id,
+        patient_name=patient_name,
+        recipient_name=recipient_name,
+        doctor_review_status=rev_status,
+        can_send=can_send,
+        block_reason=block_reason,
+        delivery_record=delivery_rec,
+        audit_events=delivery_rec.audit_events if delivery_rec else [],
+    )
+
+
+@app.post("/api/reports/{screening_id}/email/retry", response_model=EmailDeliveryRecord, tags=["Phase 14: Email Delivery"])
+async def retry_email_report_endpoint(screening_id: str, req: EmailRetryRequest, db: Session = Depends(get_db)):
+    """Retries failed email report delivery for a screening in DB."""
+    try:
+        delivery_record = await email_service.retry_email_report(
+            screening_id=screening_id,
+            force_regenerate_pdf=req.force_regenerate_pdf,
+            db=db,
+        )
+        return delivery_record
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+

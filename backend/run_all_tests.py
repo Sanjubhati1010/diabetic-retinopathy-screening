@@ -26,14 +26,15 @@ TEST_SUITES = [
     ("Phase 11: Tele-Ophthalmology & Appointments", "test_phase11_appointments.py"),
     ("Phase 12: WhatsApp Clinical Report Delivery", "test_phase12_whatsapp.py"),
     ("Phase 13: MySQL / SQLAlchemy Database Persistence", "test_phase13_database.py"),
+    ("Phase 14: Patient Email Registration & Report Delivery", "test_phase14_email.py"),
     ("End-to-End API Integration", "test_e2e_api.py"),
     ("DR Classification Model Inference", "test_inference.py"),
 ]
 
 def run_suite(name, filename):
-    print(f"\n=======================================================")
-    print(f"RUNNING: {name} ({filename})")
-    print(f"=======================================================")
+    print(f"\n=======================================================", flush=True)
+    print(f"RUNNING: {name} ({filename})", flush=True)
+    print(f"=======================================================", flush=True)
     start_t = time.time()
     
     python_exe = os.path.join(os.path.dirname(__file__), "venv", "Scripts", "python.exe")
@@ -50,15 +51,16 @@ def run_suite(name, filename):
     )
     elapsed = time.time() - start_t
     
-    print(res.stdout)
+    if res.stdout:
+        print(res.stdout, flush=True)
     if res.stderr:
-        print("STDERR:", res.stderr)
+        print("STDERR:", res.stderr, flush=True)
         
     if res.returncode == 0:
-        print(f"[PASSED] {name} ({elapsed:.2f}s)")
+        print(f"[PASSED] {name} ({elapsed:.2f}s)", flush=True)
         return True, elapsed
     else:
-        print(f"[FAILED] {name} (Exit code {res.returncode}, {elapsed:.2f}s)")
+        print(f"[FAILED] {name} (Exit code {res.returncode}, {elapsed:.2f}s)", flush=True)
         return False, elapsed
 
 def main():

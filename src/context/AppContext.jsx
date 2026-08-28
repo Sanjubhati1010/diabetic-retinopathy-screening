@@ -248,6 +248,7 @@ export const AppProvider = ({ children }) => {
     const patientObj = {
       ...newPatient,
       id,
+      email: newPatient.email ? newPatient.email.trim().toLowerCase() : null,
       registeredDate: new Date().toISOString().split('T')[0],
       lastScreened: '-',
       latestStatus: 'drUncertain',
@@ -265,6 +266,7 @@ export const AppProvider = ({ children }) => {
     return {
       id: id || 'PAT-2026-081',
       name: 'Unknown Patient',
+      email: 'sanjay.bhati@example.com',
       age: 45,
       gender: 'Other',
       village: 'Rampur',
@@ -272,7 +274,7 @@ export const AppProvider = ({ children }) => {
       lastHba1c: 7.5,
       visualAcuityOD: '6/6',
       visualAcuityOS: '6/6',
-      phone: '+91 98765 00000',
+      phone: '+91 73782 16613',
       abhaId: 'ABHA-9876-0000',
     };
   };

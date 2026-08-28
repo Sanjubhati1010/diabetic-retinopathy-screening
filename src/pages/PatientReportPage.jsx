@@ -41,6 +41,7 @@ import {
   RefreshCw,
   Clock,
   ExternalLink,
+  Mail,
 } from 'lucide-react';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
 import {
@@ -50,6 +51,9 @@ import {
   sendWhatsAppReport,
   getWhatsAppDeliveryStatus,
   retryWhatsAppDelivery,
+  sendEmailReport,
+  getEmailDeliveryStatus,
+  retryEmailDelivery,
   generateReportPdf,
 } from '../services/api';
 import { getLightweightReview } from '../services/storage';
@@ -82,6 +86,14 @@ const PatientReportContent = () => {
   const [whatsappErrorMsg, setWhatsappErrorMsg] = useState(null);
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  // Phase 14 Email Delivery States
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState(null);
+  const [emailSuccessMsg, setEmailSuccessMsg] = useState(null);
+  const [emailErrorMsg, setEmailErrorMsg] = useState(null);
+  const [showEmailAuditTrail, setShowEmailAuditTrail] = useState(false);
 
   const fetchReportData = async () => {
     setLoading(true);
@@ -130,6 +142,12 @@ const PatientReportContent = () => {
         );
         if (waStatus) {
           setWhatsappStatus(waStatus);
+        }
+
+        // Fetch Email status authoritatively
+        const emStatus = await getEmailDeliveryStatus(targetScreening.id);
+        if (emStatus) {
+          setEmailStatus(emStatus);
         }
       }
     } catch (err) {
@@ -208,6 +226,59 @@ const PatientReportContent = () => {
       setWhatsappErrorMsg(err.message || 'Failed to retry WhatsApp delivery.');
     } finally {
       setIsSendingWhatsApp(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!screening?.id) return;
+    if (!emailStatus?.recipient_email) {
+      setEmailErrorMsg('Patient email address not available.');
+      return;
+    }
+
+    setIsSendingEmail(true);
+    setEmailErrorMsg(null);
+    setEmailSuccessMsg(null);
+
+    try {
+      const payload = {
+        screening_id: screening.id,
+        recipient_email: emailStatus.recipient_email,
+        language: 'en',
+        opt_in_confirmed: true,
+      };
+      await sendEmailReport(screening.id, payload);
+      setEmailSuccessMsg('Clinical PDF report sent to patient via Email.');
+      setIsEmailModalOpen(false);
+
+      // Refresh delivery status
+      const updatedStatus = await getEmailDeliveryStatus(screening.id);
+      if (updatedStatus) {
+        setEmailStatus(updatedStatus);
+      }
+    } catch (err) {
+      setEmailErrorMsg(err.message || 'Failed to dispatch report to patient via Email.');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleRetryEmail = async () => {
+    if (!screening?.id) return;
+    setIsSendingEmail(true);
+    setEmailErrorMsg(null);
+
+    try {
+      await retryEmailDelivery(screening.id, { force_regenerate_pdf: false });
+      setEmailSuccessMsg('Email report delivery retried to patient registered email.');
+      const updatedStatus = await getEmailDeliveryStatus(screening.id);
+      if (updatedStatus) {
+        setEmailStatus(updatedStatus);
+      }
+    } catch (err) {
+      setEmailErrorMsg(err.message || 'Failed to retry Email delivery.');
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 
@@ -364,6 +435,28 @@ const PatientReportContent = () => {
                 : whatsappStatus?.status === 'READ'
                 ? 'WhatsApp: Read'
                 : 'Send on WhatsApp'}
+            </span>
+          </button>
+
+          {/* Phase 14 Send Clinical Report on Email */}
+          <button
+            type="button"
+            onClick={() => setIsEmailModalOpen(true)}
+            disabled={isRecaptureRequested}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition ${
+              isRecaptureRequested
+                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 shadow-md'
+            }`}
+            title={isRecaptureRequested ? 'Cannot deliver report: Re-capture requested by doctor' : 'Send clinical PDF report via Email'}
+          >
+            <Mail className="w-4 h-4" />
+            <span>
+              {emailStatus?.status === 'SENT'
+                ? 'Email: Sent'
+                : emailStatus?.status === 'FAILED'
+                ? 'Email: Failed'
+                : 'Send on Email'}
             </span>
           </button>
 
@@ -585,6 +678,198 @@ const PatientReportContent = () => {
               >
                 {isSendingWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 <span>{isSendingWhatsApp ? 'Sending...' : 'Dispatch Report to Patient'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 14 Clinical Report Email Delivery Card */}
+      <div className="no-print p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-white border border-blue-200 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-md">
+              <Mail className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wide">
+                  Clinical Report Email Delivery
+                </h3>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase border ${
+                  emailStatus?.status === 'SENT'
+                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                    : emailStatus?.status === 'FAILED'
+                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  Status: {emailStatus?.status || 'NOT REQUESTED'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 font-medium">
+                Authorized Recipient: <strong>{emailStatus?.patient_name || patient.name || screening.patientName || 'Sanjay Bhati'} (Patient)</strong> • Registered Email:{' '}
+                {emailStatus?.recipient_email ? (
+                  <span className="font-mono font-bold text-slate-800">{emailStatus.recipient_email}</span>
+                ) : (
+                  <span className="font-medium text-rose-600 italic">Patient email address not available.</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            {emailStatus?.status === 'FAILED' && (
+              <button
+                type="button"
+                onClick={handleRetryEmail}
+                disabled={isSendingEmail}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-sm"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSendingEmail ? 'animate-spin' : ''}`} />
+                <span>Retry Email</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowEmailAuditTrail(!showEmailAuditTrail)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-blue-200 bg-white hover:bg-blue-50 text-blue-800 text-xs font-bold transition"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>{showEmailAuditTrail ? 'Hide Audit Log' : 'Email Log'}</span>
+            </button>
+          </div>
+        </div>
+
+        {emailSuccessMsg && (
+          <div className="p-2.5 rounded-xl bg-blue-100 border border-blue-300 text-blue-900 text-xs font-semibold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-blue-700 shrink-0" />
+            <span>{emailSuccessMsg}</span>
+          </div>
+        )}
+
+        {emailErrorMsg && (
+          <div className="p-2.5 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-700 shrink-0" />
+            <span>{emailErrorMsg}</span>
+          </div>
+        )}
+
+        {/* Expandable Email Audit Log */}
+        {showEmailAuditTrail && (
+          <div className="mt-3 pt-3 border-t border-blue-200 space-y-2 text-xs">
+            <h4 className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">
+              Email Delivery Lifecycle Audit Trail
+            </h4>
+            {emailStatus?.audit_events && emailStatus.audit_events.length > 0 ? (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {emailStatus.audit_events.map((evt, idx) => (
+                  <div key={idx} className="p-2 rounded-lg bg-white border border-slate-200 flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-slate-900">{evt.event_type}</span>: <span className="text-slate-600">{evt.description || evt.details?.message || 'Email event processed'}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                      {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-500 text-xs italic">No email dispatch audit events recorded yet.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Email Delivery Confirmation Modal */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm no-print animate-fade-in">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-md">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-950">
+                  Confirm Email Report Delivery
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Direct clinical PDF report dispatch to patient's registered email address
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Screening ID:</span>
+                <span className="font-mono font-bold text-slate-900">{screening.id}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Report Recipient:</span>
+                <span className="font-bold text-slate-900">
+                  {emailStatus?.patient_name || patient.name || screening.patientName || 'Sanjay Bhati'} (Patient)
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Registered Email Address:</span>
+                {emailStatus?.recipient_email ? (
+                  <span className="font-mono font-bold text-blue-800 bg-blue-100/70 px-2 py-0.5 rounded">
+                    {emailStatus.recipient_email}
+                  </span>
+                ) : (
+                  <span className="text-rose-600 font-medium italic bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                    Patient email address not available.
+                  </span>
+                )}
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Subject:</span>
+                <span className="font-medium text-slate-800 truncate max-w-[280px]">
+                  Diabetic Retinopathy Screening Report — {emailStatus?.patient_name || patient.name || screening.patientName || 'Sanjay Bhati'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Doctor Review Status:</span>
+                <span className="font-bold text-emerald-700">{reviewStatus}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500">Attachment:</span>
+                <span className="font-medium text-slate-700 flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Approved Clinical PDF Report</span>
+                </span>
+              </div>
+            </div>
+
+            {emailStatus?.recipient_email ? (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium">
+                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>Patient Email recipient verified. Doctor-reviewed PDF report will be dispatched directly to patient.</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Delivery blocked: Patient email address not available.</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsEmailModalOpen(false)}
+                disabled={isSendingEmail}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendEmail}
+                disabled={isSendingEmail || !emailStatus?.can_send || !emailStatus?.recipient_email}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                <span>{isSendingEmail ? 'Sending...' : 'Dispatch Report to Patient Email'}</span>
               </button>
             </div>
           </div>

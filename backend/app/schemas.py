@@ -513,6 +513,7 @@ class PatientCreateRequest(BaseModel):
     age: int = Field(..., ge=1, le=120, description="Patient age")
     gender: str = Field(..., description="Gender (male, female, other)")
     phone: Optional[str] = Field(default=None, description="Contact phone number")
+    email: Optional[str] = Field(default=None, description="Patient registered email address")
     village: Optional[str] = Field(default=None, description="Village or neighborhood")
     district: Optional[str] = Field(default=None, description="District / Location")
     abha_id: Optional[str] = Field(default=None, description="Ayushman Bharat Health Account ID")
@@ -529,6 +530,7 @@ class PatientUpdateRequest(BaseModel):
     age: Optional[int] = None
     gender: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[str] = None
     village: Optional[str] = None
     district: Optional[str] = None
     abha_id: Optional[str] = None
@@ -551,6 +553,7 @@ class PatientResponse(BaseModel):
     age: int
     gender: str
     phone: Optional[str] = None
+    email: Optional[str] = None
     village: Optional[str] = None
     district: Optional[str] = None
     diabetes_duration: Optional[int] = None
@@ -629,6 +632,72 @@ class ScreeningRecordResponse(BaseModel):
 class ScreeningListResponse(BaseModel):
     total: int
     screenings: List[ScreeningRecordResponse]
+
+
+# =====================================================================
+# Phase 14: Clinical Report Email Delivery Schemas
+# =====================================================================
+
+class EmailDeliveryStatus(str, Enum):
+    NOT_REQUESTED = "NOT_REQUESTED"
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+
+
+class EmailSendRequest(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    recipient_email: str = Field(..., description="Patient registered email address")
+    language: str = Field(default="en", description="Language: 'en' or 'hi'")
+    opt_in_confirmed: bool = Field(default=True, description="Explicit recipient consent confirmation")
+
+
+class EmailAuditEvent(BaseModel):
+    event_type: str = Field(..., description="Audit event type")
+    timestamp: str = Field(..., description="ISO 8601 event timestamp")
+    screening_id: str = Field(..., description="Screening identifier")
+    actor: str = Field(default="system", description="Actor triggering the event")
+    delivery_status: str = Field(default="PENDING", description="Status at time of event")
+    provider_message_id: Optional[str] = Field(default=None, description="Email provider tracking ID")
+    details: Optional[Dict[str, Any]] = Field(default=None, description="Additional audit metadata")
+
+
+class EmailDeliveryRecord(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    recipient_email: str = Field(..., description="Recipient email (Patient registered email)")
+    patient_id: Optional[str] = Field(default=None, description="Patient identifier")
+    patient_name: Optional[str] = Field(default=None, description="Patient name")
+    recipient_name: Optional[str] = Field(default=None, description="Recipient name (Patient)")
+    status: EmailDeliveryStatus = Field(default=EmailDeliveryStatus.NOT_REQUESTED, description="Current email status")
+    subject: Optional[str] = Field(default=None, description="Email subject line")
+    provider_message_id: Optional[str] = Field(default=None, description="Email message tracking ID")
+    sent_at: Optional[str] = Field(default=None, description="Timestamp message was sent")
+    failure_reason: Optional[str] = Field(default=None, description="Failure reason if delivery failed")
+    error_message: Optional[str] = Field(default=None, description="Technical error detail")
+    pdf_filename: Optional[str] = Field(default=None, description="Attached PDF filename")
+    pdf_download_url: Optional[str] = Field(default=None, description="Document download URL")
+    is_demo: bool = Field(default=True, description="Whether delivery ran in demo/test mode")
+    audit_events: List[EmailAuditEvent] = Field(default_factory=list, description="Email audit trail")
+
+
+class EmailStatusResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    status: EmailDeliveryStatus = Field(..., description="Current email status")
+    recipient_email: Optional[str] = Field(default=None, description="Authorized recipient email (Patient registered email)")
+    patient_id: Optional[str] = Field(default=None, description="Patient identifier")
+    patient_name: Optional[str] = Field(default=None, description="Patient name")
+    recipient_name: Optional[str] = Field(default=None, description="Recipient name (Patient)")
+    doctor_review_status: str = Field(..., description="Current doctor review status")
+    can_send: bool = Field(..., description="Whether doctor-review gate and patient email permit sending")
+    block_reason: Optional[str] = Field(default=None, description="Reason why email dispatch is blocked if can_send is false")
+    delivery_record: Optional[EmailDeliveryRecord] = Field(default=None, description="Latest email delivery record")
+    audit_events: List[EmailAuditEvent] = Field(default_factory=list, description="Email audit trail")
+
+
+class EmailRetryRequest(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    force_regenerate_pdf: bool = Field(default=False, description="Whether to regenerate PDF before retrying")
+
 
 
 

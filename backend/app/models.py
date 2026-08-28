@@ -33,6 +33,7 @@ class PatientModel(Base):
     age = Column(Integer, nullable=False)
     gender = Column(String(32), nullable=False)
     phone = Column(String(32), nullable=True, index=True)
+    email = Column(String(128), nullable=True, index=True)
     village = Column(String(128), nullable=True)
     district = Column(String(128), nullable=True)
     diabetes_duration = Column(Integer, nullable=True)
@@ -131,6 +132,7 @@ class ScreeningModel(Base):
     audit_events = relationship("ReviewAuditEventModel", back_populates="screening", cascade="all, delete-orphan")
     appointments = relationship("AppointmentModel", back_populates="screening")
     whatsapp_delivery = relationship("WhatsAppDeliveryModel", back_populates="screening", uselist=False, cascade="all, delete-orphan")
+    email_delivery = relationship("EmailDeliveryModel", back_populates="screening", uselist=False, cascade="all, delete-orphan")
     report = relationship("ReportModel", back_populates="screening", uselist=False, cascade="all, delete-orphan")
 
 
@@ -279,3 +281,40 @@ class WhatsAppAuditEventModel(Base):
     timestamp = Column(String(64), nullable=False)
 
     delivery = relationship("WhatsAppDeliveryModel", back_populates="audit_events")
+
+
+class EmailDeliveryModel(Base):
+    __tablename__ = "email_deliveries"
+
+    id = Column(String(64), primary_key=True, index=True)
+    screening_id = Column(String(64), ForeignKey("screenings.id"), nullable=False, unique=True, index=True)
+    patient_id = Column(String(64), nullable=True, index=True)
+    patient_name = Column(String(128), nullable=True)
+    recipient_email = Column(String(128), nullable=False, index=True)
+    subject = Column(String(256), nullable=False)
+    status = Column(String(32), default="NOT_REQUESTED", index=True)  # NOT_REQUESTED, PENDING, SENT, FAILED
+    provider_message_id = Column(String(128), nullable=True, unique=True, index=True)
+    error_message = Column(Text, nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    pdf_filename = Column(String(256), nullable=True)
+    is_demo = Column(Boolean, default=True)
+    created_at = Column(String(64), nullable=False)
+    sent_at = Column(String(64), nullable=True)
+
+    screening = relationship("ScreeningModel", back_populates="email_delivery")
+    audit_events = relationship("EmailAuditEventModel", back_populates="delivery", cascade="all, delete-orphan")
+
+
+class EmailAuditEventModel(Base):
+    __tablename__ = "email_audit_events"
+
+    id = Column(String(64), primary_key=True, index=True)
+    delivery_id = Column(String(64), ForeignKey("email_deliveries.id"), nullable=True, index=True)
+    screening_id = Column(String(64), ForeignKey("screenings.id"), nullable=False, index=True)
+    event_type = Column(String(64), nullable=False)
+    description = Column(Text, nullable=False)
+    actor_id = Column(String(64), nullable=False)
+    timestamp = Column(String(64), nullable=False)
+
+    delivery = relationship("EmailDeliveryModel", back_populates="audit_events")
+

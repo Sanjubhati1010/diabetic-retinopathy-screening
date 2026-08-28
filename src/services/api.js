@@ -1562,6 +1562,73 @@ export async function updateHealthWorkerOptIn(hwId, payload) {
   }
 }
 
+// =====================================================================
+// Phase 14: Clinical Report Email Delivery API Client Functions
+// =====================================================================
+
+/**
+ * Requests secure Email report delivery for a doctor-reviewed screening.
+ * POST /api/reports/{screening_id}/email/send
+ */
+export async function sendEmailReport(screeningId, payload) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/email/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to deliver Email report (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error sending Email report for ${screeningId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieves the current Email delivery status, doctor review gate check, and audit trail.
+ * GET /api/reports/{screening_id}/email/status
+ */
+export async function getEmailDeliveryStatus(screeningId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/email/status`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch Email delivery status (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.warn(`Error getting Email status for ${screeningId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Retries failed Email delivery.
+ * POST /api/reports/{screening_id}/email/retry
+ */
+export async function retryEmailDelivery(screeningId, payload = {}) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/email/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to retry email delivery (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error retrying Email delivery for ${screeningId}:`, error);
+    throw error;
+  }
+}
+
+
 
 
 

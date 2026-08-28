@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Calendar,
   Phone,
+  Mail,
   MapPin,
   FileCheck,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ export const PatientRegisterPage = () => {
     age: '',
     gender: 'male',
     phone: '',
+    email: '',
     village: 'Rampur Gram Panchayat',
     district: 'Varanasi',
     diabetesDuration: '5',
@@ -36,7 +38,22 @@ export const PatientRegisterPage = () => {
     symptoms: ['blurredVision'],
   });
 
+  const [emailError, setEmailError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleEmailChange = (val) => {
+    setFormData((prev) => ({ ...prev, email: val }));
+    if (!val || !val.trim()) {
+      setEmailError('');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(val.trim())) {
+      setEmailError('Please enter a valid email address (e.g. name@example.com)');
+    } else {
+      setEmailError('');
+    }
+  };
 
   const handleCheckboxToggle = (sym) => {
     setFormData((prev) => {
@@ -51,10 +68,19 @@ export const PatientRegisterPage = () => {
 
   const handleSubmit = (e, andStartScreening = true) => {
     e.preventDefault();
+    if (formData.email && formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        setEmailError('Please enter a valid email address before submitting.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     const newPatient = addPatient({
       ...formData,
+      email: formData.email ? formData.email.trim().toLowerCase() : null,
       age: Number(formData.age) || 50,
       diabetesDuration: Number(formData.diabetesDuration) || 5,
       lastHba1c: Number(formData.lastHba1c) || 7.5,
@@ -150,7 +176,13 @@ export const PatientRegisterPage = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{t('phone')} *</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-brand-600" />
+                  <span>{t('phone')} *</span>
+                </span>
+                <span className="text-[10px] text-emerald-600 font-semibold">WhatsApp Verified</span>
+              </label>
               <input
                 type="tel"
                 required
@@ -161,7 +193,27 @@ export const PatientRegisterPage = () => {
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Mail className="w-3.5 h-3.5 text-brand-600" />
+                  <span>Email Address</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleEmailChange(e.target.value)}
+                placeholder="e.g. patient@example.com"
+                className={`w-full text-xs px-3.5 py-2.5 rounded-xl border ${
+                  emailError ? 'border-rose-400 focus:ring-rose-500 focus:border-rose-500 bg-rose-50/30' : 'border-slate-300 focus:ring-brand-500 focus:border-brand-500'
+                }`}
+              />
+              {emailError && <p className="text-[11px] text-rose-600 mt-1 font-medium">{emailError}</p>}
+            </div>
+
+            <div className="sm:col-span-1">
               <label className="block text-xs font-bold text-slate-700 mb-1">{t('village')} *</label>
               <input
                 type="text"

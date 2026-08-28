@@ -124,6 +124,7 @@ DEMO_PATIENTS = [
         "age": 58,
         "gender": "male",
         "phone": "+91 73782 16613",
+        "email": "sanjay.bhati@example.com",
         "village": "Rampur Gram Panchayat",
         "district": "Varanasi",
         "diabetes_duration": 8,
@@ -145,6 +146,7 @@ DEMO_PATIENTS = [
         "age": 52,
         "gender": "female",
         "phone": "+91 94123 88990",
+        "email": "sunita.devi@example.com",
         "village": "Shivpuri Taluk",
         "district": "Varanasi",
         "diabetes_duration": 12,
@@ -166,6 +168,7 @@ DEMO_PATIENTS = [
         "age": 46,
         "gender": "male",
         "phone": "+91 97890 12345",
+        "email": None,
         "village": "Kolar Rural Block",
         "district": "Kolar",
         "diabetes_duration": 3,
@@ -187,6 +190,7 @@ DEMO_PATIENTS = [
         "age": 64,
         "gender": "female",
         "phone": "+91 91234 56780",
+        "email": "lakshmi.patel@example.com",
         "village": "Mandya East Sector",
         "district": "Mandya",
         "diabetes_duration": 15,
@@ -461,10 +465,22 @@ def seed_database_if_empty(db: Session):
     Initializes database tables with baseline demo records if empty.
     Preserves all modified or dynamically created records across restarts.
     """
-    # 0. Schema Migration for WhatsApp Delivery Table
+    # 0. Schema Migration for WhatsApp Delivery & Patient Email & Email Delivery Tables
     try:
         from sqlalchemy import text
+        from app.database import Base
+        Base.metadata.create_all(bind=db.bind)
+
         with db.bind.connect() as conn:
+            # 0.1 Check patients.email column
+            try:
+                conn.execute(text("SELECT email FROM patients LIMIT 1"))
+            except Exception:
+                logger.info("Migrating patients table: adding email column...")
+                conn.execute(text("ALTER TABLE patients ADD COLUMN email VARCHAR(128)"))
+                conn.commit()
+
+            # 0.2 Check whatsapp_deliveries columns
             try:
                 conn.execute(text("SELECT patient_id FROM whatsapp_deliveries LIMIT 1"))
             except Exception:
@@ -492,7 +508,7 @@ def seed_database_if_empty(db: Session):
                     del_row.recipient_phone = "+919789012345"
         db.commit()
     except Exception as e:
-        logger.debug(f"Schema migration note for whatsapp_deliveries: {e}")
+        logger.debug(f"Schema migration note: {e}")
 
     # 1. Seed Doctors
     if db.query(DoctorModel).count() == 0:
@@ -537,6 +553,7 @@ def seed_database_if_empty(db: Session):
             else:
                 p.name = pat_data["name"]
                 p.phone = pat_data["phone"]
+                p.email = pat_data.get("email", p.email)
                 p.village = pat_data["village"]
                 p.district = pat_data.get("district", p.district)
         db.commit()
