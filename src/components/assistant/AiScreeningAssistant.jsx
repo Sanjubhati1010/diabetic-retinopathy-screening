@@ -194,20 +194,19 @@ export const AiScreeningAssistant = () => {
 
   return (
     <>
-      {/* Floating Trigger Button (Bottom Right) */}
+      {/* Floating Trigger Button (Compact Sleek Circle) */}
       {!isOpen && (
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 p-3.5 sm:px-5 sm:py-3.5 rounded-full bg-gradient-to-r from-brand-600 to-teal-600 text-white font-bold text-xs shadow-glow hover:shadow-xl transition-all transform hover:scale-105 flex items-center gap-2.5 group focus:outline-none focus:ring-4 focus:ring-brand-500/30"
+          className="fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full bg-gradient-to-r from-brand-600 to-teal-600 text-white shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-brand-400/40"
           aria-label="Open AI Screening Assistant"
+          title={t('assistantTitle') || 'AI Screening Assistant'}
         >
-          <div className="relative">
-            <Bot className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping"></span>
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full"></span>
+          <div className="relative flex items-center justify-center">
+            <Bot className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full"></span>
           </div>
-          <span className="hidden sm:inline tracking-wide font-extrabold">{t('assistantTitle') || 'AI Assistant'}</span>
         </button>
       )}
 

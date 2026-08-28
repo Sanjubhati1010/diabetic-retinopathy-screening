@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from 'lucide-react';
+import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
 
 export const PatientProfilePage = () => {
   const { id } = useParams();
@@ -26,6 +27,21 @@ export const PatientProfilePage = () => {
   const navigate = useNavigate();
 
   const patient = getPatientById(id);
+
+  if (!patient) {
+    return (
+      <div className="text-center py-12 space-y-4">
+        <p className="text-slate-500">Patient record not found.</p>
+        <button
+          onClick={() => navigate('/patients')}
+          className="px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold"
+        >
+          Return to Patients
+        </button>
+      </div>
+    );
+  }
+
   const patientScreenings = screenings.filter((s) => s.patientId === patient.id);
 
   const handleStartScreening = () => {
@@ -39,10 +55,9 @@ export const PatientProfilePage = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Demo Data Disclaimer */}
-      <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-        <User className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>DEMO DATA — NOT REAL MEDICAL RESULTS</span>
+      {/* Subtle Demo Data Disclaimer */}
+      <div>
+        <DemoDisclaimer text="DEMO DATA — PATIENT CLINICAL PROFILE" />
       </div>
 
       {/* Back button & Title */}

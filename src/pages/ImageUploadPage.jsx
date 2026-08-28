@@ -23,6 +23,7 @@ import {
 import { SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
 import { ensureImageFile, validateImageQuality } from '../services/api';
 import { VoiceGuidanceControl } from '../components/common/VoiceGuidanceControl';
+import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
 
 export const ImageUploadPage = () => {
   const { t } = useLanguage();
@@ -538,10 +539,9 @@ export const ImageUploadPage = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Demo Data Disclaimer */}
-      <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>DEMO DATA — NOT REAL MEDICAL RESULTS</span>
+      {/* Subtle Demo Data Disclaimer */}
+      <div>
+        <DemoDisclaimer text="DEMO DATA — NOT REAL MEDICAL RESULTS • Retinal scan upload simulation." />
       </div>
 
       {/* Wizard Step Tracker */}

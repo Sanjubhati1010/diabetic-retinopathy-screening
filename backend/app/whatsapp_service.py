@@ -595,36 +595,77 @@ class WhatsAppService:
             return existing_record
 
         # 5. Generate Clinical PDF
+        scr_rec = db.query(ScreeningModel).filter(ScreeningModel.id == screening_id).first()
         scr_dict = screening_data or {
             "id": screening_id,
-            "screeningDate": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            "className": "Moderate DR",
-            "confidence": 0.875,
-            "riskCategory": "MODERATE RISK",
-            "referralPriority": "EYE SPECIALIST REVIEW RECOMMENDED",
-            "screeningStatus": "RELIABLE AI SCREENING",
+            "screening_id": screening_id,
+            "patient_id": getattr(patient, "id", None),
+            "patient_name": getattr(patient, "name", None),
+            "village": getattr(patient, "village", None) or getattr(scr_rec, "village", None) or (hw.village if hw else "Rampur Gram Panchayat"),
+            "screeningDate": getattr(scr_rec, "screening_date", None) or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "className": getattr(scr_rec, "class_name", "Moderate DR"),
+            "class_name": getattr(scr_rec, "class_name", "Moderate DR"),
+            "confidence": getattr(scr_rec, "confidence", 0.85),
+            "riskCategory": getattr(scr_rec, "risk_category", "MODERATE RISK"),
+            "risk_category": getattr(scr_rec, "risk_category", "MODERATE RISK"),
+            "referralPriority": getattr(scr_rec, "referral_priority", "EYE SPECIALIST REVIEW RECOMMENDED"),
+            "referral_priority": getattr(scr_rec, "referral_priority", "EYE SPECIALIST REVIEW RECOMMENDED"),
+            "screeningStatus": getattr(scr_rec, "screening_status", "RELIABLE AI SCREENING"),
+            "dr_severity_od": getattr(scr_rec, "dr_severity_od", None) or "dr2",
+            "dr_severity_os": getattr(scr_rec, "dr_severity_os", None) or "dr1",
+            "overall_severity": getattr(scr_rec, "overall_severity", None) or "dr2",
+            "image_od_path": getattr(scr_rec, "image_od_path", None),
+            "image_os_path": getattr(scr_rec, "image_os_path", None),
+            "gradcam_url": getattr(scr_rec, "gradcam_url", None),
+            "heatmap_url": getattr(scr_rec, "heatmap_url", None),
         }
-        pat_name = getattr(patient, "name", "Sanjay Bhati") if patient else "Sanjay Bhati"
         pat_dict = patient_data or {
-            "name": pat_name,
-            "age": getattr(patient, "age", 58),
-            "gender": getattr(patient, "gender", "Male"),
-            "abhaId": getattr(patient, "abha_id", "91-4829-1029-4821"),
-            "village": getattr(patient, "village", hw.village if hw else "Rampur Gram Panchayat"),
+            "id": getattr(patient, "id", None),
+            "name": getattr(patient, "name", None),
+            "age": getattr(patient, "age", None),
+            "gender": getattr(patient, "gender", None),
+            "abha_id": getattr(patient, "abha_id", None) or getattr(patient, "id", None),
+            "village": getattr(patient, "village", None) or (hw.village if hw else "Rampur Gram Panchayat"),
+            "district": getattr(patient, "district", "Varanasi"),
             "phone": norm_patient_phone,
+            "email": getattr(patient, "email", None) or getattr(patient, "email_address", None),
+            "diabetes_duration": getattr(patient, "diabetes_duration", None),
+            "last_hba1c": getattr(patient, "last_hba1c", None),
+            "insulin_use": getattr(patient, "insulin_use", None),
+            "visual_acuity_od": getattr(patient, "visual_acuity_od", None),
+            "visual_acuity_os": getattr(patient, "visual_acuity_os", None),
         }
+        pat_name = pat_dict.get("name") or (patient.name if patient else "Patient")
         hw_dict = {
-            "name": hw.name if hw else "Pooja Sharma (ASHA Worker)",
+            "name": hw.name if hw else "Primary Health Center Screener",
             "id": hw.id if hw else "HW-RAMPUR-01",
-            "village": hw.village if hw else "Rampur Gram Panchayat",
+            "village": hw.village if hw else (getattr(patient, "village", None) or "Rampur Gram Panchayat"),
             "phc_center": hw.phc_center if hw else "Primary Health Center Rampur",
         }
+
+        from app.longitudinal_service import longitudinal_service
+        prev_scr = longitudinal_service.get_latest_comparable_screening(
+            current_screening_id=screening_id,
+            patient_id=getattr(patient, "id", None),
+            db=db,
+        )
+        longitudinal_data = None
+        if prev_scr:
+            try:
+                longitudinal_data = longitudinal_service.compare_screenings(
+                    current_screening=scr_dict,
+                    previous_screening=prev_scr,
+                )
+            except Exception as e:
+                logger.warning("Failed to compute longitudinal comparison in WhatsApp dispatch: %s", e)
 
         pdf_path = pdf_service.generate_clinical_report(
             screening_data=scr_dict,
             patient_data=pat_dict,
             doctor_review=review,
             health_worker=hw_dict,
+            previous_screening=prev_scr,
+            longitudinal_data=longitudinal_data,
         )
 
         pdf_token = generate_secure_pdf_token(screening_id)

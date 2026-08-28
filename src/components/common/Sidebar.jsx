@@ -21,6 +21,7 @@ import {
   X,
   Radio,
   Video,
+  Activity,
 } from 'lucide-react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
@@ -29,59 +30,68 @@ export const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
   const pendingDoctorCount = screenings.filter((s) => s.doctorStatus === 'pending').length;
+  const urgentPriorityCount = screenings.filter(
+    (s) => s.referralUrgency === 'urgent' || s.overallSeverity === 'severe' || s.overallSeverity === 'proliferative'
+  ).length;
+
+  const firstScreeningId = screenings[0]?.id || 'SCR-2026-0991';
 
   const navGroups = [
     {
-      groupTitle: 'Overview',
+      groupTitle: 'WORKSPACE',
       items: [
-        { name: t('navLanding'), path: '/', icon: Home },
-        { name: t('navDashboard'), path: '/dashboard', icon: LayoutDashboard },
-        { name: t('navPatients'), path: '/patients', icon: Users },
-        { name: t('btnRegisterPatient'), path: '/patients/register', icon: UserPlus },
+        { name: t('navDashboard') || 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+        {
+          name: 'Rural Care Priority',
+          path: '/priority',
+          icon: Activity,
+          badge: urgentPriorityCount > 0 ? `${urgentPriorityCount} Urgent` : null,
+          badgeColor: 'bg-rose-100 text-rose-700 border border-rose-300 font-extrabold',
+        },
+        { name: t('navPatients') || 'Patients', path: '/patients', icon: Users },
+        { name: t('btnRegisterPatient') || 'Register Patient', path: '/patients/register', icon: UserPlus },
+        { name: t('navNewScreening') || 'New Screening', path: '/screenings/new', icon: PlusCircle, highlight: true },
+        { name: t('navHistory') || 'Screening History', path: '/history', icon: History },
       ],
     },
     {
-      groupTitle: 'Screening & AI Workflow',
+      groupTitle: 'CLINICAL',
       items: [
-        { name: t('navNewScreening'), path: '/screenings/new', icon: PlusCircle, highlight: true },
-        { name: t('navUpload'), path: '/screenings/upload', icon: Upload },
-        { name: t('navAnalysis'), path: '/screenings/analysis', icon: Cpu },
+        { name: t('navAnalysis') || 'AI Analysis', path: '/screenings/analysis', icon: Cpu },
         {
-          name: t('navResults'),
-          path: `/screenings/${screenings[0]?.id || 'SCR-2026-0991'}/result`,
+          name: t('navResults') || 'Results',
+          path: `/screenings/${firstScreeningId}/result`,
           icon: FileCheck,
         },
         {
-          name: t('navGradCam'),
-          path: `/screenings/${screenings[0]?.id || 'SCR-2026-0991'}/xai`,
-          icon: Eye,
-          badge: 'XAI',
+          name: t('navDoctor') || 'Doctor Review',
+          path: '/doctor',
+          icon: Stethoscope,
+          badge: pendingDoctorCount > 0 ? String(pendingDoctorCount) : null,
+          badgeColor: 'bg-slate-100 text-slate-600 border border-slate-200/80 font-semibold',
         },
-        { name: t('navHistory'), path: '/history', icon: History },
         {
-          name: t('navReports'),
-          path: `/screenings/${screenings[0]?.id || 'SCR-2026-0991'}/report`,
-          icon: FileText,
+          name: t('teleOphthalmologyTitle') || 'Tele-Ophthalmology',
+          path: '/appointments',
+          icon: Video,
         },
       ],
     },
     {
-      groupTitle: 'Tele-Ophthalmology & Insights',
+      groupTitle: 'REPORTS',
       items: [
         {
-          name: t('teleOphthalmologyTitle') || 'Appointments & Tele-Consult',
-          path: '/appointments',
-          icon: Video,
+          name: t('navReports') || 'Patient Reports',
+          path: `/screenings/${firstScreeningId}/report`,
+          icon: FileText,
         },
-        {
-          name: t('navDoctor'),
-          path: '/doctor',
-          icon: Stethoscope,
-          badge: pendingDoctorCount > 0 ? String(pendingDoctorCount) : null,
-          badgeColor: 'bg-amber-100 text-amber-800',
-        },
-        { name: t('navAnalytics'), path: '/analytics', icon: BarChart3 },
-        { name: t('navSettings'), path: '/settings', icon: Settings },
+        { name: t('navAnalytics') || 'Analytics', path: '/analytics', icon: BarChart3 },
+      ],
+    },
+    {
+      groupTitle: 'SYSTEM',
+      items: [
+        { name: t('navSettings') || 'Settings', path: '/settings', icon: Settings },
       ],
     },
   ];
@@ -119,23 +129,15 @@ export const Sidebar = ({ isOpen, onClose }) => {
         </div>
 
         {/* Navigation Link Groups */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           {navGroups.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-1">
-              <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            <div key={gIdx} className="space-y-0.5">
+              <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {group.groupTitle}
               </p>
-              <div className="space-y-1 mt-1">
+              <div className="space-y-0.5 mt-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const isActive =
-                    item.path === '/'
-                      ? location.pathname === '/'
-                      : location.pathname.startsWith(item.path.split('/')[1] ? `/${item.path.split('/')[1]}` : item.path) &&
-                        (item.path.includes('xai') ? location.pathname.includes('xai') : true) &&
-                        (item.path.includes('report') ? location.pathname.includes('report') : true) &&
-                        (item.path.includes('result') ? location.pathname.includes('result') : true);
-
                   return (
                     <NavLink
                       key={item.path}
@@ -143,9 +145,9 @@ export const Sidebar = ({ isOpen, onClose }) => {
                       onClick={onClose}
                       className={({ isActive: exactActive }) => {
                         const active = item.path === '/' ? exactActive : location.pathname === item.path;
-                        return `group flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                        return `group flex items-center justify-between px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
                           active
-                            ? 'bg-brand-600 text-white shadow-glow'
+                            ? 'bg-brand-600 text-white shadow-sm font-bold'
                             : item.highlight
                             ? 'bg-brand-50 text-brand-700 hover:bg-brand-100 font-bold border border-brand-200/60'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -153,7 +155,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
                       }}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <Icon className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" />
+                        <Icon className="w-4 h-4 shrink-0 transition-transform group-hover:scale-105" />
                         <span className="truncate">{item.name}</span>
                       </div>
                       {item.badge && (

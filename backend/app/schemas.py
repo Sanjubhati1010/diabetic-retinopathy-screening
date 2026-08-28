@@ -789,8 +789,8 @@ class EmailDeliveryStatus(str, Enum):
 
 
 class EmailSendRequest(BaseModel):
-    screening_id: str = Field(..., description="Screening identifier")
-    recipient_email: str = Field(..., description="Patient registered email address")
+    screening_id: Optional[str] = Field(default=None, description="Screening identifier")
+    recipient_email: Optional[str] = Field(default=None, description="Patient registered email address")
     language: str = Field(default="en", description="Language: 'en' or 'hi'")
     opt_in_confirmed: bool = Field(default=True, description="Explicit recipient consent confirmation")
 
@@ -841,6 +841,89 @@ class EmailStatusResponse(BaseModel):
 class EmailRetryRequest(BaseModel):
     screening_id: str = Field(..., description="Screening identifier")
     force_regenerate_pdf: bool = Field(default=False, description="Whether to regenerate PDF before retrying")
+
+
+# =====================================================================
+# Rural Care Priority Engine Schemas
+# =====================================================================
+
+class PriorityEvidenceChecklist(BaseModel):
+    current_dr: str = Field(..., description="Current DR classification name")
+    ai_confidence: str = Field(..., description="Formatted AI confidence percentage or threshold status")
+    previous_dr: str = Field(..., description="Previous DR classification name or baseline marker")
+    longitudinal_change: str = Field(..., description="Longitudinal change status: UNCHANGED, IMPROVED, WORSENED, BASELINE, BLOCKED, UNVERIFIED")
+    longitudinal_detail: str = Field(..., description="Human-readable longitudinal change explanation")
+    image_quality: str = Field(..., description="Image quality gate status")
+    visual_acuity: str = Field(..., description="Visual acuity notation or not recorded")
+    diabetes_duration: str = Field(..., description="Diabetes duration in years or not available")
+    last_hba1c: str = Field(..., description="Last recorded HbA1c or not available")
+
+
+class PriorityQueueItem(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    patient_id: str = Field(..., description="Patient identifier")
+    patient_name: str = Field(..., description="Patient name")
+    village: Optional[str] = Field(default=None, description="Village name")
+    dr_result: str = Field(..., description="ICDR DR classification")
+    predicted_class: Optional[int] = Field(default=None, description="Predicted numerical class (0-4)")
+    confidence: Optional[float] = Field(default=None, description="Model confidence score")
+    confidence_percentage: str = Field(default="N/A", description="Formatted confidence percentage")
+    confidence_status: str = Field(default="HIGH", description="Confidence tier: HIGH, MODERATE, LOW, UNAVAILABLE")
+    priority_level: str = Field(..., description="Priority level: P1, P2, P3, VERIFICATION_REQUIRED, RECAPTURE_REQUIRED")
+    priority_label: str = Field(..., description="Human-readable priority badge label")
+    priority_score: float = Field(..., description="Deterministic priority score")
+    score_label: str = Field(default="Decision-support priority score", description="Label explaining score nature")
+    color: str = Field(default="emerald", description="Color token: rose, amber, emerald")
+    safety_status: str = Field(default="READY_FOR_AI", description="Safety gate status")
+    is_safety_blocked: bool = Field(default=False, description="Whether safety gate blocks prioritization")
+    is_low_confidence: bool = Field(default=False, description="Whether AI uncertainty flags low confidence")
+    primary_reason: str = Field(..., description="Primary reason for calculated priority")
+    detailed_reasons: List[str] = Field(default_factory=list, description="Machine-readable list of explanatory factors")
+    missing_factors: List[str] = Field(default_factory=list, description="List of clinical factors unavailable and excluded from score")
+    evidence_checklist: PriorityEvidenceChecklist = Field(..., description="Structured evidence checklist")
+    longitudinal_change_status: str = Field(default="BASELINE", description="Longitudinal status: UNCHANGED, IMPROVED, WORSENED, BASELINE, NOT COMPARABLE")
+    longitudinal_summary: str = Field(default="", description="Summary of longitudinal comparison")
+    previous_screening_id: Optional[str] = Field(default=None, description="Previous screening ID if compared")
+    previous_screening_date: Optional[str] = Field(default=None, description="Previous screening date")
+    previous_dr_result: Optional[str] = Field(default=None, description="Previous DR result")
+    doctor_status: str = Field(default="pending", description="Doctor review status")
+    doctor_reviewed_result: Optional[str] = Field(default=None, description="Doctor modified result if available")
+    is_doctor_verified: bool = Field(default=False, description="Whether doctor has reviewed and accepted/modified")
+    recommended_action: str = Field(..., description="Clinical decision support recommendation")
+    algorithm_version: str = Field(default="RCP-1.0", description="Algorithm version identifier for auditability")
+    calculated_at: str = Field(..., description="Calculation timestamp in ISO format")
+    disclaimer: str = Field(
+        default="Priority is an AI-assisted triage recommendation and does not replace clinical judgment.",
+        description="Clinical decision support disclaimer"
+    )
+
+
+class PriorityQueueResponse(BaseModel):
+    total: int = Field(..., description="Total screened queue items")
+    urgent_count: int = Field(..., description="P1 Urgent count")
+    priority_count: int = Field(..., description="P2 Priority count")
+    routine_count: int = Field(..., description="P3 Routine count")
+    verification_required_count: int = Field(..., description="Verification required count")
+    recapture_required_count: int = Field(..., description="Re-capture required count")
+    queue: List[PriorityQueueItem] = Field(default_factory=list, description="Prioritized screening list")
+    algorithm_version: str = Field(default="RCP-1.0", description="Priority Engine version")
+    timestamp: str = Field(..., description="Timestamp of generation")
+
+
+class PriorityStatsResponse(BaseModel):
+    total_screened: int = Field(..., description="Total screened patients")
+    urgent_count: int = Field(..., description="P1 Urgent cases count")
+    priority_count: int = Field(..., description="P2 Priority cases count")
+    routine_count: int = Field(..., description="P3 Routine cases count")
+    verification_required_count: int = Field(..., description="AI uncertainty / verification required count")
+    recapture_required_count: int = Field(..., description="Re-capture / failed safety gate count")
+    algorithm_version: str = Field(default="RCP-1.0", description="Priority Engine version")
+    timestamp: str = Field(..., description="Timestamp of statistics")
+
+
+class PriorityDetailResponse(BaseModel):
+    priority_item: PriorityQueueItem = Field(..., description="Complete priority item with explanation and audit")
+
 
 
 

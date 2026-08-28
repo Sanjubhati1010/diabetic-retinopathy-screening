@@ -19,6 +19,7 @@ import {
   Calendar,
   AlertTriangle,
 } from 'lucide-react';
+import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
 
 export const ScreeningHistoryPage = () => {
   const { t } = useLanguage();
@@ -68,10 +69,9 @@ export const ScreeningHistoryPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Demo Data Disclaimer */}
-      <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>DEMO DATA — NOT REAL MEDICAL RESULTS</span>
+      {/* Subtle Demo Data Disclaimer */}
+      <div>
+        <DemoDisclaimer text="DEMO DATA — SCREENING HISTORY ARCHIVE" />
       </div>
 
       {/* Header */}

@@ -56,18 +56,18 @@ export const MetricCard = ({
   return (
     <div
       onClick={onClick}
-      className={`rounded-2xl p-5 border transition-all duration-200 shadow-card ${vStyles.cardBg} ${
-        onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''
+      className={`rounded-2xl p-4 sm:p-4.5 border transition-all duration-200 shadow-xs ${vStyles.cardBg} ${
+        onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-sm' : ''
       }`}
     >
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</p>
-          <div className="flex items-baseline gap-2">
-            <h3 className={`text-2xl sm:text-3xl font-extrabold ${vStyles.textVal}`}>{value}</h3>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-0.5 min-w-0 flex-1">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">{title}</p>
+          <div className="flex items-baseline gap-2 pt-0.5">
+            <h3 className={`text-2xl sm:text-2.5xl font-extrabold tracking-tight ${vStyles.textVal}`}>{value}</h3>
             {trend && (
               <span
-                className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                   trendPositive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                 }`}
               >
@@ -75,14 +75,14 @@ export const MetricCard = ({
               </span>
             )}
           </div>
+          {subtitle && <p className="text-[11px] text-slate-500 truncate mt-0.5">{subtitle}</p>}
         </div>
         {Icon && (
-          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${vStyles.iconBg}`}>
-            <Icon className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${vStyles.iconBg}`}>
+            <Icon className="w-4.5 h-4.5" />
           </div>
         )}
       </div>
-      {subtitle && <p className="mt-3 text-xs text-slate-500 leading-relaxed">{subtitle}</p>}
     </div>
   );
 };

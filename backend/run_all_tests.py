@@ -27,6 +27,7 @@ TEST_SUITES = [
     ("Phase 12: WhatsApp Clinical Report Delivery", "test_phase12_whatsapp.py"),
     ("Phase 13: MySQL / SQLAlchemy Database Persistence", "test_phase13_database.py"),
     ("Phase 14: Patient Email Registration & Report Delivery", "test_phase14_email.py"),
+    ("Phase 15: Rural Care Priority Engine", "test_priority_engine.py"),
     ("End-to-End API Integration", "test_e2e_api.py"),
     ("DR Classification Model Inference", "test_inference.py"),
 ]

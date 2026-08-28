@@ -25,6 +25,8 @@ def test_phase10_longitudinal_suite():
         ReviewAuditEventModel,
         WhatsAppDeliveryModel,
         WhatsAppAuditEventModel,
+        EmailDeliveryModel,
+        EmailAuditEventModel,
         ReportModel,
         AppointmentModel,
     )
@@ -40,11 +42,14 @@ def test_phase10_longitudinal_suite():
             db.query(ScreeningReviewModel).filter(ScreeningReviewModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
             db.query(WhatsAppAuditEventModel).filter(WhatsAppAuditEventModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
             db.query(WhatsAppDeliveryModel).filter(WhatsAppDeliveryModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.query(EmailAuditEventModel).filter(EmailAuditEventModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
+            db.query(EmailDeliveryModel).filter(EmailDeliveryModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
             db.query(ReportModel).filter(ReportModel.screening_id.in_(non_canon_ids)).delete(synchronize_session=False)
             db.query(AppointmentModel).filter(AppointmentModel.screening_id.in_(non_canon_ids)).update({AppointmentModel.screening_id: None}, synchronize_session=False)
             db.query(ScreeningModel).filter(ScreeningModel.id.in_(non_canon_ids)).delete(synchronize_session=False)
             db.commit()
-    except Exception:
+    except Exception as e:
+        print("Cleanup warning:", e)
         db.rollback()
     finally:
         db.close()

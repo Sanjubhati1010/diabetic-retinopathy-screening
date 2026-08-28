@@ -119,6 +119,30 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
             role="doctor",
         )
 
+        # Pre-seed unreviewed screening SCR-UNREVIEWED-888
+        db_unrev = SessionLocal()
+        try:
+            scr_unrev = db_unrev.query(ScreeningModel).filter(ScreeningModel.id == "SCR-UNREVIEWED-888").first()
+            if not scr_unrev:
+                db_unrev.add(
+                    ScreeningModel(
+                        id="SCR-UNREVIEWED-888",
+                        patient_id="PAT-2026-081",
+                        patient_name="Sanjay Bhati",
+                        village="Rampur Gram Panchayat",
+                        screening_date="2026-08-28",
+                        timestamp_iso="2026-08-28T10:00:00Z",
+                        predicted_class=2,
+                        class_name="Moderate DR",
+                        confidence=0.85,
+                        doctor_status="pending",
+                        review_status="PENDING_REVIEW",
+                    )
+                )
+                db_unrev.commit()
+        finally:
+            db_unrev.close()
+
     def test_01_doctor_review_gate_blocks_unreviewed(self):
         """1. Doctor-review gate: Blocks unreviewed screening from WhatsApp delivery."""
         res = client.post(

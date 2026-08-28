@@ -18,6 +18,7 @@ import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCar
 import { GradCamEvidenceSummary } from '../components/evidence/GradCamEvidenceSummary';
 import { DualEvidenceViewer } from '../components/evidence/DualEvidenceViewer';
 import { LongitudinalComparisonCard } from '../components/longitudinal/LongitudinalComparisonCard';
+import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
 import { SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
 import {
   FileCheck,
@@ -460,12 +461,9 @@ export const ScreeningResultPage = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Demo Data Notice */}
-      <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>
-          DEMO DATA — NOT REAL MEDICAL RESULTS • AI-assisted screening only. This result is not a medical diagnosis and must be reviewed by a qualified healthcare professional.
-        </span>
+      {/* Subtle Demo Data Notice */}
+      <div>
+        <DemoDisclaimer text="DEMO DATA — NOT REAL MEDICAL RESULTS • AI-assisted screening decision support." />
       </div>
 
       {/* Phase 4: OVERALL TWO-EYE SCREENING SUMMARY */}

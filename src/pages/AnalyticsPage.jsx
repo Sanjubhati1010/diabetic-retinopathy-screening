@@ -2,6 +2,7 @@ import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { MetricCard } from '../components/common/MetricCard';
 import { MOCK_ANALYTICS } from '../data/mockData';
+import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
 import {
   BarChart3,
   TrendingUp,
@@ -22,10 +23,9 @@ export const AnalyticsPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Demo Data Disclaimer */}
-      <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>DEMO DATA — NOT REAL MEDICAL RESULTS</span>
+      {/* Subtle Demo Data Disclaimer */}
+      <div>
+        <DemoDisclaimer text="DEMO DATA — POPULATION HEALTH & SCREENING ANALYTICS" />
       </div>
 
       {/* Top Header */}

@@ -408,6 +408,7 @@ class TestPhase14EmailReportDelivery(unittest.TestCase):
         """Verifies outbound SMTP connection, login, PDF attachment, provider acceptance, and SENT persistence."""
         mock_server = MagicMock()
         mock_server.send_message.return_value = {}  # Empty dict indicates successful acceptance by SMTP server
+        mock_smtp_cls.return_value = mock_server
         mock_smtp_cls.return_value.__enter__.return_value = mock_server
 
         with patch.dict(os.environ, {
@@ -433,7 +434,7 @@ class TestPhase14EmailReportDelivery(unittest.TestCase):
             self.assertFalse(data["is_demo"])
 
             # Verify SMTP server interactions
-            mock_smtp_cls.assert_called_with("smtp.gmail.com", 587, timeout=15)
+            mock_smtp_cls.assert_called_with("smtp.gmail.com", 587, timeout=20)
             mock_server.starttls.assert_called_once()
             mock_server.login.assert_called_once_with("dr.screening@madocs.health.in", "app-specific-password")
             mock_server.send_message.assert_called_once()
@@ -456,6 +457,7 @@ class TestPhase14EmailReportDelivery(unittest.TestCase):
         """When SMTP connection or authentication fails, records FAILED status and returns 400 with error detail."""
         mock_server = MagicMock()
         mock_server.login.side_effect = Exception("535 5.7.8 Username and Password not accepted")
+        mock_smtp_cls.return_value = mock_server
         mock_smtp_cls.return_value.__enter__.return_value = mock_server
 
         scr_id = "SCR-EMAIL-FAIL-01"
@@ -511,6 +513,7 @@ class TestPhase14EmailReportDelivery(unittest.TestCase):
         """Tests verified delivery to the safe test email learnixdigital@gmail.com."""
         mock_server = MagicMock()
         mock_server.send_message.return_value = {}
+        mock_smtp_cls.return_value = mock_server
         mock_smtp_cls.return_value.__enter__.return_value = mock_server
 
         with patch.dict(os.environ, {
@@ -577,6 +580,7 @@ class TestPhase14EmailReportDelivery(unittest.TestCase):
         """Retries email delivery on a previously failed screening."""
         mock_server = MagicMock()
         mock_server.send_message.return_value = {}
+        mock_smtp_cls.return_value = mock_server
         mock_smtp_cls.return_value.__enter__.return_value = mock_server
 
         with patch.dict(os.environ, {
@@ -598,6 +602,7 @@ class TestPhase14EmailReportDelivery(unittest.TestCase):
         """Verifies WhatsApp delivery and Email delivery operate concurrently without interference."""
         mock_server = MagicMock()
         mock_server.send_message.return_value = {}
+        mock_smtp_cls.return_value = mock_server
         mock_smtp_cls.return_value.__enter__.return_value = mock_server
 
         with patch.dict(os.environ, {

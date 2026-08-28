@@ -24,6 +24,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import AppointmentDetailsPage from './pages/AppointmentDetailsPage';
 import VideoConsultationPage from './pages/VideoConsultationPage';
+import { PriorityDashboardPage } from './pages/PriorityDashboardPage';
 
 // Protected Route Component to require explicit login
 const ProtectedDashboardLayout = () => {
@@ -67,6 +68,7 @@ function AppRoutes() {
       {/* Authenticated Dashboard Pages wrapped in Protected Layout */}
       <Route element={<ProtectedDashboardLayout />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/priority" element={<PriorityDashboardPage />} />
         <Route path="/patients" element={<PatientListPage />} />
         <Route path="/patients/register" element={<PatientRegisterPage />} />
         <Route path="/patients/:id" element={<PatientProfilePage />} />

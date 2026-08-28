@@ -24,6 +24,7 @@ import {
   Phone,
   Sparkles,
   ChevronLeft,
+  ChevronDown,
   FileCheck,
   Stethoscope,
   UserCheck,
@@ -43,6 +44,7 @@ import {
   ExternalLink,
   Mail,
 } from 'lucide-react';
+import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
 import {
   getScreeningReview,
@@ -101,6 +103,10 @@ const PatientReportContent = () => {
   const fetchReportData = async () => {
     setLoading(true);
     setError(null);
+    setResolvedPatient(null);
+    setWhatsappStatus(null);
+    setEmailStatus(null);
+    setLiveReview(null);
 
     try {
       // 1. If explicit ID provided, attempt lookup locally then via backend API
@@ -121,26 +127,32 @@ const PatientReportContent = () => {
             };
           }
         }
+        if (!targetScreening) {
+          setError('Patient/report data could not be verified for this screening.');
+          setScreening(null);
+          setLoading(false);
+          return;
+        }
       }
 
-      // 2. If not found by ID or no ID, look for latest real prediction in screenings
-      if (!targetScreening) {
+      // 2. If no ID specified in URL, look for latest real prediction in screenings
+      if (!targetScreening && !id) {
         targetScreening = screenings.find(
           (s) => s.isRealPrediction || s.gradCamUrl || s.confidence !== null
         );
       }
 
       // 3. If still not found, check activeScreening
-      if (!targetScreening && activeScreening && (activeScreening.imageOD || activeScreening.aiResult)) {
+      if (!targetScreening && !id && activeScreening && (activeScreening.imageOD || activeScreening.aiResult)) {
         targetScreening = {
           ...activeScreening,
-          id: id || activeScreening.id || 'SCR-2026-1023',
+          id: activeScreening.id || 'SCR-2026-1023',
           screeningDate: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
         };
       }
 
-      // 4. Fallback to first screening in list
-      if (!targetScreening && screenings && screenings.length > 0) {
+      // 4. Fallback to first screening in list only if no explicit ID was requested
+      if (!targetScreening && !id && screenings && screenings.length > 0) {
         targetScreening = screenings[0];
       }
 
@@ -928,10 +940,9 @@ const PatientReportContent = () => {
         </div>
       )}
 
-      {/* Demo Data Notice (Hidden during print) */}
-      <div className="no-print flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-        <Shield className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>DEMO DATA — NOT REAL MEDICAL RESULTS • Report verified for clinical decision support.</span>
+      {/* Subtle Demo Data Disclaimer (Hidden during print) */}
+      <div className="no-print">
+        <DemoDisclaimer text="DEMO DATA — NOT REAL MEDICAL RESULTS • Report verified for clinical decision support." />
       </div>
 
       {/* Spoken Voice Guidance Control */}
@@ -1269,7 +1280,7 @@ const PatientReportContent = () => {
           </div>
         </div>
 
-        {/* Phase 10: Previous Screening Context */}
+        {/* Phase 10: Previous Screening Context (Compact Collapsible) */}
         {(() => {
           const previousScreening = getLatestComparableScreening
             ? getLatestComparableScreening(screening.id, screening.patientId)
@@ -1277,81 +1288,86 @@ const PatientReportContent = () => {
           const longitudinalComp = calculateLongitudinalComparison(screening, previousScreening);
 
           return (
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <details className="group rounded-2xl bg-slate-50/80 border border-slate-200 overflow-hidden">
+              <summary className="flex items-center justify-between p-3.5 sm:p-4 cursor-pointer hover:bg-slate-100/70 transition select-none">
                 <div className="flex items-center gap-2">
                   <History className="w-4 h-4 text-teal-600" />
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
-                    Previous Screening Context
-                  </h4>
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                    {t('viewPreviousScreenings') || 'View Previous Screenings (Comparison)'}
+                  </span>
                 </div>
-                <ClassificationChangeBadge status={longitudinalComp?.classification_change_status} size="sm" />
+                <div className="flex items-center gap-2">
+                  <ClassificationChangeBadge status={longitudinalComp?.classification_change_status} size="sm" />
+                  <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" />
+                </div>
+              </summary>
+
+              <div className="p-4 sm:p-5 pt-0 space-y-3 border-t border-slate-200/60 mt-1">
+                {longitudinalComp?.has_previous_screening && previousScreening ? (
+                  <div className="space-y-3 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Previous Screening */}
+                      <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                          {t('previousScreening') || 'Previous Screening'}
+                        </span>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800">{previousScreening.screeningDate || previousScreening.date}</span>
+                          <span className="font-mono text-[10px] text-slate-400">{previousScreening.id || previousScreening.screening_id}</span>
+                        </div>
+                        <div className="flex items-center justify-between pt-0.5">
+                          <span className="text-slate-500">DR Grade:</span>
+                          <span className="font-extrabold text-slate-900">{previousScreening.className || previousScreening.overallSeverity}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Doctor Status:</span>
+                          <span className="font-bold text-emerald-700">{previousScreening.doctorStatus === 'verified' ? 'Accepted' : 'Pending'}</span>
+                        </div>
+                      </div>
+
+                      {/* Current Screening */}
+                      <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700 block">
+                          {t('currentScreening') || 'Current Screening'}
+                        </span>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800">{screening.screeningDate || 'Today'}</span>
+                          <span className="font-mono text-[10px] text-teal-700">{screening.id || 'Active'}</span>
+                        </div>
+                        <div className="flex items-center justify-between pt-0.5">
+                          <span className="text-slate-500">DR Grade:</span>
+                          <span className="font-extrabold text-slate-900">{screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate DR')}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Doctor Status:</span>
+                          <span className="font-bold text-teal-900">{reviewStatus === 'AI RESULT ACCEPTED' ? 'Accepted' : reviewStatus === 'IMAGE RE-CAPTURE REQUESTED' ? 'Re-capture' : 'Pending Review'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Classification Change Summary */}
+                    <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                        {t('screeningClassificationChange') || 'Screening Classification Change'}
+                      </span>
+                      <p className="font-bold text-slate-900 text-xs">{longitudinalComp?.classification_change_summary}</p>
+                      <p className="text-[11px] text-teal-800 font-medium">{longitudinalComp?.clinical_recommendation}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs text-slate-500">
+                    <p className="font-bold text-slate-800">{t('prevScreeningNotAvailable') || 'Previous screening history is unavailable.'}</p>
+                    <p className="text-[11px] text-slate-400">This screening is recorded as the patient's baseline examination.</p>
+                  </div>
+                )}
+
+                {/* Mandatory Disclaimer */}
+                <p className="text-[10px] text-slate-500 leading-relaxed italic border-t border-slate-200/60 pt-2">
+                  "{t('longitudinalDisclaimer') ||
+                    'This comparison summarizes AI-assisted screening results across visits. It does not independently establish disease progression or replace clinical assessment.'}"
+                </p>
               </div>
-
-              {longitudinalComp?.has_previous_screening && previousScreening ? (
-                <div className="space-y-3 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Previous Screening */}
-                    <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-1.5">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                        {t('previousScreening') || 'Previous Screening'}
-                      </span>
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800">{previousScreening.screeningDate || previousScreening.date}</span>
-                        <span className="font-mono text-[10px] text-slate-400">{previousScreening.id || previousScreening.screening_id}</span>
-                      </div>
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-slate-500">DR Grade:</span>
-                        <span className="font-extrabold text-slate-900">{previousScreening.className || previousScreening.overallSeverity}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Doctor Status:</span>
-                        <span className="font-bold text-emerald-700">{previousScreening.doctorStatus === 'verified' ? 'Accepted' : 'Pending'}</span>
-                      </div>
-                    </div>
-
-                    {/* Current Screening */}
-                    <div className="p-3.5 rounded-xl bg-teal-50/70 border border-teal-200 space-y-1.5">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700 block">
-                        {t('currentScreening') || 'Current Screening'}
-                      </span>
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800">{screening.screeningDate || 'Today'}</span>
-                        <span className="font-mono text-[10px] text-teal-700">{screening.id || 'Active'}</span>
-                      </div>
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-slate-500">DR Grade:</span>
-                        <span className="font-extrabold text-slate-900">{screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate DR')}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Doctor Status:</span>
-                        <span className="font-bold text-teal-900">{reviewStatus === 'AI RESULT ACCEPTED' ? 'Accepted' : reviewStatus === 'IMAGE RE-CAPTURE REQUESTED' ? 'Re-capture' : 'Pending Review'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Classification Change Summary */}
-                  <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
-                      {t('screeningClassificationChange') || 'Screening Classification Change'}
-                    </span>
-                    <p className="font-bold text-slate-900 text-xs">{longitudinalComp?.classification_change_summary}</p>
-                    <p className="text-[11px] text-teal-800 font-medium">{longitudinalComp?.clinical_recommendation}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs text-slate-500">
-                  <p className="font-bold text-slate-800">{t('prevScreeningNotAvailable') || 'Previous screening history is unavailable.'}</p>
-                  <p className="text-[11px] text-slate-400">This screening is recorded as the patient's baseline examination.</p>
-                </div>
-              )}
-
-              {/* Mandatory Disclaimer */}
-              <p className="text-[10px] text-slate-500 leading-relaxed italic border-t border-slate-200/60 pt-2">
-                "{t('longitudinalDisclaimer') ||
-                  'This comparison summarizes AI-assisted screening results across visits. It does not independently establish disease progression or replace clinical assessment.'}"
-              </p>
-            </div>
+            </details>
           );
         })()}
 

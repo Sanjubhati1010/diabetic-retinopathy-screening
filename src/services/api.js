@@ -1823,6 +1823,401 @@ export async function getScreenings(patientId = null) {
   }
 }
 
+// =====================================================================
+// Rural Care Priority Engine Client API
+// =====================================================================
+
+/**
+ * Helper to compute deterministic priority locally when offline.
+ */
+export function calculateLocalPriority(screening, patient = null, previousScreening = null) {
+  const predictedClass = screening.predictedClass ?? screening.predicted_class;
+  const className = screening.className || screening.class_name || (predictedClass === 0 ? 'No DR' : predictedClass === 1 ? 'Mild' : predictedClass === 2 ? 'Moderate' : predictedClass === 3 ? 'Severe' : predictedClass === 4 ? 'Proliferative DR' : 'Unknown');
+  const confidence = screening.confidence;
+  const safetyStatus = screening.safetyStatus || screening.safety_status || 'READY_FOR_AI';
+  const isRecapture = screening.doctorStatus === 'recapture_requested' || screening.reviewStatus === 'IMAGE RE-CAPTURE REQUESTED';
+
+  // 1. Safety Block Check
+  if (safetyStatus !== 'READY_FOR_AI' || predictedClass === null || predictedClass === undefined || isRecapture) {
+    return {
+      screening_id: screening.id || screening.screening_id || 'SCR-LOCAL',
+      patient_id: screening.patientId || screening.patient_id || patient?.id || 'PAT-LOCAL',
+      patient_name: screening.patientName || screening.patient_name || patient?.name || 'Patient',
+      village: screening.village || patient?.village || 'Rampur',
+      dr_result: className,
+      predicted_class: predictedClass,
+      confidence: confidence,
+      confidence_percentage: confidence ? `${(confidence * 100).toFixed(1)}%` : 'N/A',
+      confidence_status: 'UNAVAILABLE',
+      priority_level: 'RECAPTURE_REQUIRED',
+      priority_label: 'RE-CAPTURE REQUIRED',
+      priority_score: 0.0,
+      score_label: 'Decision-support priority score',
+      color: 'rose',
+      safety_status: safetyStatus,
+      is_safety_blocked: true,
+      is_low_confidence: false,
+      primary_reason: 'Image quality failed safety gate or image re-capture requested — AI-based prioritization is blocked.',
+      detailed_reasons: ['Image clarity insufficient for reliable prioritization.'],
+      missing_factors: [],
+      evidence_checklist: {
+        current_dr: className,
+        ai_confidence: confidence ? `${(confidence * 100).toFixed(1)}%` : 'N/A',
+        previous_dr: 'N/A',
+        longitudinal_change: 'BLOCKED',
+        longitudinal_detail: 'Safety gate blocked',
+        image_quality: 'Failed / Insufficient Quality',
+        visual_acuity: 'N/A',
+        diabetes_duration: 'N/A',
+        last_hba1c: 'N/A',
+      },
+      longitudinal_change_status: 'NOT COMPARABLE',
+      longitudinal_summary: 'Prioritization blocked by safety gate.',
+      previous_screening_id: null,
+      previous_screening_date: null,
+      previous_dr_result: null,
+      doctor_status: screening.doctorStatus || 'pending',
+      doctor_reviewed_result: screening.doctorReviewedResult || null,
+      is_doctor_verified: screening.doctorStatus === 'verified',
+      recommended_action: 'Doctor verification / image re-capture required.',
+      algorithm_version: 'RCP-1.0',
+      calculated_at: new Date().toISOString(),
+      disclaimer: 'Priority is an AI-assisted triage recommendation and does not replace clinical judgment.',
+    };
+  }
+
+  // 2. AI Uncertainty Check
+  if (confidence !== null && confidence !== undefined && confidence < 0.60) {
+    const confPct = `${(confidence * 100).toFixed(1)}%`;
+    return {
+      screening_id: screening.id || screening.screening_id || 'SCR-LOCAL',
+      patient_id: screening.patientId || screening.patient_id || patient?.id || 'PAT-LOCAL',
+      patient_name: screening.patientName || screening.patient_name || patient?.name || 'Patient',
+      village: screening.village || patient?.village || 'Rampur',
+      dr_result: className,
+      predicted_class: predictedClass,
+      confidence: confidence,
+      confidence_percentage: confPct,
+      confidence_status: 'LOW',
+      priority_level: 'VERIFICATION_REQUIRED',
+      priority_label: 'AI UNCERTAINTY',
+      priority_score: 1.0,
+      score_label: 'Decision-support priority score',
+      color: 'amber',
+      safety_status: safetyStatus,
+      is_safety_blocked: false,
+      is_low_confidence: true,
+      primary_reason: `AI confidence (${confPct}) is insufficient for reliable automated prioritization. Doctor verification is required.`,
+      detailed_reasons: [`AI confidence (${confPct}) is below the reliable threshold (60.0%). Low confidence does not imply low risk.`],
+      missing_factors: [],
+      evidence_checklist: {
+        current_dr: className,
+        ai_confidence: `${confPct} (Below 60% Threshold)`,
+        previous_dr: 'Pending verification',
+        longitudinal_change: 'UNVERIFIED',
+        longitudinal_detail: 'Low confidence screening result',
+        image_quality: 'Good',
+        visual_acuity: patient?.visualAcuityOD || 'Not recorded',
+        diabetes_duration: patient?.diabetesDuration ? `${patient.diabetesDuration} yrs` : 'Not available',
+        last_hba1c: patient?.lastHba1c ? `${patient.lastHba1c}%` : 'Not available',
+      },
+      longitudinal_change_status: 'UNVERIFIED',
+      longitudinal_summary: 'AI uncertainty: Confidence below reliable threshold.',
+      previous_screening_id: null,
+      previous_screening_date: null,
+      previous_dr_result: null,
+      doctor_status: screening.doctorStatus || 'pending',
+      doctor_reviewed_result: screening.doctorReviewedResult || null,
+      is_doctor_verified: screening.doctorStatus === 'verified',
+      recommended_action: 'Doctor verification / image re-capture required.',
+      algorithm_version: 'RCP-1.0',
+      calculated_at: new Date().toISOString(),
+      disclaimer: 'Priority is an AI-assisted triage recommendation and does not replace clinical judgment.',
+    };
+  }
+
+  // 3. Normal scoring
+  let score = 0.0;
+  const weights = { 0: 0.0, 1: 1.0, 2: 3.0, 3: 5.0, 4: 6.0 };
+  const baseScore = weights[predictedClass] ?? 0.0;
+  score += baseScore;
+
+  const reasons = [`Current DR severity: ${className} (base score: ${baseScore.toFixed(1)})`];
+  const missingFactors = [];
+
+  let longStatus = 'BASELINE';
+  let longSummary = 'Baseline screening — no previous comparison available.';
+  let prevName = null;
+
+  if (previousScreening) {
+    const prevClass = previousScreening.predictedClass ?? previousScreening.predicted_class;
+    prevName = previousScreening.className || previousScreening.class_name || (prevClass === 0 ? 'No DR' : prevClass === 1 ? 'Mild' : prevClass === 2 ? 'Moderate' : prevClass === 3 ? 'Severe' : 'Proliferative DR');
+    if (prevClass !== undefined && prevClass !== null) {
+      if (predictedClass === prevClass) {
+        longStatus = 'UNCHANGED';
+        longSummary = `Screening classification unchanged (${className}).`;
+        reasons.push(`Longitudinal history: Classification stable at ${className}.`);
+      } else if (predictedClass > prevClass) {
+        longStatus = 'WORSENED';
+        if (prevClass === 1 && predictedClass === 2) {
+          score += 2.0;
+          longSummary = 'Screening classification increased from Mild to Moderate.';
+          reasons.push('⚠ Longitudinal alert: Classification worsened from Mild to Moderate (+2.0 points).');
+        } else if (prevClass === 2 && predictedClass >= 3) {
+          score += 3.0;
+          longSummary = `Screening classification worsened significantly from Moderate to ${className}.`;
+          reasons.push(`⚠ Longitudinal alert: Significant classification worsening from Moderate to ${className} (+3.0 points).`);
+        } else {
+          const delta = predictedClass - prevClass;
+          const inc = 1.5 * delta;
+          score += inc;
+          longSummary = `Screening classification increased from ${prevName} to ${className}.`;
+          reasons.push(`⚠ Longitudinal alert: Classification increased from ${prevName} to ${className} (+${inc.toFixed(1)} points).`);
+        }
+      } else {
+        longStatus = 'IMPROVED';
+        longSummary = `Screening classification improved from ${prevName} to ${className}.`;
+      }
+    }
+  } else {
+    missingFactors.push('Previous screening history');
+  }
+
+  // Visual acuity
+  const vaOD = patient?.visualAcuityOD || screening.visualAcuityOD || patient?.visual_acuity_od;
+  const vaReduced = vaOD && (vaOD.includes('6/12') || vaOD.includes('6/18') || vaOD.includes('6/24') || vaOD.includes('6/36') || vaOD.includes('6/60') || vaOD.includes('reduced'));
+  if (vaOD) {
+    if (vaReduced) {
+      score += 1.5;
+      reasons.push(`Reduced visual acuity recorded (${vaOD}) (+1.5 points).`);
+    } else {
+      reasons.push(`Visual acuity within normal range (${vaOD}).`);
+    }
+  } else {
+    missingFactors.push('Visual acuity not recorded');
+  }
+
+  // Duration
+  const dur = patient?.diabetesDuration || patient?.diabetes_duration;
+  if (dur !== undefined && dur !== null) {
+    if (dur >= 10) {
+      score += 1.0;
+      reasons.push(`Long-standing diabetes duration (${dur} years) (+1.0 point).`);
+    } else if (dur >= 5) {
+      score += 0.5;
+      reasons.push(`Diabetes duration (${dur} years) (+0.5 points).`);
+    }
+  } else {
+    missingFactors.push('Diabetes duration not available');
+  }
+
+  // HbA1c
+  const hba1c = patient?.lastHba1c || patient?.last_hba1c;
+  if (hba1c !== undefined && hba1c !== null) {
+    if (hba1c >= 9.0) {
+      score += 1.5;
+      reasons.push(`Elevated HbA1c (${hba1c}%) (+1.5 points).`);
+    } else if (hba1c >= 8.0) {
+      score += 1.0;
+      reasons.push(`Suboptimal HbA1c (${hba1c}%) (+1.0 point).`);
+    }
+  } else {
+    missingFactors.push('HbA1c not available');
+  }
+
+  score = Math.round(score * 10) / 10;
+
+  let priorityLevel = 'P3';
+  let priorityLabel = 'P3 — ROUTINE';
+  let color = 'emerald';
+  let recommendedAction = 'Routine annual follow-up according to local clinical protocol.';
+  let primaryReason = 'No significant risk indicators — routine screening schedule.';
+
+  if (predictedClass >= 3 || score >= 6.0 || (predictedClass === 2 && longStatus === 'WORSENED')) {
+    priorityLevel = 'P1';
+    priorityLabel = 'P1 — URGENT';
+    color = 'rose';
+    recommendedAction = 'Specialist review according to clinical protocol — urgent appointment recommended.';
+    primaryReason = longStatus === 'WORSENED'
+      ? `Classification worsened since previous visit (${prevName} → ${className})`
+      : predictedClass >= 3
+      ? `${className} DR detected by AI screening — requires urgent specialist examination.`
+      : `Elevated clinical priority score (${score.toFixed(1)}) across retinal and contextual factors.`;
+  } else if (predictedClass === 2 || score >= 2.5 || (predictedClass === 1 && longStatus === 'WORSENED')) {
+    priorityLevel = 'P2';
+    priorityLabel = 'P2 — PRIORITY';
+    color = 'amber';
+    recommendedAction = 'Specialist review according to clinical protocol.';
+    primaryReason = vaReduced
+      ? `${className} DR + reduced visual acuity`
+      : longStatus === 'WORSENED'
+      ? `Classification worsened since previous visit (${prevName} → ${className})`
+      : `${className} DR with moderate priority profile`;
+  } else {
+    priorityLevel = 'P3';
+    priorityLabel = 'P3 — ROUTINE';
+    color = 'emerald';
+    recommendedAction = 'Routine annual follow-up according to local clinical protocol.';
+    primaryReason = predictedClass === 0
+      ? 'No significant risk indicators — routine screening schedule.'
+      : 'Stable mild DR with low contextual risk.';
+  }
+
+  return {
+    screening_id: screening.id || screening.screening_id || 'SCR-LOCAL',
+    patient_id: screening.patientId || screening.patient_id || patient?.id || 'PAT-LOCAL',
+    patient_name: screening.patientName || screening.patient_name || patient?.name || 'Patient',
+    village: screening.village || patient?.village || 'Rampur',
+    dr_result: className,
+    predicted_class: predictedClass,
+    confidence: confidence,
+    confidence_percentage: confidence ? `${(confidence * 100).toFixed(1)}%` : 'N/A',
+    confidence_status: confidence && confidence >= 0.85 ? 'HIGH' : 'MODERATE',
+    priority_level: priorityLevel,
+    priority_label: priorityLabel,
+    priority_score: score,
+    score_label: 'Decision-support priority score',
+    color: color,
+    safety_status: safetyStatus,
+    is_safety_blocked: false,
+    is_low_confidence: false,
+    primary_reason: primaryReason,
+    detailed_reasons: reasons,
+    missing_factors: missingFactors,
+    evidence_checklist: {
+      current_dr: className,
+      ai_confidence: confidence ? `${(confidence * 100).toFixed(1)}%` : 'Not available',
+      previous_dr: prevName || 'None (Baseline)',
+      longitudinal_change: longStatus,
+      longitudinal_detail: longSummary,
+      image_quality: 'Good',
+      visual_acuity: vaOD || 'Not recorded',
+      diabetes_duration: dur ? `${dur} years` : 'Not available',
+      last_hba1c: hba1c ? `${hba1c}%` : 'Not available',
+    },
+    longitudinal_change_status: longStatus,
+    longitudinal_summary: longSummary,
+    previous_screening_id: previousScreening?.id || null,
+    previous_screening_date: previousScreening?.screeningDate || previousScreening?.screening_date || null,
+    previous_dr_result: prevName,
+    doctor_status: screening.doctorStatus || 'pending',
+    doctor_reviewed_result: screening.doctorReviewedResult || null,
+    is_doctor_verified: screening.doctorStatus === 'verified',
+    recommended_action: recommendedAction,
+    algorithm_version: 'RCP-1.0',
+    calculated_at: new Date().toISOString(),
+    disclaimer: 'Priority is an AI-assisted triage recommendation and does not replace clinical judgment.',
+  };
+}
+
+/**
+ * Fetches priority queue from backend or falls back to local calculation.
+ * GET /api/priority/queue
+ */
+export async function getPriorityQueue(filters = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (filters.filter && filters.filter !== 'all') params.append('filter', filters.filter);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.sort_by) params.append('sort_by', filters.sort_by);
+    if (filters.sort_order) params.append('sort_order', filters.sort_order);
+
+    const url = `${API_BASE_URL}/api/priority/queue${params.toString() ? `?${params.toString()}` : ''}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (error) {
+    console.warn('Backend priority queue endpoint unavailable, using offline calculation:', error);
+  }
+
+  // Fallback to local deterministic calculation using saved storage
+  const screenings = safeLocalStorageGet('dr_screenings', []);
+  const patients = safeLocalStorageGet('dr_patients', []);
+  const patientMap = {};
+  patients.forEach((p) => { patientMap[p.id] = p; });
+
+  const queue = screenings.map((scr) => {
+    const pat = patientMap[scr.patientId || scr.patient_id];
+    // Find prior screening
+    const history = screenings.filter((s) => (s.patientId || s.patient_id) === (scr.patientId || scr.patient_id) && s.id !== scr.id);
+    const prior = history.length > 0 ? history[0] : null;
+    return calculateLocalPriority(scr, pat, prior);
+  });
+
+  const urgentCount = queue.filter((i) => i.priority_level === 'P1').length;
+  const priorityCount = queue.filter((i) => i.priority_level === 'P2').length;
+  const routineCount = queue.filter((i) => i.priority_level === 'P3').length;
+  const verificationCount = queue.filter((i) => i.priority_level === 'VERIFICATION_REQUIRED').length;
+  const recaptureCount = queue.filter((i) => i.priority_level === 'RECAPTURE_REQUIRED').length;
+
+  return {
+    total: queue.length,
+    urgent_count: urgentCount,
+    priority_count: priorityCount,
+    routine_count: routineCount,
+    verification_required_count: verificationCount,
+    recapture_required_count: recaptureCount,
+    queue: queue,
+    algorithm_version: 'RCP-1.0',
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetches priority statistics summary.
+ * GET /api/priority/stats
+ */
+export async function getPriorityStats() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/priority/stats`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (error) {
+    console.warn('Backend priority stats endpoint unavailable, computing locally:', error);
+  }
+  const qData = await getPriorityQueue();
+  return {
+    total_screened: qData.total,
+    urgent_count: qData.urgent_count,
+    priority_count: qData.priority_count,
+    routine_count: qData.routine_count,
+    verification_required_count: qData.verification_required_count,
+    recapture_required_count: qData.recapture_required_count,
+    algorithm_version: 'RCP-1.0',
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetches granular priority breakdown for a specific screening.
+ * GET /api/priority/screening/{screening_id}
+ */
+export async function getPriorityExplanation(screeningId) {
+  if (!screeningId) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/priority/screening/${encodeURIComponent(screeningId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      return data.priority_item;
+    }
+  } catch (error) {
+    console.warn(`Backend priority explanation unavailable for ${screeningId}:`, error);
+  }
+
+  // Local fallback
+  const screenings = safeLocalStorageGet('dr_screenings', []);
+  const scr = screenings.find((s) => s.id === screeningId);
+  if (!scr) return null;
+  const patients = safeLocalStorageGet('dr_patients', []);
+  const pat = patients.find((p) => p.id === (scr.patientId || scr.patient_id));
+  const history = screenings.filter((s) => (s.patientId || s.patient_id) === (scr.patientId || scr.patient_id) && s.id !== scr.id);
+  const prior = history.length > 0 ? history[0] : null;
+  return calculateLocalPriority(scr, pat, prior);
+}
+
+
 
 
 

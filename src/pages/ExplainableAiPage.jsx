@@ -17,6 +17,7 @@ import {
   Eye,
   HelpCircle,
 } from 'lucide-react';
+import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
 import { SAMPLE_FUNDUS_IMAGES } from '../data/mockData';
 import {
   getFullResultUrl,
@@ -138,12 +139,9 @@ export const ExplainableAiPage = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Demo Data Notice */}
-      <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>
-          DEMO DATA — NOT REAL MEDICAL RESULTS • AI-assisted screening only. This result is not a medical diagnosis and must be reviewed by a qualified healthcare professional.
-        </span>
+      {/* Subtle Demo Data Notice */}
+      <div>
+        <DemoDisclaimer text="DEMO DATA — NOT REAL MEDICAL RESULTS • Grad-CAM explainability decision support." />
       </div>
 
       {/* Top Navigation & Info */}

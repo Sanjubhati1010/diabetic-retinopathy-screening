@@ -88,6 +88,10 @@ from app.schemas import (
     EmailDeliveryRecord,
     EmailStatusResponse,
     EmailRetryRequest,
+    PriorityQueueItem,
+    PriorityQueueResponse,
+    PriorityStatsResponse,
+    PriorityDetailResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
@@ -97,6 +101,12 @@ from app.longitudinal_service import longitudinal_service
 from app.appointment_service import appointment_service
 from app.pdf_service import pdf_service, verify_secure_pdf_token, generate_secure_pdf_token
 from app.whatsapp_service import whatsapp_service, normalize_phone_number
+from app.priority_engine import (
+    calculate_screening_priority,
+    get_priority_queue,
+    get_priority_stats,
+    ALGORITHM_VERSION,
+)
 
 # Setup structured logging
 logging.basicConfig(
@@ -1403,16 +1413,13 @@ async def update_health_worker_opt_in(hw_id: str, req: HealthWorkerOptInRequest,
 async def generate_screening_pdf_report(screening_id: str, db: Session = Depends(get_db)):
     """
     Generates or retrieves the official clinical PDF report for a screening.
-    Ensures doctor-review gate has been completed before generating final report.
+    Ensures doctor-review gate has been completed and patient record is authoritatively verified.
     """
-    can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id, db=db)
-    if not can_proceed:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+    try:
+        pdf_path = pdf_service.generate_clinical_report_for_screening(screening_id, db=db)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
 
-    pdf_path = pdf_service.generate_clinical_report(
-        screening_data={"id": screening_id, "screeningDate": datetime.now(timezone.utc).strftime("%Y-%m-%d")},
-        doctor_review=review,
-    )
     token = generate_secure_pdf_token(screening_id)
     file_size = pdf_path.stat().st_size if pdf_path.exists() else 0
 
@@ -1440,13 +1447,10 @@ async def download_secure_screening_pdf(screening_id: str, token: str = Query(..
 
     pdf_path = pdf_service.output_dir / f"{screening_id}_clinical_report.pdf"
     if not pdf_path.exists():
-        can_proceed, reason, review = whatsapp_service.check_doctor_review_gate(screening_id, db=db)
-        if not can_proceed:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
-        pdf_path = pdf_service.generate_clinical_report(
-            screening_data={"id": screening_id, "screeningDate": datetime.now(timezone.utc).strftime("%Y-%m-%d")},
-            doctor_review=review,
-        )
+        try:
+            pdf_path = pdf_service.generate_clinical_report_for_screening(screening_id, db=db)
+        except ValueError as ve:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
 
     return FileResponse(
         path=str(pdf_path),
@@ -1571,17 +1575,21 @@ async def whatsapp_webhook_event(request: Request, db: Session = Depends(get_db)
 # =====================================================================
 
 @app.post("/api/reports/{screening_id}/email/send", response_model=EmailDeliveryRecord, tags=["Phase 14: Email Delivery"])
-async def send_email_report_endpoint(screening_id: str, req: EmailSendRequest, db: Session = Depends(get_db)):
+async def send_email_report_endpoint(screening_id: str, req: Optional[EmailSendRequest] = None, db: Session = Depends(get_db)):
     """
     Requests secure Email delivery of the doctor-reviewed clinical PDF report to the patient.
     Enforces Doctor Review Gate, recipient email validation, and opt-in consent.
     """
     try:
+        recipient_email = req.recipient_email if req else None
+        language = req.language if req else "en"
+        opt_in = req.opt_in_confirmed if req else True
+
         delivery_record = await email_service.send_email_report(
             screening_id=screening_id,
-            recipient_email=req.recipient_email,
-            language=req.language,
-            opt_in_confirmed=req.opt_in_confirmed,
+            recipient_email=recipient_email,
+            language=language,
+            opt_in_confirmed=opt_in,
             db=db,
         )
         return delivery_record
@@ -1663,4 +1671,153 @@ async def retry_email_report_endpoint(screening_id: str, req: EmailRetryRequest,
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+# =====================================================================
+# Rural Care Priority Engine Endpoints
+# =====================================================================
+
+@app.get(
+    "/api/priority/queue",
+    response_model=PriorityQueueResponse,
+    tags=["Rural Care Priority Engine"],
+    summary="Get Prioritized Screening Triage Queue",
+)
+async def get_priority_queue_endpoint(
+    filter_level: Optional[str] = Query(default=None, alias="filter"),
+    search: Optional[str] = Query(default=None),
+    sort_by: str = Query(default="priority"),
+    sort_order: str = Query(default="desc"),
+    db: Session = Depends(get_db),
+):
+    """
+    Rural Care Priority Engine:
+    Retrieves dynamically computed, explainable priority triage queue for all screened patients.
+    Supports filtering by priority level (P1, P2, P3, VERIFICATION_REQUIRED, RECAPTURE_REQUIRED) and multi-field search.
+    """
+    try:
+        queue = get_priority_queue(
+            db=db,
+            filter_level=filter_level,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+        stats = get_priority_stats(db=db)
+        return PriorityQueueResponse(
+            total=stats["total_screened"],
+            urgent_count=stats["urgent_count"],
+            priority_count=stats["priority_count"],
+            routine_count=stats["routine_count"],
+            verification_required_count=stats["verification_required_count"],
+            recapture_required_count=stats["recapture_required_count"],
+            queue=queue,
+            algorithm_version=ALGORITHM_VERSION,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"Error computing priority queue: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to calculate priority queue.")
+
+
+@app.get(
+    "/api/priority/stats",
+    response_model=PriorityStatsResponse,
+    tags=["Rural Care Priority Engine"],
+    summary="Get Rural Care Priority Summary Statistics",
+)
+async def get_priority_stats_endpoint(db: Session = Depends(get_db)):
+    """Returns summary operational statistics for Rural Care Priority Engine dashboard cards."""
+    try:
+        stats = get_priority_stats(db=db)
+        return PriorityStatsResponse(**stats)
+    except Exception as e:
+        logger.error(f"Error computing priority stats: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to calculate priority statistics.")
+
+
+@app.get(
+    "/api/priority/screening/{screening_id}",
+    response_model=PriorityDetailResponse,
+    tags=["Rural Care Priority Engine"],
+    summary="Get Detailed Priority Breakdown for a Screening",
+)
+async def get_priority_detail_for_screening(screening_id: str, db: Session = Depends(get_db)):
+    """Returns granular explainable priority breakdown for a single screening."""
+    scr = db.query(ScreeningModel).filter(ScreeningModel.id == screening_id).first()
+    if not scr:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Screening '{screening_id}' not found.")
+
+    pat = db.query(PatientModel).filter(PatientModel.id == scr.patient_id).first()
+    patient_dict = None
+    if pat:
+        symptoms = json.loads(pat.symptoms_json) if pat.symptoms_json else []
+        patient_dict = {
+            "id": pat.id,
+            "name": pat.name,
+            "age": pat.age,
+            "gender": pat.gender,
+            "village": pat.village,
+            "diabetes_duration": pat.diabetes_duration,
+            "last_hba1c": pat.last_hba1c,
+            "insulin_use": pat.insulin_use,
+            "visual_acuity_od": pat.visual_acuity_od,
+            "visual_acuity_os": pat.visual_acuity_os,
+            "symptoms": symptoms,
+        }
+
+    screening_dict = {
+        "id": scr.id,
+        "screening_id": scr.id,
+        "patient_id": scr.patient_id,
+        "patient_name": scr.patient_name,
+        "village": scr.village,
+        "screening_date": scr.screening_date,
+        "timestamp_iso": scr.timestamp_iso,
+        "predicted_class": scr.predicted_class,
+        "class_name": scr.class_name,
+        "confidence": scr.confidence,
+        "safety_status": scr.safety_status,
+        "dr_severity_od": scr.dr_severity_od,
+        "dr_severity_os": scr.dr_severity_os,
+        "overall_severity": scr.overall_severity,
+        "doctor_status": scr.doctor_status,
+        "review_status": scr.review_status,
+        "doctor_reviewed_result": scr.review.reviewed_result if scr.review else None,
+        "image_od_path": scr.image_od_path,
+        "image_os_path": scr.image_os_path,
+        "gradcam_url": scr.gradcam_url,
+    }
+
+    try:
+        priority_item = calculate_screening_priority(
+            screening=screening_dict,
+            patient=patient_dict,
+            db=db,
+        )
+        return PriorityDetailResponse(priority_item=PriorityQueueItem(**priority_item))
+    except Exception as e:
+        logger.error(f"Error computing priority for screening {screening_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to compute priority.")
+
+
+@app.get(
+    "/api/priority/patient/{patient_id}",
+    response_model=PriorityDetailResponse,
+    tags=["Rural Care Priority Engine"],
+    summary="Get Priority Detail for Patient's Latest Screening",
+)
+async def get_priority_detail_for_patient(patient_id: str, db: Session = Depends(get_db)):
+    """Returns priority breakdown for a specific patient's most recent screening."""
+    latest_scr = (
+        db.query(ScreeningModel)
+        .filter(ScreeningModel.patient_id == patient_id)
+        .order_by(ScreeningModel.timestamp_iso.desc())
+        .first()
+    )
+    if not latest_scr:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No screening records found for patient '{patient_id}'.")
+
+    return await get_priority_detail_for_screening(latest_scr.id, db=db)
+
 
