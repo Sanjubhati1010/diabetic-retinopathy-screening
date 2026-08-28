@@ -1591,6 +1591,7 @@ async def get_email_status_endpoint(screening_id: str, db: Session = Depends(get
     can_send, gate_reason, review = email_service.check_doctor_review_gate(screening_id, db=db)
     delivery_rec = email_service.get_delivery_status(screening_id, db=db)
     patient = email_service.resolve_patient_for_screening(screening_id=screening_id, db=db)
+    is_configured = email_service.is_configured
 
     rev_status = review.get("review_status", "PENDING DOCTOR REVIEW") if review else "PENDING DOCTOR REVIEW"
 
@@ -1602,23 +1603,39 @@ async def get_email_status_endpoint(screening_id: str, db: Session = Depends(get
         can_send = False
         block_reason = "Patient email address not available."
         resolved_recipient_email = None
+    elif not can_send:
+        # Doctor review gate blocked dispatch
+        block_reason = gate_reason
+        resolved_recipient_email = norm_patient_email
+    elif not is_configured:
+        can_send = False
+        block_reason = "Email service is not configured."
+        resolved_recipient_email = norm_patient_email
     else:
         resolved_recipient_email = norm_patient_email
-        block_reason = None if can_send else gate_reason
+        block_reason = None
 
     patient_id = delivery_rec.patient_id if (delivery_rec and delivery_rec.patient_id) else (getattr(patient, "id", None))
     patient_name = delivery_rec.patient_name if (delivery_rec and delivery_rec.patient_name) else (getattr(patient, "name", None))
     recipient_name = delivery_rec.recipient_name if (delivery_rec and delivery_rec.recipient_name) else patient_name
 
+    if not is_configured and (not delivery_rec or delivery_rec.status == EmailDeliveryStatus.NOT_REQUESTED or delivery_rec.is_demo):
+        status_val = EmailDeliveryStatus.NOT_CONFIGURED
+    elif delivery_rec:
+        status_val = delivery_rec.status
+    else:
+        status_val = EmailDeliveryStatus.NOT_REQUESTED
+
     return EmailStatusResponse(
         screening_id=screening_id,
-        status=delivery_rec.status if delivery_rec else EmailDeliveryStatus.NOT_REQUESTED,
-        recipient_email=delivery_rec.recipient_email if delivery_rec else resolved_recipient_email,
+        status=status_val,
+        recipient_email=delivery_rec.recipient_email if (delivery_rec and delivery_rec.recipient_email) else resolved_recipient_email,
         patient_id=patient_id,
         patient_name=patient_name,
         recipient_name=recipient_name,
         doctor_review_status=rev_status,
         can_send=can_send,
+        is_configured=is_configured,
         block_reason=block_reason,
         delivery_record=delivery_rec,
         audit_events=delivery_rec.audit_events if delivery_rec else [],

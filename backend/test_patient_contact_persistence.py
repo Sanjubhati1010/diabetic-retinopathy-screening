@@ -208,13 +208,25 @@ class TestPatientContactPersistence(unittest.TestCase):
         self.assertEqual(wa_status["recipient_phone"], "+919877766554")
         self.assertTrue(wa_status["can_send"])
 
-        # Email status endpoint
+        # Email status endpoint (unconfigured provider)
         em_status_res = self.client.get("/api/reports/SCR-2026-1025/email/status")
         self.assertEqual(em_status_res.status_code, 200)
         em_status = em_status_res.json()
         self.assertEqual(em_status["patient_name"], "Devendra Mehra")
         self.assertEqual(em_status["recipient_email"], "devendra.mehra@ruralcare.org")
-        self.assertTrue(em_status["can_send"])
+        self.assertEqual(em_status["status"], "NOT_CONFIGURED")
+        self.assertFalse(em_status["can_send"])
+        self.assertEqual(em_status["block_reason"], "Email service is not configured.")
+
+        # Email status endpoint (when SMTP provider is configured)
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"SMTP_HOST": "smtp.gmail.com", "SMTP_USERNAME": "test@gmail.com", "SMTP_PASSWORD": "password"}):
+            em_conf_res = self.client.get("/api/reports/SCR-2026-1025/email/status")
+            self.assertEqual(em_conf_res.status_code, 200)
+            em_conf_data = em_conf_res.json()
+            self.assertTrue(em_conf_data["can_send"])
+            self.assertTrue(em_conf_data["is_configured"])
+            self.assertEqual(em_conf_data["recipient_email"], "devendra.mehra@ruralcare.org")
 
     def test_10_health_worker_contacts_never_substituted(self):
         """10. Health worker contacts are NEVER substituted as patient's contact."""

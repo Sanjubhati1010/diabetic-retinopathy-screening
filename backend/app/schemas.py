@@ -782,6 +782,7 @@ class ScreeningListResponse(BaseModel):
 
 class EmailDeliveryStatus(str, Enum):
     NOT_REQUESTED = "NOT_REQUESTED"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
     PENDING = "PENDING"
     SENT = "SENT"
     FAILED = "FAILED"
@@ -831,6 +832,7 @@ class EmailStatusResponse(BaseModel):
     recipient_name: Optional[str] = Field(default=None, description="Recipient name (Patient)")
     doctor_review_status: str = Field(..., description="Current doctor review status")
     can_send: bool = Field(..., description="Whether doctor-review gate and patient email permit sending")
+    is_configured: bool = Field(default=False, description="Whether a verified outbound email provider is configured")
     block_reason: Optional[str] = Field(default=None, description="Reason why email dispatch is blocked if can_send is false")
     delivery_record: Optional[EmailDeliveryRecord] = Field(default=None, description="Latest email delivery record")
     audit_events: List[EmailAuditEvent] = Field(default_factory=list, description="Email audit trail")

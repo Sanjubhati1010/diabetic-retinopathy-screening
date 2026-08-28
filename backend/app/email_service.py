@@ -41,14 +41,43 @@ logger = logging.getLogger("dr_backend.email_service")
 
 class EmailService:
     def __init__(self):
-        # Email Provider Configuration via Environment Variables
-        self.provider_type = os.getenv("EMAIL_PROVIDER", "mock").lower()  # 'smtp' or 'mock'
-        self.smtp_host = os.getenv("SMTP_HOST", "")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_username = os.getenv("SMTP_USERNAME", "")
-        self.smtp_password = os.getenv("SMTP_PASSWORD", "")
-        self.email_from = os.getenv("EMAIL_FROM", "Rural DR Screening AI <no-reply@madocs.health.in>")
         self.email_regex = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+    @property
+    def smtp_host(self) -> str:
+        return os.getenv("SMTP_HOST", "").strip()
+
+    @property
+    def smtp_port(self) -> int:
+        try:
+            return int(os.getenv("SMTP_PORT", "587"))
+        except ValueError:
+            return 587
+
+    @property
+    def smtp_username(self) -> str:
+        return os.getenv("SMTP_USERNAME", "").strip()
+
+    @property
+    def smtp_password(self) -> str:
+        return os.getenv("SMTP_PASSWORD", "").strip()
+
+    @property
+    def email_from(self) -> str:
+        return os.getenv("EMAIL_FROM", "Rural DR Screening AI <no-reply@madocs.health.in>").strip()
+
+    @property
+    def is_configured(self) -> bool:
+        """
+        Returns True ONLY if a real outbound email provider/SMTP server is properly configured.
+        Requires SMTP_HOST to be set and non-empty.
+        """
+        host = self.smtp_host
+        if not host:
+            return False
+        if self.smtp_username and not self.smtp_password:
+            return False
+        return True
 
     def normalize_email(self, email: Optional[str]) -> Optional[str]:
         """Trims, lowercases, and validates email address format."""
@@ -303,6 +332,7 @@ class EmailService:
     ) -> EmailDeliveryRecord:
         """
         Executes verified clinical report email delivery to the patient's registered email address.
+        Strictly requires real SMTP provider configuration; never fakes or simulates SENT status.
         """
         owns_session = False
         if db is None:
@@ -310,6 +340,11 @@ class EmailService:
             owns_session = True
 
         try:
+            # 0. Enforce real outbound email provider configuration
+            if not self.is_configured:
+                logger.warning(f"Email delivery blocked for {screening_id}: Email service is not configured.")
+                raise ValueError("Email service is not configured.")
+
             # 1. Enforce Doctor Review Gate
             can_send, gate_reason, review = self.check_doctor_review_gate(screening_id, db=db)
             if not can_send:
@@ -385,36 +420,38 @@ class EmailService:
                 pdf_attachment.add_header("Content-Disposition", "attachment", filename=pdf_path.name)
                 msg.attach(pdf_attachment)
 
-            # 8. Dispatch via Configured Provider
+            # 8. Real SMTP Outbound Dispatch with Provider Acceptance Verification
             provider_message_id = None
             sent_at = None
             delivery_status = EmailDeliveryStatus.PENDING
             error_message = None
+            smtp_failed = False
 
-            if self.provider_type == "smtp":
-                if not self.smtp_host:
-                    raise ValueError("Email service is not configured.")
-                try:
-                    with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10) as server:
+            try:
+                if self.smtp_port == 465:
+                    server_conn = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=15)
+                else:
+                    server_conn = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15)
+
+                with server_conn as server:
+                    if self.smtp_port != 465:
                         server.starttls()
-                        if self.smtp_username and self.smtp_password:
-                            server.login(self.smtp_username, self.smtp_password)
-                        server.send_message(msg)
-                    provider_message_id = f"smtp-{uuid.uuid4().hex[:12]}"
-                    sent_at = datetime.now(timezone.utc).isoformat()
-                    delivery_status = EmailDeliveryStatus.SENT
-                    logger.info(f"SMTP Email delivered successfully to {norm_patient_email}")
-                except Exception as smtp_err:
-                    logger.error(f"SMTP dispatch failed: {smtp_err}")
-                    delivery_status = EmailDeliveryStatus.FAILED
-                    error_message = str(smtp_err)
-                    raise ValueError(f"Email delivery failed: {smtp_err}")
-            else:
-                # Mock / Demo Provider Dispatch Simulation
-                provider_message_id = f"emid.{uuid.uuid4().hex[:16]}"
+                    if self.smtp_username and self.smtp_password:
+                        server.login(self.smtp_username, self.smtp_password)
+                    send_errors = server.send_message(msg)
+                    if send_errors and norm_patient_email in send_errors:
+                        err_code, err_msg = send_errors[norm_patient_email]
+                        raise ValueError(f"SMTP rejected recipient: {err_code} {err_msg}")
+
+                provider_message_id = f"smtp-{uuid.uuid4().hex[:12]}"
                 sent_at = datetime.now(timezone.utc).isoformat()
                 delivery_status = EmailDeliveryStatus.SENT
-                logger.info(f"[Mock Provider] Email dispatched to patient {patient_name} <{norm_patient_email}> (ID: {provider_message_id})")
+                logger.info(f"Verified SMTP Email delivered successfully to {norm_patient_email} (ID: {provider_message_id})")
+            except Exception as smtp_err:
+                logger.error(f"SMTP dispatch failed for {screening_id}: {smtp_err}")
+                delivery_status = EmailDeliveryStatus.FAILED
+                error_message = str(smtp_err)
+                smtp_failed = True
 
             # 9. Persist Delivery Record into MySQL
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -451,7 +488,7 @@ class EmailService:
                     error_message=error_message,
                     failure_reason=error_message,
                     pdf_filename=pdf_path.name,
-                    is_demo=(self.provider_type == "mock"),
+                    is_demo=False,
                     created_at=now_iso,
                     sent_at=sent_at,
                 )
@@ -467,6 +504,7 @@ class EmailService:
                 existing.failure_reason = error_message
                 existing.pdf_filename = pdf_path.name
                 existing.sent_at = sent_at
+                existing.is_demo = False
                 delivery_model = existing
 
             # 10. Persist Audit Trail Event
@@ -474,14 +512,17 @@ class EmailService:
                 id=f"audit-em-{uuid.uuid4().hex[:10]}",
                 delivery_id=delivery_model.id,
                 screening_id=screening_id,
-                event_type="EMAIL_DISPATCHED",
-                description=f"Clinical PDF report email dispatched to patient {patient_name} ({norm_patient_email}).",
+                event_type="EMAIL_FAILED" if smtp_failed else "EMAIL_DISPATCHED",
+                description=f"SMTP dispatch failed: {error_message}" if smtp_failed else f"Clinical PDF report email dispatched to patient {patient_name} ({norm_patient_email}).",
                 actor_id="system_email_service",
                 timestamp=now_iso,
             )
             db.add(audit_evt)
             db.commit()
             db.refresh(delivery_model)
+
+            if smtp_failed:
+                raise ValueError(f"Email delivery failed: {error_message}")
 
             logger.info(f"Persisted email delivery for {screening_id} to patient {patient_name} ({norm_patient_email}) in database.")
             return self._delivery_model_to_record(delivery_model, db=db)
@@ -562,17 +603,22 @@ class EmailService:
                 for row in audit_rows
             ]
 
+        # If a legacy demo record exists and email is not configured, do not claim SENT
+        effective_status = model.status
+        if model.is_demo and not self.is_configured:
+            effective_status = EmailDeliveryStatus.NOT_CONFIGURED.value
+
         return EmailDeliveryRecord(
             screening_id=model.screening_id,
             recipient_email=model.recipient_email,
             patient_id=model.patient_id,
             patient_name=model.patient_name,
             recipient_name=model.patient_name,
-            status=EmailDeliveryStatus(model.status) if model.status in EmailDeliveryStatus.__members__ else EmailDeliveryStatus.NOT_REQUESTED,
+            status=EmailDeliveryStatus(effective_status) if effective_status in EmailDeliveryStatus.__members__ else EmailDeliveryStatus.NOT_REQUESTED,
             subject=model.subject,
-            provider_message_id=model.provider_message_id,
-            sent_at=model.sent_at,
-            failure_reason=model.failure_reason,
+            provider_message_id=model.provider_message_id if not model.is_demo else None,
+            sent_at=model.sent_at if not (model.is_demo and not self.is_configured) else None,
+            failure_reason=model.failure_reason if not (model.is_demo and not self.is_configured) else "Email service is not configured.",
             error_message=model.error_message,
             pdf_filename=model.pdf_filename,
             pdf_download_url=f"/api/reports/{model.screening_id}/document?token={token}",
