@@ -208,25 +208,25 @@ class TestPatientContactPersistence(unittest.TestCase):
         self.assertEqual(wa_status["recipient_phone"], "+919877766554")
         self.assertTrue(wa_status["can_send"])
 
-        # Email status endpoint (unconfigured provider)
+        # Email status endpoint (configured state)
         em_status_res = self.client.get("/api/reports/SCR-2026-1025/email/status")
         self.assertEqual(em_status_res.status_code, 200)
         em_status = em_status_res.json()
         self.assertEqual(em_status["patient_name"], "Devendra Mehra")
         self.assertEqual(em_status["recipient_email"], "devendra.mehra@ruralcare.org")
-        self.assertEqual(em_status["status"], "NOT_CONFIGURED")
-        self.assertFalse(em_status["can_send"])
-        self.assertEqual(em_status["block_reason"], "Email service is not configured.")
+        self.assertTrue(em_status["can_send"])
+        self.assertTrue(em_status["is_configured"])
 
-        # Email status endpoint (when SMTP provider is configured)
+        # Email status endpoint (when SMTP provider is unconfigured)
         from unittest.mock import patch
-        with patch.dict(os.environ, {"SMTP_HOST": "smtp.gmail.com", "SMTP_USERNAME": "test@gmail.com", "SMTP_PASSWORD": "password"}):
-            em_conf_res = self.client.get("/api/reports/SCR-2026-1025/email/status")
-            self.assertEqual(em_conf_res.status_code, 200)
-            em_conf_data = em_conf_res.json()
-            self.assertTrue(em_conf_data["can_send"])
-            self.assertTrue(em_conf_data["is_configured"])
-            self.assertEqual(em_conf_data["recipient_email"], "devendra.mehra@ruralcare.org")
+        with patch.dict(os.environ, {"SMTP_HOST": "", "SMTP_USERNAME": "", "SMTP_PASSWORD": ""}):
+            em_unconf_res = self.client.get("/api/reports/SCR-2026-1025/email/status")
+            self.assertEqual(em_unconf_res.status_code, 200)
+            em_unconf_data = em_unconf_res.json()
+            self.assertFalse(em_unconf_data["can_send"])
+            self.assertFalse(em_unconf_data["is_configured"])
+            self.assertEqual(em_unconf_data["status"], "NOT_CONFIGURED")
+            self.assertEqual(em_unconf_data["block_reason"], "Email service is not configured.")
 
     def test_10_health_worker_contacts_never_substituted(self):
         """10. Health worker contacts are NEVER substituted as patient's contact."""

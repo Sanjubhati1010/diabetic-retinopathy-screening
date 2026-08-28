@@ -7,6 +7,13 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+from dotenv import load_dotenv
+
+# Explicitly load backend/.env before importing database and services
+BACKEND_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+if BACKEND_ENV_FILE.is_file():
+    load_dotenv(dotenv_path=BACKEND_ENV_FILE)
+
 from fastapi import FastAPI, File, UploadFile, HTTPException, status, Header, WebSocket, WebSocketDisconnect, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

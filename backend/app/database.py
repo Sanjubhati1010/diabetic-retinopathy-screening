@@ -5,12 +5,19 @@ Provides connection pooling, engine initialization, session factory, and depende
 
 import os
 import logging
+from pathlib import Path
 from typing import Generator
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger("dr_backend.database")
+
+# Explicitly load backend/.env if present
+BACKEND_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+if BACKEND_ENV_FILE.is_file():
+    load_dotenv(dotenv_path=BACKEND_ENV_FILE)
 
 # Environment-based Database URL
 # Production MySQL: mysql+pymysql://<user>:<password>@<host>:<port>/<dbname>?charset=utf8mb4

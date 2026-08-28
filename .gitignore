@@ -47,3 +47,6 @@ scratch/
 backend/results/reports/*.pdf
 !backend/results/reports/.gitkeep
 *.db
+.env
+.env*.local
+backend/.env

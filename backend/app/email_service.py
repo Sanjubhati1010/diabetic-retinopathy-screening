@@ -16,7 +16,13 @@ from email.mime.application import MIMEApplication
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
+
+# Explicitly load backend/.env if present
+BACKEND_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+if BACKEND_ENV_FILE.is_file():
+    load_dotenv(dotenv_path=BACKEND_ENV_FILE)
 
 from app.database import SessionLocal
 from app.models import (
