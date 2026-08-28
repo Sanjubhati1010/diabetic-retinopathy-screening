@@ -295,10 +295,20 @@ class WhatsAppService:
             from app.models import PatientModel, ScreeningModel, AppointmentModel
             # 1. Check ScreeningModel in DB
             scr = db.query(ScreeningModel).filter(ScreeningModel.id == screening_id).first()
-            if scr and scr.patient_id:
-                pat = db.query(PatientModel).filter(PatientModel.id == scr.patient_id).first()
-                if pat:
-                    return pat
+            if scr:
+                if scr.patient_id:
+                    pat = db.query(PatientModel).filter(PatientModel.id == scr.patient_id).first()
+                    if pat:
+                        # If patient record is a stub without contact details, look for real patient by name
+                        if not pat.phone and not pat.email and scr.patient_name and not scr.patient_name.startswith("Patient "):
+                            real_pat = db.query(PatientModel).filter(PatientModel.name == scr.patient_name).order_by(PatientModel.created_at.desc()).first()
+                            if real_pat:
+                                return real_pat
+                        return pat
+                if scr.patient_name and scr.patient_name.strip() and not scr.patient_name.startswith("Patient "):
+                    pat = db.query(PatientModel).filter(PatientModel.name == scr.patient_name).order_by(PatientModel.created_at.desc()).first()
+                    if pat:
+                        return pat
 
             # 2. Check AppointmentModel in DB
             apt = db.query(AppointmentModel).filter(AppointmentModel.screening_id == screening_id).first()

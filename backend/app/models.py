@@ -4,6 +4,7 @@ Defines normalized schemas with primary keys, foreign keys, unique constraints, 
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import (
     Column,
     String,
@@ -52,6 +53,14 @@ class PatientModel(Base):
 
     screenings = relationship("ScreeningModel", back_populates="patient", cascade="all, delete-orphan")
     appointments = relationship("AppointmentModel", back_populates="patient")
+
+    @property
+    def mobile(self) -> Optional[str]:
+        return self.phone
+
+    @mobile.setter
+    def mobile(self, val: Optional[str]):
+        self.phone = val
 
 
 class DoctorModel(Base):

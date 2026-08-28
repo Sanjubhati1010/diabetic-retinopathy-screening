@@ -66,7 +66,7 @@ export const PatientRegisterPage = () => {
     });
   };
 
-  const handleSubmit = (e, andStartScreening = true) => {
+  const handleSubmit = async (e, andStartScreening = true) => {
     e.preventDefault();
     if (formData.email && formData.email.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -78,28 +78,33 @@ export const PatientRegisterPage = () => {
 
     setIsSubmitting(true);
 
-    const newPatient = addPatient({
-      ...formData,
-      email: formData.email ? formData.email.trim().toLowerCase() : null,
-      age: Number(formData.age) || 50,
-      diabetesDuration: Number(formData.diabetesDuration) || 5,
-      lastHba1c: Number(formData.lastHba1c) || 7.5,
-    });
+    try {
+      const newPatient = await addPatient({
+        ...formData,
+        phone: formData.phone,
+        mobile: formData.phone,
+        email: formData.email ? formData.email.trim().toLowerCase() : null,
+        age: Number(formData.age) || 50,
+        diabetesDuration: Number(formData.diabetesDuration) || 5,
+        lastHba1c: Number(formData.lastHba1c) || 7.5,
+      });
 
-    setActiveScreening((prev) => ({
-      ...prev,
-      patientId: newPatient.id,
-      patientName: newPatient.name,
-    }));
+      setActiveScreening((prev) => ({
+        ...prev,
+        patientId: newPatient.id,
+        patientName: newPatient.name,
+      }));
 
-    setTimeout(() => {
-      setIsSubmitting(false);
       if (andStartScreening) {
         navigate('/screenings/upload');
       } else {
         navigate('/patients');
       }
-    }, 400);
+    } catch (err) {
+      console.error('Error in patient registration:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

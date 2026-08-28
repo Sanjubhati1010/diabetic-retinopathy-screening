@@ -55,6 +55,8 @@ import {
   getEmailDeliveryStatus,
   retryEmailDelivery,
   generateReportPdf,
+  getScreeningRecordById,
+  getPatientById as getPatientByIdApi,
 } from '../services/api';
 import { getLightweightReview } from '../services/storage';
 import { ClassificationChangeBadge } from '../components/longitudinal/LongitudinalComparisonCard';
@@ -94,16 +96,31 @@ const PatientReportContent = () => {
   const [emailSuccessMsg, setEmailSuccessMsg] = useState(null);
   const [emailErrorMsg, setEmailErrorMsg] = useState(null);
   const [showEmailAuditTrail, setShowEmailAuditTrail] = useState(false);
+  const [resolvedPatient, setResolvedPatient] = useState(null);
 
   const fetchReportData = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // 1. If explicit ID provided, attempt lookup
+      // 1. If explicit ID provided, attempt lookup locally then via backend API
       let targetScreening = null;
       if (id) {
         targetScreening = getScreeningById(id);
+        if (!targetScreening || !targetScreening.patientId) {
+          const apiScr = await getScreeningRecordById(id);
+          if (apiScr) {
+            targetScreening = {
+              ...apiScr,
+              patientId: apiScr.patient_id,
+              patientName: apiScr.patient_name,
+              screeningDate: apiScr.screening_date,
+              overallSeverity: apiScr.overall_severity,
+              doctorStatus: apiScr.doctor_status || 'pending',
+              reviewStatus: apiScr.review_status,
+            };
+          }
+        }
       }
 
       // 2. If not found by ID or no ID, look for latest real prediction in screenings
@@ -148,6 +165,18 @@ const PatientReportContent = () => {
         const emStatus = await getEmailDeliveryStatus(targetScreening.id);
         if (emStatus) {
           setEmailStatus(emStatus);
+        }
+
+        // Authoritatively resolve patient record from database
+        const pid = targetScreening.patientId || targetScreening.patient_id || waStatus?.patient_id || emStatus?.patient_id;
+        if (pid) {
+          let pat = getPatientById(pid);
+          if (!pat) {
+            pat = await getPatientByIdApi(pid);
+          }
+          if (pat) {
+            setResolvedPatient(pat);
+          }
         }
       }
     } catch (err) {
@@ -371,7 +400,7 @@ const PatientReportContent = () => {
   }
 
   // Resolve patient details safely
-  const patient = getPatientById(screening?.patientId) || {};
+  const patient = resolvedPatient || (screening?.patientId ? getPatientById(screening.patientId) : null) || {};
 
   // Load live review or fallback to lightweight cache
   const cachedReview = getLightweightReview(screening?.id);
@@ -990,7 +1019,7 @@ const PatientReportContent = () => {
 
           <div>
             <span className="text-slate-400 font-semibold block text-[11px]">CONTACT</span>
-            <span className="font-bold text-slate-900">{patient.phone || 'Not available'}</span>
+            <span className="font-bold text-slate-900">{patient.phone || patient.mobile || 'Not available'}</span>
           </div>
         </div>
 

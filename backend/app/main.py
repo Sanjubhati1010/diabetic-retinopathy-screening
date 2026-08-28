@@ -404,6 +404,8 @@ async def list_patients(db: Session = Depends(get_db)):
                     age=p.age,
                     gender=p.gender,
                     phone=p.phone,
+                    mobile=p.phone,
+                    email=p.email,
                     village=p.village,
                     district=p.district,
                     diabetes_duration=p.diabetes_duration,
@@ -437,10 +439,13 @@ async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db
     try:
         # Validate email if provided
         clean_email = None
-        if req.email and req.email.strip():
-            clean_email = email_service.normalize_email(req.email)
+        effective_email = req.email or req.email_address
+        if effective_email and effective_email.strip():
+            clean_email = email_service.normalize_email(effective_email)
             if not clean_email:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address format.")
+
+        effective_phone = req.phone or req.mobile or req.mobile_number or req.phone_number
 
         count = db.query(PatientModel).count()
         pat_id = f"PAT-2026-{count + 81:03d}"
@@ -452,7 +457,7 @@ async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db
             name=req.name,
             age=req.age,
             gender=req.gender,
-            phone=req.phone,
+            phone=effective_phone,
             email=clean_email,
             village=req.village,
             district=req.district,
@@ -479,6 +484,7 @@ async def create_patient(req: PatientCreateRequest, db: Session = Depends(get_db
             age=new_pat.age,
             gender=new_pat.gender,
             phone=new_pat.phone,
+            mobile=new_pat.phone,
             email=new_pat.email,
             village=new_pat.village,
             district=new_pat.district,
@@ -520,6 +526,7 @@ async def get_patient_detail(patient_id: str, db: Session = Depends(get_db)):
         age=pat.age,
         gender=pat.gender,
         phone=pat.phone,
+        mobile=pat.phone,
         email=pat.email,
         village=pat.village,
         district=pat.district,
@@ -548,19 +555,23 @@ async def update_patient(patient_id: str, req: PatientUpdateRequest, db: Session
     if not pat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Patient '{patient_id}' not found.")
     try:
-        if req.email is not None:
-            if req.email and req.email.strip():
-                clean_email = email_service.normalize_email(req.email)
+        effective_email = req.email or req.email_address
+        if req.email is not None or req.email_address is not None:
+            if effective_email and effective_email.strip():
+                clean_email = email_service.normalize_email(effective_email)
                 if not clean_email:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address format.")
                 pat.email = clean_email
             else:
                 pat.email = None
 
+        effective_phone = req.phone or req.mobile or req.mobile_number or req.phone_number
+        if req.phone is not None or req.mobile is not None or req.mobile_number is not None or req.phone_number is not None:
+            pat.phone = effective_phone
+
         if req.name is not None: pat.name = req.name
         if req.age is not None: pat.age = req.age
         if req.gender is not None: pat.gender = req.gender
-        if req.phone is not None: pat.phone = req.phone
         if req.village is not None: pat.village = req.village
         if req.district is not None: pat.district = req.district
         if req.abha_id is not None: pat.abha_id = req.abha_id
@@ -585,6 +596,7 @@ async def update_patient(patient_id: str, req: PatientUpdateRequest, db: Session
             age=pat.age,
             gender=pat.gender,
             phone=pat.phone,
+            mobile=pat.phone,
             email=pat.email,
             village=pat.village,
             district=pat.district,

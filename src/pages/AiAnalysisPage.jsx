@@ -183,7 +183,7 @@ export const AiAnalysisPage = () => {
     }
   }, []);
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (!rightEyeResult && !leftEyeResult) return;
 
     const odRes = rightEyeResult;
@@ -224,7 +224,7 @@ export const AiAnalysisPage = () => {
       ((odRes?.inference_time || 0) + (osRes?.inference_time || 0)).toFixed(4)
     );
 
-    const newScr = addScreening({
+    const newScr = await addScreening({
       patientId: activeScreening.patientId || 'PAT-2026-081',
       patientName: activeScreening.patientName || 'Sanjay Bhati',
       age: 58,

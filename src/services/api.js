@@ -1628,6 +1628,201 @@ export async function retryEmailDelivery(screeningId, payload = {}) {
   }
 }
 
+// =====================================================================
+// Phase 13/14: Persistent Patient & Screening Relational Management API
+// =====================================================================
+
+/**
+ * Registers a new patient with persistent storage in MySQL database.
+ * POST /api/patients
+ */
+export async function createPatient(patientData) {
+  try {
+    const payload = {
+      name: patientData.name,
+      age: Number(patientData.age) || 50,
+      gender: patientData.gender || 'male',
+      phone: patientData.phone || patientData.mobile || null,
+      mobile: patientData.phone || patientData.mobile || null,
+      email: patientData.email ? patientData.email.trim().toLowerCase() : null,
+      village: patientData.village || 'Rampur Gram Panchayat',
+      district: patientData.district || 'Varanasi',
+      abha_id: patientData.abhaId || patientData.abha_id || null,
+      diabetes_duration: Number(patientData.diabetesDuration || patientData.diabetes_duration) || 0,
+      last_hba1c: Number(patientData.lastHba1c || patientData.last_hba1c) || 7.0,
+      insulin_use: Boolean(patientData.insulinUse ?? patientData.insulin_use),
+      visual_acuity_od: patientData.visualAcuityOD || patientData.visual_acuity_od || '6/6',
+      visual_acuity_os: patientData.visualAcuityOS || patientData.visual_acuity_os || '6/6',
+      symptoms: patientData.symptoms || [],
+    };
+
+    const res = await fetch(`${API_BASE_URL}/api/patients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to register patient (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Error creating patient in backend database:', error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieves all registered patients from MySQL database.
+ * GET /api/patients
+ */
+export async function getPatients() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/patients`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch patients (${res.status})`);
+    }
+    const data = await res.json();
+    return data.patients || [];
+  } catch (error) {
+    console.warn('Error fetching patients from backend:', error);
+    return null;
+  }
+}
+
+/**
+ * Retrieves specific patient by ID from MySQL database.
+ * GET /api/patients/{patient_id}
+ */
+export async function getPatientById(patientId) {
+  if (!patientId) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/patients/${encodeURIComponent(patientId)}`);
+    if (!res.ok) {
+      return null;
+    }
+    return await res.json();
+  } catch (error) {
+    console.warn(`Error fetching patient ${patientId} from backend:`, error);
+    return null;
+  }
+}
+
+/**
+ * Updates patient record in MySQL database.
+ * PATCH /api/patients/{patient_id}
+ */
+export async function updatePatient(patientId, updateData) {
+  if (!patientId) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/patients/${encodeURIComponent(patientId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateData),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to update patient (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error updating patient ${patientId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Saves a completed screening session into MySQL database.
+ * POST /api/screenings
+ */
+export async function createScreening(screeningData) {
+  try {
+    const payload = {
+      id: screeningData.id || null,
+      patient_id: screeningData.patientId || screeningData.patient_id,
+      patient_name: screeningData.patientName || screeningData.patient_name || 'Patient',
+      village: screeningData.village || 'Rampur Gram Panchayat',
+      screening_date: screeningData.screeningDate || screeningData.screening_date,
+      timestamp_iso: screeningData.timestampIso || screeningData.timestamp_iso || new Date().toISOString(),
+      predicted_class: screeningData.predictedClass ?? screeningData.predicted_class ?? 0,
+      class_name: screeningData.className || screeningData.class_name || 'No DR',
+      confidence: screeningData.confidence ?? 0.85,
+      probabilities: screeningData.probabilities || null,
+      dr_severity_od: screeningData.drSeverityOD || screeningData.dr_severity_od || 'drUncertain',
+      dr_severity_os: screeningData.drSeverityOS || screeningData.dr_severity_os || 'drUncertain',
+      overall_severity: screeningData.overallSeverity || screeningData.overall_severity || 'drUncertain',
+      safety_status: screeningData.safetyStatus || screeningData.safety_status || 'READY_FOR_AI',
+      screening_status: screeningData.screeningStatus || screeningData.screening_status || 'RELIABLE AI SCREENING',
+      risk_category: screeningData.riskCategory || screeningData.risk_category || 'MODERATE',
+      referral_priority: screeningData.referralPriority || screeningData.referral_priority || 'EYE SPECIALIST REVIEW RECOMMENDED',
+      risk_explanation: screeningData.riskExplanation || screeningData.risk_explanation || null,
+      referral_guidance: screeningData.referralGuidance || screeningData.referral_guidance || null,
+      safety_message: screeningData.safetyMessage || screeningData.safety_message || null,
+      gradcam_url: screeningData.gradCamUrl || screeningData.gradcam_url || null,
+      heatmap_url: screeningData.heatmapUrl || screeningData.heatmap_url || null,
+      image_od_path: screeningData.imageOD || screeningData.image_od_path || null,
+      image_os_path: screeningData.imageOS || screeningData.image_os_path || null,
+      doctor_status: screeningData.doctorStatus || screeningData.doctor_status || 'pending',
+      review_status: screeningData.reviewStatus || screeningData.review_status || 'PENDING DOCTOR REVIEW',
+    };
+
+    const res = await fetch(`${API_BASE_URL}/api/screenings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to save screening (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Error creating screening in backend database:', error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieves specific screening by ID from MySQL database.
+ * GET /api/screenings/{screening_id}
+ */
+export async function getScreeningRecordById(screeningId) {
+  if (!screeningId) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/screenings/${encodeURIComponent(screeningId)}`);
+    if (!res.ok) {
+      return null;
+    }
+    return await res.json();
+  } catch (error) {
+    console.warn(`Error fetching screening ${screeningId} from backend:`, error);
+    return null;
+  }
+}
+
+/**
+ * Retrieves all screenings from MySQL database.
+ * GET /api/screenings
+ */
+export async function getScreenings(patientId = null) {
+  try {
+    const url = patientId
+      ? `${API_BASE_URL}/api/screenings?patient_id=${encodeURIComponent(patientId)}`
+      : `${API_BASE_URL}/api/screenings`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch screenings (${res.status})`);
+    }
+    const data = await res.json();
+    return data.screenings || [];
+  } catch (error) {
+    console.warn('Error fetching screenings from backend:', error);
+    return null;
+  }
+}
+
 
 
 

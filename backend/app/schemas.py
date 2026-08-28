@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Dict, Optional, List, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -513,7 +513,11 @@ class PatientCreateRequest(BaseModel):
     age: int = Field(..., ge=1, le=120, description="Patient age")
     gender: str = Field(..., description="Gender (male, female, other)")
     phone: Optional[str] = Field(default=None, description="Contact phone number")
+    mobile: Optional[str] = Field(default=None, description="Contact mobile number")
+    mobile_number: Optional[str] = Field(default=None, description="Mobile number alias")
+    phone_number: Optional[str] = Field(default=None, description="Phone number alias")
     email: Optional[str] = Field(default=None, description="Patient registered email address")
+    email_address: Optional[str] = Field(default=None, description="Patient registered email address alias")
     village: Optional[str] = Field(default=None, description="Village or neighborhood")
     district: Optional[str] = Field(default=None, description="District / Location")
     abha_id: Optional[str] = Field(default=None, description="Ayushman Bharat Health Account ID")
@@ -524,13 +528,54 @@ class PatientCreateRequest(BaseModel):
     visual_acuity_os: Optional[str] = Field(default="6/6", description="Visual acuity left eye")
     symptoms: Optional[List[str]] = Field(default_factory=list, description="Reported visual symptoms")
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            phone_val = (
+                data.get("phone")
+                or data.get("mobile")
+                or data.get("mobile_number")
+                or data.get("mobileNumber")
+                or data.get("phone_number")
+                or data.get("phoneNumber")
+            )
+            if phone_val is not None:
+                data["phone"] = phone_val
+                data["mobile"] = phone_val
+            email_val = (
+                data.get("email")
+                or data.get("email_address")
+                or data.get("emailAddress")
+            )
+            if email_val is not None:
+                data["email"] = email_val
+                data["email_address"] = email_val
+            if "abhaId" in data and "abha_id" not in data:
+                data["abha_id"] = data["abhaId"]
+            if "diabetesDuration" in data and "diabetes_duration" not in data:
+                data["diabetes_duration"] = data["diabetesDuration"]
+            if "lastHba1c" in data and "last_hba1c" not in data:
+                data["last_hba1c"] = data["lastHba1c"]
+            if "insulinUse" in data and "insulin_use" not in data:
+                data["insulin_use"] = data["insulinUse"]
+            if "visualAcuityOD" in data and "visual_acuity_od" not in data:
+                data["visual_acuity_od"] = data["visualAcuityOD"]
+            if "visualAcuityOS" in data and "visual_acuity_os" not in data:
+                data["visual_acuity_os"] = data["visualAcuityOS"]
+        return data
+
 
 class PatientUpdateRequest(BaseModel):
     name: Optional[str] = None
     age: Optional[int] = None
     gender: Optional[str] = None
     phone: Optional[str] = None
+    mobile: Optional[str] = None
+    mobile_number: Optional[str] = None
+    phone_number: Optional[str] = None
     email: Optional[str] = None
+    email_address: Optional[str] = None
     village: Optional[str] = None
     district: Optional[str] = None
     abha_id: Optional[str] = None
@@ -545,6 +590,43 @@ class PatientUpdateRequest(BaseModel):
     referral_urgency: Optional[str] = None
     doctor_verified: Optional[bool] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            phone_val = (
+                data.get("phone")
+                or data.get("mobile")
+                or data.get("mobile_number")
+                or data.get("mobileNumber")
+                or data.get("phone_number")
+                or data.get("phoneNumber")
+            )
+            if phone_val is not None:
+                data["phone"] = phone_val
+                data["mobile"] = phone_val
+            email_val = (
+                data.get("email")
+                or data.get("email_address")
+                or data.get("emailAddress")
+            )
+            if email_val is not None:
+                data["email"] = email_val
+                data["email_address"] = email_val
+            if "abhaId" in data and "abha_id" not in data:
+                data["abha_id"] = data["abhaId"]
+            if "diabetesDuration" in data and "diabetes_duration" not in data:
+                data["diabetes_duration"] = data["diabetesDuration"]
+            if "lastHba1c" in data and "last_hba1c" not in data:
+                data["last_hba1c"] = data["lastHba1c"]
+            if "insulinUse" in data and "insulin_use" not in data:
+                data["insulin_use"] = data["insulinUse"]
+            if "visualAcuityOD" in data and "visual_acuity_od" not in data:
+                data["visual_acuity_od"] = data["visualAcuityOD"]
+            if "visualAcuityOS" in data and "visual_acuity_os" not in data:
+                data["visual_acuity_os"] = data["visualAcuityOS"]
+        return data
+
 
 class PatientResponse(BaseModel):
     id: str
@@ -553,7 +635,9 @@ class PatientResponse(BaseModel):
     age: int
     gender: str
     phone: Optional[str] = None
+    mobile: Optional[str] = None
     email: Optional[str] = None
+    email_address: Optional[str] = None
     village: Optional[str] = None
     district: Optional[str] = None
     diabetes_duration: Optional[int] = None
@@ -567,6 +651,20 @@ class PatientResponse(BaseModel):
     latest_status: str = "drUncertain"
     referral_urgency: str = "routine"
     doctor_verified: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_contact_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            phone_val = data.get("phone") or data.get("mobile")
+            if phone_val is not None:
+                data["phone"] = phone_val
+                data["mobile"] = phone_val
+            email_val = data.get("email") or data.get("email_address")
+            if email_val is not None:
+                data["email"] = email_val
+                data["email_address"] = email_val
+        return data
 
 
 class PatientListResponse(BaseModel):
@@ -601,6 +699,50 @@ class ScreeningCreateRequest(BaseModel):
     image_os_path: Optional[str] = None
     doctor_status: Optional[str] = "pending"
     review_status: Optional[str] = "PENDING DOCTOR REVIEW"
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "patientId" in data and "patient_id" not in data:
+                data["patient_id"] = data["patientId"]
+            if "patientName" in data and "patient_name" not in data:
+                data["patient_name"] = data["patientName"]
+            if "screeningDate" in data and "screening_date" not in data:
+                data["screening_date"] = data["screeningDate"]
+            if "timestampIso" in data and "timestamp_iso" not in data:
+                data["timestamp_iso"] = data["timestampIso"]
+            if "predictedClass" in data and "predicted_class" not in data:
+                data["predicted_class"] = data["predictedClass"]
+            if "className" in data and "class_name" not in data:
+                data["class_name"] = data["className"]
+            if "drSeverityOD" in data and "dr_severity_od" not in data:
+                data["dr_severity_od"] = data["drSeverityOD"]
+            if "drSeverityOS" in data and "dr_severity_os" not in data:
+                data["dr_severity_os"] = data["drSeverityOS"]
+            if "overallSeverity" in data and "overall_severity" not in data:
+                data["overall_severity"] = data["overallSeverity"]
+            if "safetyStatus" in data and "safety_status" not in data:
+                data["safety_status"] = data["safetyStatus"]
+            if "screeningStatus" in data and "screening_status" not in data:
+                data["screening_status"] = data["screeningStatus"]
+            if "riskCategory" in data and "risk_category" not in data:
+                data["risk_category"] = data["riskCategory"]
+            if "referralPriority" in data and "referral_priority" not in data:
+                data["referral_priority"] = data["referralPriority"]
+            if "gradCamUrl" in data and "gradcam_url" not in data:
+                data["gradcam_url"] = data["gradCamUrl"]
+            if "heatmapUrl" in data and "heatmap_url" not in data:
+                data["heatmap_url"] = data["heatmapUrl"]
+            if "imageOdPath" in data and "image_od_path" not in data:
+                data["image_od_path"] = data["imageOdPath"]
+            if "imageOsPath" in data and "image_os_path" not in data:
+                data["image_os_path"] = data["imageOsPath"]
+            if "doctorStatus" in data and "doctor_status" not in data:
+                data["doctor_status"] = data["doctorStatus"]
+            if "reviewStatus" in data and "review_status" not in data:
+                data["review_status"] = data["reviewStatus"]
+        return data
 
 
 class ScreeningRecordResponse(BaseModel):

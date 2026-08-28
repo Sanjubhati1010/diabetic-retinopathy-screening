@@ -8,6 +8,14 @@ import {
   sanitizeScreeningsForStorage,
   sanitizePatientsForStorage,
 } from '../services/storage';
+import {
+  createPatient as createPatientApi,
+  getPatients as getPatientsApi,
+  getPatientById as getPatientByIdApi,
+  createScreening as createScreeningApi,
+  getScreenings as getScreeningsApi,
+  getScreeningRecordById as getScreeningRecordByIdApi,
+} from '../services/api';
 
 const AppContext = createContext();
 
@@ -232,6 +240,59 @@ export const AppProvider = ({ children }) => {
     safeLocalStorageSet('dr_screenings', sanitizeScreeningsForStorage(screenings));
   }, [screenings]);
 
+  // Initial synchronization with backend MySQL database
+  useEffect(() => {
+    let isMounted = true;
+    async function syncBackendData() {
+      try {
+        const backendPatients = await getPatientsApi();
+        if (isMounted && backendPatients && Array.isArray(backendPatients) && backendPatients.length > 0) {
+          setPatients((prev) => {
+            const map = new Map();
+            // Seed defaults first
+            prev.forEach((p) => map.set(p.id, p));
+            // Overwrite/merge with authoritative backend data
+            backendPatients.forEach((bp) => {
+              map.set(bp.id, {
+                ...bp,
+                phone: bp.phone || bp.mobile || null,
+                mobile: bp.phone || bp.mobile || null,
+                email: bp.email || null,
+              });
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const backendScreenings = await getScreeningsApi();
+        if (isMounted && backendScreenings && Array.isArray(backendScreenings) && backendScreenings.length > 0) {
+          setScreenings((prev) => {
+            const map = new Map();
+            prev.forEach((s) => map.set(s.id, s));
+            backendScreenings.forEach((bs) => {
+              map.set(bs.id, {
+                ...bs,
+                patientId: bs.patient_id || bs.patientId,
+                patientName: bs.patient_name || bs.patientName,
+                screeningDate: bs.screening_date || bs.screeningDate,
+                overallSeverity: bs.overall_severity || bs.overallSeverity,
+                doctorStatus: bs.doctor_status || bs.doctorStatus || 'pending',
+                reviewStatus: bs.review_status || bs.reviewStatus,
+              });
+            });
+            return Array.from(map.values());
+          });
+        }
+      } catch (err) {
+        console.warn('Initial backend synchronization warning:', err);
+      }
+    }
+    syncBackendData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const login = (role, userDetails) => {
     setIsAuthenticated(true);
     setUserRole(role);
@@ -243,51 +304,79 @@ export const AppProvider = ({ children }) => {
     setCurrentUser(null);
   };
 
-  const addPatient = (newPatient) => {
-    const id = `PAT-2026-${String(patients.length + 81).padStart(3, '0')}`;
+  const addPatient = async (newPatient) => {
+    const rawPhone = newPatient.phone || newPatient.mobile || null;
+    const rawEmail = newPatient.email ? newPatient.email.trim().toLowerCase() : null;
+
+    let backendId = null;
+    let backendPhone = rawPhone;
+    let backendEmail = rawEmail;
+
+    try {
+      const res = await createPatientApi({
+        ...newPatient,
+        phone: rawPhone,
+        mobile: rawPhone,
+        email: rawEmail,
+      });
+      if (res && res.id) {
+        backendId = res.id;
+        backendPhone = res.phone || res.mobile || rawPhone;
+        backendEmail = res.email || rawEmail;
+      }
+    } catch (err) {
+      console.warn('Backend patient registration API unavailable, using local persistence:', err);
+    }
+
+    const id = backendId || `PAT-2026-${String(patients.length + 81).padStart(3, '0')}`;
     const patientObj = {
       ...newPatient,
       id,
-      email: newPatient.email ? newPatient.email.trim().toLowerCase() : null,
+      phone: backendPhone,
+      mobile: backendPhone,
+      email: backendEmail,
       registeredDate: new Date().toISOString().split('T')[0],
       lastScreened: '-',
       latestStatus: 'drUncertain',
       referralUrgency: 'routine',
       doctorVerified: false,
     };
-    setPatients((prev) => [patientObj, ...prev]);
+    setPatients((prev) => {
+      const filtered = prev.filter((p) => p.id !== id);
+      return [patientObj, ...filtered];
+    });
     return patientObj;
   };
 
   const getPatientById = (id) => {
-    const found = patients.find((p) => p.id === id);
+    if (!id) return patients[0] || null;
+    const found = patients.find((p) => p.id === id || p.abhaId === id || p.abha_id === id);
     if (found) return found;
-    if (patients && patients.length > 0) return patients[0];
-    return {
-      id: id || 'PAT-2026-081',
-      name: 'Unknown Patient',
-      email: 'sanjay.bhati@example.com',
-      age: 45,
-      gender: 'Other',
-      village: 'Rampur',
-      diabetesDuration: 5,
-      lastHba1c: 7.5,
-      visualAcuityOD: '6/6',
-      visualAcuityOS: '6/6',
-      phone: '+91 73782 16613',
-      abhaId: 'ABHA-9876-0000',
-    };
+    return null;
   };
 
-  const addScreening = (screeningData) => {
-    const id = `SCR-2026-${String(screenings.length + 991).padStart(4, '0')}`;
+  const addScreening = async (screeningData) => {
+    const localId = screeningData.id || `SCR-2026-${String(screenings.length + 991).padStart(4, '0')}`;
     const newScr = {
       ...screeningData,
-      id,
-      screeningDate: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-      doctorStatus: 'pending',
+      id: localId,
+      screeningDate: screeningData.screeningDate || new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      doctorStatus: screeningData.doctorStatus || 'pending',
     };
-    setScreenings((prev) => [newScr, ...prev]);
+
+    try {
+      const res = await createScreeningApi(newScr);
+      if (res && res.id) {
+        newScr.id = res.id;
+      }
+    } catch (err) {
+      console.warn('Backend screening persistence API unavailable, using local persistence:', err);
+    }
+
+    setScreenings((prev) => {
+      const filtered = prev.filter((s) => s.id !== newScr.id);
+      return [newScr, ...filtered];
+    });
 
     // Update patient's latestStatus
     setPatients((prev) =>
