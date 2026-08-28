@@ -77,7 +77,7 @@ export const AppProvider = ({ children }) => {
         health_worker_name: "Pooja Sharma (ASHA Worker)",
         health_worker_email: "asha.rampur@phc.in",
         patient_id: "PAT-2026-081",
-        patient_name: "Ramesh Kumar Verma",
+        patient_name: "Sanjay Bhati",
         patient_age: 58,
         patient_gender: "male",
         village: "Rampur Gram Panchayat",
@@ -316,7 +316,7 @@ export const AppProvider = ({ children }) => {
       return {
         id,
         patientId: 'PAT-2026-081',
-        patientName: 'Ramesh Kumar Verma',
+        patientName: 'Sanjay Bhati',
         village: 'Rampur',
         screeningDate: local.updatedAt ? new Date(local.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleString('en-IN'),
         className: local.doctorReviewedResult || 'Moderate',
@@ -336,7 +336,7 @@ export const AppProvider = ({ children }) => {
     if (typeof id === 'string' && id.startsWith('SCR-')) {
       const template = (screenings && screenings[0]) || {
         patientId: 'PAT-2026-081',
-        patientName: 'Ramesh Kumar Verma',
+        patientName: 'Sanjay Bhati',
         village: 'Rampur',
         screeningDate: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
         className: 'Moderate',

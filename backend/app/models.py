@@ -248,6 +248,8 @@ class WhatsAppDeliveryModel(Base):
     id = Column(String(64), primary_key=True, index=True)
     screening_id = Column(String(64), ForeignKey("screenings.id"), nullable=False, unique=True, index=True)
     recipient_phone = Column(String(32), nullable=False, index=True)
+    patient_id = Column(String(64), nullable=True, index=True)
+    patient_name = Column(String(128), nullable=True)
     health_worker_id = Column(String(64), ForeignKey("health_workers.id"), nullable=False, index=True)
     health_worker_name = Column(String(128), nullable=False)
     language = Column(String(16), default="en")

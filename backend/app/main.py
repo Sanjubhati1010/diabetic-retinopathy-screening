@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import json
 import uuid
 import logging
@@ -1428,25 +1429,38 @@ async def send_whatsapp_report_endpoint(screening_id: str, req: WhatsAppSendRequ
 
 @app.get("/api/reports/{screening_id}/whatsapp/status", response_model=WhatsAppStatusResponse, tags=["Phase 12: WhatsApp"])
 async def get_whatsapp_status_endpoint(screening_id: str, hw_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    """Returns WhatsApp delivery status, doctor gate evaluation, and complete audit trail from DB."""
+    """Returns WhatsApp delivery status, doctor gate evaluation, patient recipient resolution, and complete audit trail from DB."""
     can_send, gate_reason, review = whatsapp_service.check_doctor_review_gate(screening_id, db=db)
     delivery_rec = whatsapp_service.get_delivery_status(screening_id, db=db)
+    patient = whatsapp_service.resolve_patient_for_screening(screening_id=screening_id, db=db)
     hw = whatsapp_service.resolve_health_worker_for_screening(screening_id=screening_id, hw_id=hw_id, db=db)
 
     rev_status = review.get("review_status", "PENDING DOCTOR REVIEW") if review else "PENDING DOCTOR REVIEW"
 
-    # Enforce Requirement 8: If health worker is missing or mobile is unverified, block sending
-    has_valid_recipient = bool(hw and hw.phone and hw.phone.strip())
-    if not has_valid_recipient:
+    # Enforce: The recipient is the Patient. If patient is missing or mobile is unverified/missing, block sending.
+    patient_phone = patient.phone if patient else None
+    norm_patient_phone = normalize_phone_number(patient_phone) if patient_phone else ""
+    has_valid_patient_recipient = bool(norm_patient_phone and len(re.sub(r"[^\d]", "", norm_patient_phone)) >= 10)
+
+    if not has_valid_patient_recipient:
         can_send = False
-        block_reason = "Health worker mobile number not available/verified."
+        block_reason = "Patient mobile number not available/verified."
+        resolved_recipient_phone = None
     else:
+        resolved_recipient_phone = norm_patient_phone
         block_reason = None if can_send else gate_reason
+
+    patient_id = delivery_rec.patient_id if (delivery_rec and delivery_rec.patient_id) else (getattr(patient, "id", None))
+    patient_name = delivery_rec.patient_name if (delivery_rec and delivery_rec.patient_name) else (getattr(patient, "name", None))
+    recipient_name = delivery_rec.recipient_name if (delivery_rec and delivery_rec.recipient_name) else patient_name
 
     return WhatsAppStatusResponse(
         screening_id=screening_id,
         status=delivery_rec.status if delivery_rec else WhatsAppDeliveryStatus.NOT_REQUESTED,
-        recipient_phone=delivery_rec.recipient_phone if delivery_rec else (hw.phone if hw else None),
+        recipient_phone=delivery_rec.recipient_phone if delivery_rec else resolved_recipient_phone,
+        patient_id=patient_id,
+        patient_name=patient_name,
+        recipient_name=recipient_name,
         health_worker_id=delivery_rec.health_worker_id if delivery_rec else (hw.id if hw else None),
         health_worker_name=delivery_rec.health_worker_name if delivery_rec else (hw.name if hw else None),
         doctor_review_status=rev_status,

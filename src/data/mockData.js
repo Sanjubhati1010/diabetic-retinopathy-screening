@@ -15,10 +15,10 @@ export const MOCK_PATIENTS = [
   {
     id: "PAT-2026-081",
     abhaId: "91-4829-1029-4821",
-    name: "Ramesh Kumar Verma",
+    name: "Sanjay Bhati",
     age: 58,
     gender: "male",
-    phone: "+91 98765 43210",
+    phone: "+91 73782 16613",
     village: "Rampur Gram Panchayat",
     district: "Varanasi",
     diabetesDuration: 8,
@@ -115,11 +115,11 @@ export const MOCK_PATIENTS = [
 ];
 
 export const MOCK_SCREENINGS = [
-  // Patient PAT-2026-081 (Ramesh Kumar Verma) - 3 Visits
+  // Patient PAT-2026-081 (Sanjay Bhati) - 3 Visits
   {
     id: "SCR-2026-0991",
     patientId: "PAT-2026-081",
-    patientName: "Ramesh Kumar Verma",
+    patientName: "Sanjay Bhati",
     age: 58,
     village: "Rampur Gram Panchayat",
     screeningDate: "2026-08-22 10:45 AM",
@@ -153,7 +153,7 @@ export const MOCK_SCREENINGS = [
   {
     id: "SCR-2026-0740",
     patientId: "PAT-2026-081",
-    patientName: "Ramesh Kumar Verma",
+    patientName: "Sanjay Bhati",
     age: 58,
     village: "Rampur Gram Panchayat",
     screeningDate: "2026-06-12 11:15 AM",
@@ -187,7 +187,7 @@ export const MOCK_SCREENINGS = [
   {
     id: "SCR-2026-0410",
     patientId: "PAT-2026-081",
-    patientName: "Ramesh Kumar Verma",
+    patientName: "Sanjay Bhati",
     age: 58,
     village: "Rampur Gram Panchayat",
     screeningDate: "2026-03-20 09:30 AM",

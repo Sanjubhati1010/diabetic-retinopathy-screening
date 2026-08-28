@@ -120,10 +120,10 @@ DEMO_PATIENTS = [
     {
         "id": "PAT-2026-081",
         "abha_id": "91-4829-1029-4821",
-        "name": "Ramesh Kumar Verma",
+        "name": "Sanjay Bhati",
         "age": 58,
         "gender": "male",
-        "phone": "+91 98765 43210",
+        "phone": "+91 73782 16613",
         "village": "Rampur Gram Panchayat",
         "district": "Varanasi",
         "diabetes_duration": 8,
@@ -204,11 +204,11 @@ DEMO_PATIENTS = [
 ]
 
 DEMO_SCREENINGS = [
-    # Patient PAT-2026-081 (Ramesh Kumar Verma) - 3 Visits
+    # Patient PAT-2026-081 (Sanjay Bhati) - 3 Visits
     {
         "id": "SCR-2026-0991",
         "patient_id": "PAT-2026-081",
-        "patient_name": "Ramesh Kumar Verma",
+        "patient_name": "Sanjay Bhati",
         "village": "Rampur Gram Panchayat",
         "screening_date": "2026-08-22 10:45 AM",
         "timestamp_iso": "2026-08-22T10:45:00Z",
@@ -236,7 +236,7 @@ DEMO_SCREENINGS = [
     {
         "id": "SCR-2026-0740",
         "patient_id": "PAT-2026-081",
-        "patient_name": "Ramesh Kumar Verma",
+        "patient_name": "Sanjay Bhati",
         "village": "Rampur Gram Panchayat",
         "screening_date": "2026-06-15 11:20 AM",
         "timestamp_iso": "2026-06-15T11:20:00Z",
@@ -264,7 +264,7 @@ DEMO_SCREENINGS = [
     {
         "id": "SCR-2026-0410",
         "patient_id": "PAT-2026-081",
-        "patient_name": "Ramesh Kumar Verma",
+        "patient_name": "Sanjay Bhati",
         "village": "Rampur Gram Panchayat",
         "screening_date": "2026-03-20 09:30 AM",
         "timestamp_iso": "2026-03-20T09:30:00Z",
@@ -386,7 +386,7 @@ DEMO_APPOINTMENTS = [
         "health_worker_name": "Pooja Sharma (ASHA Worker)",
         "health_worker_email": "asha.rampur@phc.in",
         "patient_id": "PAT-2026-081",
-        "patient_name": "Ramesh Kumar Verma",
+        "patient_name": "Sanjay Bhati",
         "patient_age": 58,
         "patient_gender": "male",
         "village": "Rampur Gram Panchayat",
@@ -418,12 +418,12 @@ DEMO_APPOINTMENTS = [
         "screening_id": "SCR-2026-0992",
         "screening_summary": "Severe DR (Urgent Referral Required)",
         "date": "2026-08-28",
-        "start_time": "11:30",
-        "end_time": "12:00",
-        "reason": "High risk NPDR with macular edema suspicion. Tele-consultation required for urgent tertiary hospital referral.",
-        "status": "PENDING",
-        "created_at": "2026-08-27T14:15:00Z",
-        "updated_at": "2026-08-27T14:15:00Z",
+        "start_time": "11:15",
+        "end_time": "11:45",
+        "reason": "Severe NPDR detected with retinal hemorrhages. Urgent specialist consultation required.",
+        "status": "CONFIRMED",
+        "created_at": "2026-08-27T14:30:00Z",
+        "updated_at": "2026-08-27T15:00:00Z",
         "doctor_notes": None,
         "doctor_recommendation": None,
         "follow_up_date": None,
@@ -461,6 +461,39 @@ def seed_database_if_empty(db: Session):
     Initializes database tables with baseline demo records if empty.
     Preserves all modified or dynamically created records across restarts.
     """
+    # 0. Schema Migration for WhatsApp Delivery Table
+    try:
+        from sqlalchemy import text
+        with db.bind.connect() as conn:
+            try:
+                conn.execute(text("SELECT patient_id FROM whatsapp_deliveries LIMIT 1"))
+            except Exception:
+                logger.info("Migrating whatsapp_deliveries table: adding patient_id and patient_name columns...")
+                conn.execute(text("ALTER TABLE whatsapp_deliveries ADD COLUMN patient_id VARCHAR(64)"))
+                conn.execute(text("ALTER TABLE whatsapp_deliveries ADD COLUMN patient_name VARCHAR(128)"))
+                conn.commit()
+
+        # Migrate existing WhatsApp delivery records to patient recipient
+        from app.models import WhatsAppDeliveryModel
+        legacy_deliveries = db.query(WhatsAppDeliveryModel).all()
+        for del_row in legacy_deliveries:
+            if del_row.recipient_phone == "+919876543210" or del_row.patient_name is None:
+                if del_row.screening_id in ["SCR-2026-0991", "SCR-2026-1024", "SCR-2026-0740", "SCR-2026-0410", "SCR-WH-d24ca6", "SCR-PHASE12-ACCEPTED", "SCR-FAILED-001"]:
+                    del_row.patient_id = "PAT-2026-081"
+                    del_row.patient_name = "Sanjay Bhati"
+                    del_row.recipient_phone = "+917378216613"
+                elif del_row.screening_id in ["SCR-2026-0992", "SCR-2026-0612"]:
+                    del_row.patient_id = "PAT-2026-082"
+                    del_row.patient_name = "Sunita Devi"
+                    del_row.recipient_phone = "+919412388990"
+                elif del_row.screening_id in ["SCR-2026-0993", "SCR-2026-0850"]:
+                    del_row.patient_id = "PAT-2026-083"
+                    del_row.patient_name = "Balwinder Singh"
+                    del_row.recipient_phone = "+919789012345"
+        db.commit()
+    except Exception as e:
+        logger.debug(f"Schema migration note for whatsapp_deliveries: {e}")
+
     # 1. Seed Doctors
     if db.query(DoctorModel).count() == 0:
         logger.info("Seeding initial Doctor records into database...")
@@ -479,15 +512,36 @@ def seed_database_if_empty(db: Session):
         for hw in DEMO_HEALTH_WORKERS:
             db.add(HealthWorkerModel(**hw))
         db.commit()
+    else:
+        for hw_data in DEMO_HEALTH_WORKERS:
+            hw_rec = db.query(HealthWorkerModel).filter(HealthWorkerModel.id == hw_data["id"]).first()
+            if not hw_rec:
+                db.add(HealthWorkerModel(**hw_data))
+            else:
+                hw_rec.name = hw_data["name"]
+                hw_rec.phone = hw_data["phone"]
+                hw_rec.village = hw_data.get("village", hw_rec.village)
+        db.commit()
 
-    # 3. Seed Patients
+    # 3. Seed / Sync Patients
     if db.query(PatientModel).count() == 0:
         logger.info("Seeding initial Patient records into database...")
         for pat in DEMO_PATIENTS:
             db.add(PatientModel(**pat))
         db.commit()
+    else:
+        for pat_data in DEMO_PATIENTS:
+            p = db.query(PatientModel).filter(PatientModel.id == pat_data["id"]).first()
+            if not p:
+                db.add(PatientModel(**pat_data))
+            else:
+                p.name = pat_data["name"]
+                p.phone = pat_data["phone"]
+                p.village = pat_data["village"]
+                p.district = pat_data.get("district", p.district)
+        db.commit()
 
-    # 4. Seed Screenings
+    # 4. Seed / Sync Screenings
     if db.query(ScreeningModel).count() == 0:
         logger.info("Seeding initial Screening records into database...")
         for scr in DEMO_SCREENINGS:
@@ -497,7 +551,12 @@ def seed_database_if_empty(db: Session):
         # Sync canonical baseline screenings if updated
         for scr_data in DEMO_SCREENINGS:
             existing = db.query(ScreeningModel).filter(ScreeningModel.id == scr_data["id"]).first()
-            if existing and existing.predicted_class != scr_data["predicted_class"]:
+            if not existing:
+                db.add(ScreeningModel(**scr_data))
+            else:
+                existing.patient_id = scr_data.get("patient_id", existing.patient_id)
+                existing.patient_name = scr_data.get("patient_name", existing.patient_name)
+                existing.village = scr_data.get("village", existing.village)
                 existing.predicted_class = scr_data["predicted_class"]
                 existing.class_name = scr_data["class_name"]
                 existing.confidence = scr_data["confidence"]
@@ -510,7 +569,7 @@ def seed_database_if_empty(db: Session):
         for scr in DEMO_SCREENINGS:
             if scr.get("review_status") == "AI RESULT ACCEPTED":
                 rev_id = f"REV-{scr['id']}"
-                if not db.query(ScreeningReviewModel).filter(ScreeningReviewModel.id == rev_id).first():
+                if not db.query(ScreeningReviewModel).filter((ScreeningReviewModel.id == rev_id) | (ScreeningReviewModel.screening_id == scr["id"])).first():
                     review_rec = ScreeningReviewModel(
                         id=rev_id,
                         screening_id=scr["id"],

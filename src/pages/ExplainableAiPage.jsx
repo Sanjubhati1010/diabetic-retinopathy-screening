@@ -44,7 +44,7 @@ export const ExplainableAiPage = () => {
         ? {
             id: activeScreening.id || id || 'SCR-CURRENT',
             patientId: activeScreening.patientId || 'PAT-2026-081',
-            patientName: activeScreening.patientName || 'Ramesh Kumar Verma',
+            patientName: activeScreening.patientName || 'Sanjay Bhati',
             imageOD: activeScreening.imageOD || SAMPLE_FUNDUS_IMAGES.sample_od,
             imageOS: activeScreening.imageOS || SAMPLE_FUNDUS_IMAGES.sample_os,
             rightEyeAnalysis: activeScreening.rightEyeAnalysis || activeScreening.aiResultOD,
@@ -63,7 +63,7 @@ export const ExplainableAiPage = () => {
         : latestRealScreening || (screenings && screenings[0]) || {
             id: id || 'SCR-2026-1024',
             patientId: 'PAT-2026-081',
-            patientName: 'Ramesh Kumar Verma',
+            patientName: 'Sanjay Bhati',
             imageOD: SAMPLE_FUNDUS_IMAGES.sample_od,
             imageOS: SAMPLE_FUNDUS_IMAGES.sample_os,
             overallSeverity: 'dr2',

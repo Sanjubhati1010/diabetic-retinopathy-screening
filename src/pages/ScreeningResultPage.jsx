@@ -71,7 +71,7 @@ export const ScreeningResultPage = () => {
     screening = latestRealScreening || (screenings && screenings[0]) || {
       id: id || 'SCR-2026-1024',
       patientId: 'PAT-2026-081',
-      patientName: 'Ramesh Kumar Verma',
+      patientName: 'Sanjay Bhati',
       village: 'Rampur',
       screeningDate: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
       className: 'Moderate',

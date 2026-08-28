@@ -226,7 +226,7 @@ export const AiAnalysisPage = () => {
 
     const newScr = addScreening({
       patientId: activeScreening.patientId || 'PAT-2026-081',
-      patientName: activeScreening.patientName || 'Ramesh Kumar Verma',
+      patientName: activeScreening.patientName || 'Sanjay Bhati',
       age: 58,
       village: 'Rampur Gram Panchayat',
       campName: activeScreening.campLocation || 'Rampur PHC Community Camp',

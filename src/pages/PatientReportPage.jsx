@@ -155,8 +155,8 @@ const PatientReportContent = () => {
 
   const handleSendWhatsApp = async () => {
     if (!screening?.id) return;
-    if (!whatsappStatus?.recipient_phone || !whatsappStatus?.health_worker_id) {
-      setWhatsappErrorMsg('Health worker mobile number not available/verified.');
+    if (!whatsappStatus?.recipient_phone) {
+      setWhatsappErrorMsg('Patient mobile number not available/verified.');
       return;
     }
 
@@ -168,12 +168,12 @@ const PatientReportContent = () => {
       const payload = {
         screening_id: screening.id,
         recipient_phone: whatsappStatus.recipient_phone,
-        health_worker_id: whatsappStatus.health_worker_id,
+        health_worker_id: whatsappStatus.health_worker_id || 'HW-RAMPUR-01',
         language: 'en',
         opt_in_confirmed: true,
       };
       const res = await sendWhatsAppReport(screening.id, payload);
-      setWhatsappSuccessMsg('Report sent to health worker via WhatsApp.');
+      setWhatsappSuccessMsg('Report sent to patient via WhatsApp.');
       setIsWhatsAppModalOpen(false);
 
       // Refresh delivery status
@@ -185,7 +185,7 @@ const PatientReportContent = () => {
         setWhatsappStatus(updatedStatus);
       }
     } catch (err) {
-      setWhatsappErrorMsg(err.message || 'Failed to dispatch report to WhatsApp.');
+      setWhatsappErrorMsg(err.message || 'Failed to dispatch report to patient via WhatsApp.');
     } finally {
       setIsSendingWhatsApp(false);
     }
@@ -198,10 +198,10 @@ const PatientReportContent = () => {
 
     try {
       await retryWhatsAppDelivery(screening.id, {
-        health_worker_id: 'HW-RAMPUR-01',
+        health_worker_id: whatsappStatus?.health_worker_id || 'HW-RAMPUR-01',
         force_regenerate_pdf: false,
       });
-      setWhatsappSuccessMsg('WhatsApp report delivery retried.');
+      setWhatsappSuccessMsg('WhatsApp report delivery retried to patient registered mobile.');
       const updatedStatus = await getWhatsAppDeliveryStatus(screening.id);
       setWhatsappStatus(updatedStatus);
     } catch (err) {
@@ -424,11 +424,16 @@ const PatientReportContent = () => {
                 </span>
               </div>
               <p className="text-[11px] text-slate-600 font-medium">
-                Authorized Recipient: <strong>{whatsappStatus?.health_worker_name || screening.screenerName || 'Not Assigned'}</strong> • Registered:{' '}
+                Authorized Recipient: <strong>{whatsappStatus?.patient_name || patient.name || screening.patientName || 'Sanjay Bhati'} (Patient)</strong> • Registered:{' '}
                 {whatsappStatus?.recipient_phone ? (
                   <span className="font-mono font-bold text-slate-800">{whatsappStatus.recipient_phone}</span>
                 ) : (
-                  <span className="font-medium text-rose-600 italic">Health worker mobile number not available/verified.</span>
+                  <span className="font-medium text-rose-600 italic">Patient mobile number not available/verified.</span>
+                )}
+                {whatsappStatus?.health_worker_name && (
+                  <span className="text-slate-500 ml-2 border-l border-slate-300 pl-2">
+                    Screener: {whatsappStatus.health_worker_name}
+                  </span>
                 )}
               </p>
             </div>
@@ -511,7 +516,7 @@ const PatientReportContent = () => {
                   Confirm WhatsApp Report Delivery
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Official clinical report distribution to authorized health worker
+                  Direct clinical report dispatch to patient's registered mobile number
                 </p>
               </div>
             </div>
@@ -522,42 +527,44 @@ const PatientReportContent = () => {
                 <span className="font-mono font-bold text-slate-900">{screening.id}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-200/60">
-                <span className="text-slate-500">Patient:</span>
-                <span className="font-bold text-slate-900">{patient.name || screening.patientName || 'Patient'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60">
-                <span className="text-slate-500">Doctor Review Status:</span>
-                <span className="font-bold text-emerald-700">{reviewStatus}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60">
-                <span className="text-slate-500">Recipient Health Worker:</span>
+                <span className="text-slate-500">Report Recipient:</span>
                 <span className="font-bold text-slate-900">
-                  {whatsappStatus?.health_worker_name || screening.screenerName || 'Not Assigned'}
+                  {whatsappStatus?.patient_name || patient.name || screening.patientName || 'Sanjay Bhati'} (Patient)
                 </span>
               </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Verified Mobile Number:</span>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Registered Mobile Number:</span>
                 {whatsappStatus?.recipient_phone ? (
                   <span className="font-mono font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">
                     {whatsappStatus.recipient_phone}
                   </span>
                 ) : (
                   <span className="text-rose-600 font-medium italic bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                    Health worker mobile number not available/verified.
+                    Patient mobile number not available/verified.
                   </span>
                 )}
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Doctor Review Status:</span>
+                <span className="font-bold text-emerald-700">{reviewStatus}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500">Screening Attribution (ASHA / HW):</span>
+                <span className="font-medium text-slate-700">
+                  {whatsappStatus?.health_worker_name || screening.screenerName || 'Pooja Sharma (ASHA Worker)'}
+                </span>
               </div>
             </div>
 
             {whatsappStatus?.recipient_phone ? (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>WhatsApp Opt-in consent verified. PDF will be generated & sent securely.</span>
+                <span>Patient WhatsApp recipient verified. Doctor-reviewed PDF report will be dispatched directly to patient.</span>
               </div>
             ) : (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>Delivery blocked: Health worker mobile number not available/verified.</span>
+                <span>Delivery blocked: Patient mobile number not available/verified.</span>
               </div>
             )}
 
@@ -577,7 +584,7 @@ const PatientReportContent = () => {
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSendingWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                <span>{isSendingWhatsApp ? 'Sending...' : 'Dispatch Report Now'}</span>
+                <span>{isSendingWhatsApp ? 'Sending...' : 'Dispatch Report to Patient'}</span>
               </button>
             </div>
           </div>

@@ -365,9 +365,11 @@ class TestPhase13DatabasePersistence(unittest.TestCase):
             del_model = WhatsAppDeliveryModel(
                 id=f"DEL-{scr_id}",
                 screening_id=scr_id,
-                recipient_phone="+919876543210",
+                recipient_phone="+917378216613",
+                patient_id="PAT-2026-081",
+                patient_name="Sanjay Bhati",
                 health_worker_id="HW-RAMPUR-01",
-                health_worker_name="Pooja Sharma",
+                health_worker_name="Pooja Sharma (ASHA Worker)",
                 language="en",
                 status="SENT",
                 provider_message_id="wamid.TEST_PERSIST_001",
@@ -380,7 +382,8 @@ class TestPhase13DatabasePersistence(unittest.TestCase):
 
         status_rec = whatsapp_service.get_delivery_status(scr_id, db=self.db)
         self.assertIsNotNone(status_rec)
-        self.assertEqual(status_rec.recipient_phone, "+919876543210")
+        self.assertEqual(status_rec.recipient_phone, "+917378216613")
+        self.assertEqual(status_rec.patient_name, "Sanjay Bhati")
         print("[TEST 10] WhatsApp delivery record persistence verified.")
 
     # 11. WhatsApp webhook status update persistence
@@ -393,7 +396,7 @@ class TestPhase13DatabasePersistence(unittest.TestCase):
         scr = ScreeningModel(
             id=scr_id,
             patient_id="PAT-2026-081",
-            patient_name="Ramesh Kumar Verma",
+            patient_name="Sanjay Bhati",
             village="Rampur Gram Panchayat",
             screening_date="2026-08-27 10:00 AM",
             timestamp_iso=now_iso,
@@ -411,9 +414,11 @@ class TestPhase13DatabasePersistence(unittest.TestCase):
         del_model = WhatsAppDeliveryModel(
             id=f"DEL-{scr_id}",
             screening_id=scr_id,
-            recipient_phone="+919876543210",
+            recipient_phone="+917378216613",
+            patient_id="PAT-2026-081",
+            patient_name="Sanjay Bhati",
             health_worker_id="HW-RAMPUR-01",
-            health_worker_name="Pooja Sharma",
+            health_worker_name="Pooja Sharma (ASHA Worker)",
             language="en",
             status="SENT",
             provider_message_id=wamid,

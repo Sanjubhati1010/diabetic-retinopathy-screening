@@ -419,8 +419,8 @@ class WhatsAppDeliveryStatus(str, Enum):
 
 class WhatsAppSendRequest(BaseModel):
     screening_id: str = Field(..., description="Screening identifier")
-    recipient_phone: str = Field(..., description="Authorized recipient WhatsApp phone number with country code (e.g. +919876543210)")
-    health_worker_id: str = Field(..., description="Health worker identifier requesting delivery")
+    recipient_phone: str = Field(..., description="Authorized patient WhatsApp phone number with country code (e.g. +917378216613)")
+    health_worker_id: Optional[str] = Field(default="HW-RAMPUR-01", description="Health worker identifier requesting delivery for attribution")
     language: str = Field(default="en", description="Language preference: 'en' or 'hi'")
     opt_in_confirmed: bool = Field(default=True, description="Explicit recipient WhatsApp opt-in verification")
 
@@ -438,9 +438,12 @@ class WhatsAppAuditEvent(BaseModel):
 
 class WhatsAppDeliveryRecord(BaseModel):
     screening_id: str = Field(..., description="Screening identifier")
-    recipient_phone: str = Field(..., description="Recipient phone number")
-    health_worker_id: str = Field(..., description="Authorized health worker ID")
-    health_worker_name: Optional[str] = Field(default=None, description="Health worker name")
+    recipient_phone: str = Field(..., description="Recipient phone number (Patient registered mobile)")
+    patient_id: Optional[str] = Field(default=None, description="Patient identifier")
+    patient_name: Optional[str] = Field(default=None, description="Patient name")
+    recipient_name: Optional[str] = Field(default=None, description="Recipient name (Patient)")
+    health_worker_id: Optional[str] = Field(default=None, description="Attributed health worker ID")
+    health_worker_name: Optional[str] = Field(default=None, description="Attributed health worker name")
     status: WhatsAppDeliveryStatus = Field(default=WhatsAppDeliveryStatus.NOT_REQUESTED, description="Current delivery status")
     provider_message_id: Optional[str] = Field(default=None, description="Provider message tracking ID")
     provider_status: Optional[str] = Field(default=None, description="Raw provider status string")
@@ -460,9 +463,12 @@ class WhatsAppDeliveryRecord(BaseModel):
 class WhatsAppStatusResponse(BaseModel):
     screening_id: str = Field(..., description="Screening identifier")
     status: WhatsAppDeliveryStatus = Field(..., description="Current delivery status")
-    recipient_phone: Optional[str] = Field(default=None, description="Authorized recipient phone")
-    health_worker_id: Optional[str] = Field(default=None, description="Authorized health worker ID")
-    health_worker_name: Optional[str] = Field(default=None, description="Authorized health worker name")
+    recipient_phone: Optional[str] = Field(default=None, description="Authorized recipient phone (Patient registered mobile)")
+    patient_id: Optional[str] = Field(default=None, description="Patient identifier")
+    patient_name: Optional[str] = Field(default=None, description="Patient name")
+    recipient_name: Optional[str] = Field(default=None, description="Recipient name (Patient)")
+    health_worker_id: Optional[str] = Field(default=None, description="Attributed health worker ID")
+    health_worker_name: Optional[str] = Field(default=None, description="Attributed health worker name")
     doctor_review_status: str = Field(..., description="Current doctor review status")
     can_send: bool = Field(..., description="Whether doctor-review gate and consent permit delivery")
     block_reason: Optional[str] = Field(default=None, description="Reason why sending is blocked if can_send is false")

@@ -23,19 +23,57 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         print("RUNNING PHASE 12 WHATSAPP CLINICAL REPORT TESTS")
         print("==================================================")
 
-        # Clean existing test deliveries to ensure fresh test runs
+        # Run seed and migrations
         from app.database import SessionLocal
-        from app.models import WhatsAppDeliveryModel, WhatsAppAuditEventModel, ScreeningReviewModel, ReviewAuditEventModel
+        from app.db_seeder import seed_database_if_empty
+        from app.models import WhatsAppDeliveryModel, WhatsAppAuditEventModel, ScreeningReviewModel, ReviewAuditEventModel, ScreeningModel
         db = SessionLocal()
         try:
+            seed_database_if_empty(db)
             test_sids = ["SCR-PHASE12-ACCEPTED", "SCR-PHASE12-RECAPTURE", "SCR-FAILED-001", "SCR-UNREVIEWED-999", "SCR-UNREVIEWED-888"]
             db.query(WhatsAppAuditEventModel).filter(WhatsAppAuditEventModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
             db.query(WhatsAppDeliveryModel).filter(WhatsAppDeliveryModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
             db.query(ReviewAuditEventModel).filter(ReviewAuditEventModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
             db.query(ScreeningReviewModel).filter(ScreeningReviewModel.screening_id.in_(test_sids)).delete(synchronize_session=False)
+
+            # Ensure ScreeningModel entries exist for test screenings
+            for sid, cname, conf in [
+                ("SCR-PHASE12-ACCEPTED", "Moderate", 0.875),
+                ("SCR-PHASE12-RECAPTURE", "Moderate", 0.875),
+                ("SCR-FAILED-001", "Moderate", 0.85),
+            ]:
+                s_rec = db.query(ScreeningModel).filter(ScreeningModel.id == sid).first()
+                if not s_rec:
+                    db.add(
+                        ScreeningModel(
+                            id=sid,
+                            patient_id="PAT-2026-081",
+                            patient_name="Sanjay Bhati",
+                            village="Rampur Gram Panchayat",
+                            screening_date="2026-08-28 10:00 AM",
+                            timestamp_iso="2026-08-28T10:00:00Z",
+                            predicted_class=2,
+                            class_name=cname,
+                            confidence=conf,
+                            dr_severity_od="dr2",
+                            dr_severity_os="dr1",
+                            overall_severity="dr2",
+                            safety_status="READY_FOR_AI",
+                            screening_status="RELIABLE AI SCREENING",
+                            risk_category="MODERATE",
+                            referral_priority="EYE SPECIALIST REVIEW RECOMMENDED",
+                            doctor_status="verified",
+                            review_status="AI RESULT ACCEPTED",
+                        )
+                    )
+                else:
+                    s_rec.patient_id = "PAT-2026-081"
+                    s_rec.patient_name = "Sanjay Bhati"
+                    s_rec.village = "Rampur Gram Panchayat"
             db.commit()
-        except Exception:
+        except Exception as e:
             db.rollback()
+            print(f"Error in setUpClass DB setup: {e}")
         finally:
             db.close()
 
@@ -87,7 +125,7 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
             "/api/reports/SCR-UNREVIEWED-999/whatsapp/send",
             json={
                 "screening_id": "SCR-UNREVIEWED-999",
-                "recipient_phone": "+919876543210",
+                "recipient_phone": "+917378216613",
                 "health_worker_id": "HW-RAMPUR-01",
                 "language": "en",
                 "opt_in_confirmed": True,
@@ -110,7 +148,7 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
             "/api/reports/SCR-PHASE12-RECAPTURE/whatsapp/send",
             json={
                 "screening_id": "SCR-PHASE12-RECAPTURE",
-                "recipient_phone": "+919876543210",
+                "recipient_phone": "+917378216613",
                 "health_worker_id": "HW-RAMPUR-01",
                 "language": "en",
                 "opt_in_confirmed": True,
@@ -120,41 +158,33 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         self.assertIn("Final report is waiting for re-capture", res.json()["detail"])
         print("[TEST 3] Re-capture request status safely blocked final delivery.")
 
-    def test_04_valid_health_worker_number(self):
-        """4. Valid health-worker number: Successfully accepts valid normalized phone."""
-        phone1 = normalize_phone_number("+91 98765 43210")
-        phone2 = normalize_phone_number("9876543210")
-        phone3 = normalize_phone_number("919876543210")
-        self.assertEqual(phone1, "+919876543210")
-        self.assertEqual(phone2, "+919876543210")
-        self.assertEqual(phone3, "+919876543210")
-        print("[TEST 4] Health worker mobile normalization verified.")
+    def test_04_valid_phone_normalization(self):
+        """4. Valid phone normalization: Successfully accepts and formats valid phone numbers."""
+        phone1 = normalize_phone_number("+91 73782 16613")
+        phone2 = normalize_phone_number("7378216613")
+        phone3 = normalize_phone_number("917378216613")
+        self.assertEqual(phone1, "+917378216613")
+        self.assertEqual(phone2, "+917378216613")
+        self.assertEqual(phone3, "+917378216613")
+        print("[TEST 4] Phone number normalization verified.")
 
-    def test_05_missing_whatsapp_consent(self):
-        """5. Missing WhatsApp consent: Rejects delivery when health worker has not opted in."""
-        # HW-KOLAR-03 has whatsapp_opt_in = False
-        res = client.post(
-            "/api/reports/SCR-PHASE12-ACCEPTED/whatsapp/send",
-            json={
-                "screening_id": "SCR-PHASE12-ACCEPTED",
-                "recipient_phone": "+919789012345",
-                "health_worker_id": "HW-KOLAR-03",
-                "language": "en",
-                "opt_in_confirmed": False,
-            },
-        )
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("Consent Violation", res.json()["detail"])
-        print("[TEST 5] Missing WhatsApp consent rejected with HTTP 400.")
+    def test_05_missing_patient_mobile_blocks_send(self):
+        """5. Missing Patient Mobile Gate: Rejects delivery when patient mobile is missing or unverified."""
+        res = client.get("/api/reports/SCR-UNKNOWN-VILLAGE-999/whatsapp/status")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertFalse(data["can_send"])
+        self.assertEqual(data["block_reason"], "Patient mobile number not available/verified.")
+        print("[TEST 5] Missing patient mobile gate verified (can_send=False, block_reason enforced).")
 
     def test_06_unauthorized_number(self):
-        """6. Unauthorized number: Rejects delivery when phone does not match registered health worker."""
+        """6. Unauthorized number: Rejects delivery when phone does not match registered patient."""
         res = client.post(
             "/api/reports/SCR-PHASE12-ACCEPTED/whatsapp/send",
             json={
                 "screening_id": "SCR-PHASE12-ACCEPTED",
-                "recipient_phone": "+919999999999",  # Unauthorized number
-                "health_worker_id": "HW-RAMPUR-01",  # Registered as +919876543210
+                "recipient_phone": "+919999999999",  # Unauthorized number (Patient is +917378216613)
+                "health_worker_id": "HW-RAMPUR-01",
                 "language": "en",
                 "opt_in_confirmed": True,
             },
@@ -184,13 +214,13 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         self.assertEqual(res.headers["content-type"], "application/pdf")
         print("[TEST 8] Secure tokenized PDF download endpoint verified.")
 
-    def test_09_provider_success_and_send(self):
-        """9. Provider success: Verifies delivery record creation and status marked SENT."""
+    def test_09_provider_success_and_send_to_patient(self):
+        """9. Provider success: Verifies delivery record creation and status marked SENT to patient."""
         res = client.post(
             "/api/reports/SCR-PHASE12-ACCEPTED/whatsapp/send",
             json={
                 "screening_id": "SCR-PHASE12-ACCEPTED",
-                "recipient_phone": "+919876543210",
+                "recipient_phone": "+917378216613",
                 "health_worker_id": "HW-RAMPUR-01",
                 "language": "en",
                 "opt_in_confirmed": True,
@@ -199,9 +229,11 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data["status"], "SENT")
-        self.assertIn("wamid.", data["provider_message_id"])
+        self.assertEqual(data["recipient_phone"], "+917378216613")
+        self.assertEqual(data["patient_name"], "Sanjay Bhati")
         self.assertEqual(data["health_worker_name"], "Pooja Sharma (ASHA Worker)")
-        print(f"[TEST 9] WhatsApp delivery dispatch verified (Status: {data['status']}, MsgID: {data['provider_message_id']}).")
+        self.assertIn("wamid.", data["provider_message_id"])
+        print(f"[TEST 9] WhatsApp delivery dispatch to patient verified (Recipient: {data['recipient_phone']} - {data['patient_name']}).")
 
     def test_10_provider_failure_handling(self):
         """10. Provider failure handling: Status response indicates failure correctly."""
@@ -216,7 +248,9 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
                 del_rec = WhatsAppDeliveryModel(
                     id="DEL-SCR-FAILED-001",
                     screening_id="SCR-FAILED-001",
-                    recipient_phone="+919876543210",
+                    recipient_phone="+917378216613",
+                    patient_id="PAT-2026-081",
+                    patient_name="Sanjay Bhati",
                     health_worker_id="HW-RAMPUR-01",
                     health_worker_name="Pooja Sharma (ASHA Worker)",
                     language="en",
@@ -229,6 +263,8 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
                 db.add(del_rec)
             else:
                 del_rec.status = "FAILED"
+                del_rec.recipient_phone = "+917378216613"
+                del_rec.patient_name = "Sanjay Bhati"
                 del_rec.error_message = "Recipient phone number not registered on WhatsApp."
                 del_rec.retry_count = 0
             db.commit()
@@ -238,7 +274,9 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         # Also set in in-memory store for fallback
         whatsapp_service._delivery_records["SCR-FAILED-001"] = WhatsAppDeliveryRecord(
             screening_id="SCR-FAILED-001",
-            recipient_phone="+919876543210",
+            recipient_phone="+917378216613",
+            patient_id="PAT-2026-081",
+            patient_name="Sanjay Bhati",
             health_worker_id="HW-RAMPUR-01",
             status=WhatsAppDeliveryStatus.FAILED,
             error_message="Recipient phone number not registered on WhatsApp.",
@@ -249,7 +287,7 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         print("[TEST 10] Provider failure status handling verified.")
 
     def test_11_retry_mechanism(self):
-        """11. Retry mechanism: Successfully executes retry on failed delivery."""
+        """11. Retry mechanism: Successfully executes retry on failed delivery to patient mobile."""
         res = client.post(
             "/api/reports/SCR-FAILED-001/whatsapp/retry",
             json={
@@ -261,8 +299,10 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data["status"], "SENT")
+        self.assertEqual(data["recipient_phone"], "+917378216613")
+        self.assertEqual(data["patient_name"], "Sanjay Bhati")
         self.assertEqual(data["retry_count"], 1)
-        print("[TEST 11] WhatsApp delivery retry verified (Status: SENT, Retries: 1).")
+        print("[TEST 11] WhatsApp delivery retry verified (Status: SENT, Retries: 1, Patient: Sanjay Bhati).")
 
     def test_12_duplicate_send_prevention(self):
         """12. Duplicate-send prevention: Repeated delivery requests return existing record."""
@@ -270,7 +310,7 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
             "/api/reports/SCR-PHASE12-ACCEPTED/whatsapp/send",
             json={
                 "screening_id": "SCR-PHASE12-ACCEPTED",
-                "recipient_phone": "+919876543210",
+                "recipient_phone": "+917378216613",
                 "health_worker_id": "HW-RAMPUR-01",
                 "language": "en",
                 "opt_in_confirmed": True,
@@ -284,7 +324,7 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
             "/api/reports/SCR-PHASE12-ACCEPTED/whatsapp/send",
             json={
                 "screening_id": "SCR-PHASE12-ACCEPTED",
-                "recipient_phone": "+919876543210",
+                "recipient_phone": "+917378216613",
                 "health_worker_id": "HW-RAMPUR-01",
                 "language": "en",
                 "opt_in_confirmed": True,
@@ -348,26 +388,26 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         """15. Hindi template: Message body formatted correctly in Hindi."""
         msg = whatsapp_service.format_message_body(
             screening_id="SCR-2026-001",
-            patient_ref="रमेश कुमार",
+            patient_ref="संजय भाटी",
             review_status="AI RESULT ACCEPTED",
             language="hi",
         )
         self.assertIn("आपकी डायबिटिक रेटिनोपैथी स्क्रीनिंग रिपोर्ट", msg)
         self.assertIn("SCR-2026-001", msg)
-        self.assertIn("रमेश कुमार", msg)
+        self.assertIn("संजय भाटी", msg)
         print("[TEST 15] Hindi message template verified.")
 
     def test_16_english_template(self):
         """16. English template: Message body formatted correctly in English."""
         msg = whatsapp_service.format_message_body(
             screening_id="SCR-2026-001",
-            patient_ref="Ramesh Kumar",
+            patient_ref="Sanjay Bhati",
             review_status="AI RESULT ACCEPTED",
             language="en",
         )
         self.assertIn("Your diabetic retinopathy screening report is ready", msg)
         self.assertIn("SCR-2026-001", msg)
-        self.assertIn("Ramesh Kumar", msg)
+        self.assertIn("Sanjay Bhati", msg)
         print("[TEST 16] English message template verified.")
 
     def test_17_audit_trail(self):
@@ -402,47 +442,47 @@ class TestPhase12WhatsAppReportDelivery(unittest.TestCase):
         self.assertEqual(res.json()["patient_id"], "PAT-2026-081")
         print("[TEST 20] Phase 10 Longitudinal patient screening history integrity verified.")
 
-    def test_21_whatsapp_recipient_mapping_regression(self):
-        """21. Regression Test: WhatsApp recipient is authoritatively resolved from screening/patient association, not hardcoded."""
-        # 1. Shivpuri screening (PAT-2026-082) -> Sarita Devi
-        res_shivpuri = client.get("/api/reports/SCR-2026-0992/whatsapp/status")
-        self.assertEqual(res_shivpuri.status_code, 200)
-        data_s = res_shivpuri.json()
-        self.assertEqual(data_s["health_worker_name"], "Sarita Devi (Vision Tech)")
-        self.assertEqual(data_s["recipient_phone"], "+919412388990")
-        self.assertEqual(data_s["health_worker_id"], "HW-SHIVPURI-02")
-        self.assertNotEqual(data_s["health_worker_name"], "Pooja Sharma (ASHA Worker)")
-        self.assertNotEqual(data_s["recipient_phone"], "+919876543210")
-
-        # 2. Kolar screening (PAT-2026-083) -> Sunil Gowda
-        res_kolar = client.get("/api/reports/SCR-2026-0850/whatsapp/status")
-        self.assertEqual(res_kolar.status_code, 200)
-        data_k = res_kolar.json()
-        self.assertEqual(data_k["health_worker_name"], "Sunil Gowda (Vision Tech)")
-        self.assertEqual(data_k["recipient_phone"], "+919789012345")
-        self.assertEqual(data_k["health_worker_id"], "HW-KOLAR-03")
-        self.assertNotEqual(data_k["health_worker_name"], "Pooja Sharma (ASHA Worker)")
-
-        # 3. Rampur screening (PAT-2026-081 / SCR-2026-1024) -> Pooja Sharma
+    def test_21_whatsapp_patient_recipient_mapping_regression(self):
+        """21. Regression Test: WhatsApp recipient is authoritatively resolved to the Patient record from DB, not health worker."""
+        # 1. Sanjay Bhati (PAT-2026-081 / SCR-2026-1024) -> Patient: Sanjay Bhati (+91 73782 16613), Screener: Pooja Sharma (+919876543210)
         res_rampur = client.get("/api/reports/SCR-2026-1024/whatsapp/status")
         self.assertEqual(res_rampur.status_code, 200)
         data_r = res_rampur.json()
+        self.assertEqual(data_r["patient_name"], "Sanjay Bhati")
+        self.assertEqual(data_r["recipient_phone"], "+917378216613")
         self.assertEqual(data_r["health_worker_name"], "Pooja Sharma (ASHA Worker)")
-        self.assertEqual(data_r["recipient_phone"], "+919876543210")
-        self.assertEqual(data_r["health_worker_id"], "HW-RAMPUR-01")
-        print("[TEST 21] Authoritative WhatsApp recipient data mapping verified across different health workers.")
+        # CRITICAL ASSERTION: Recipient phone MUST NOT be Pooja Sharma's number
+        self.assertNotEqual(data_r["recipient_phone"], "+919876543210")
+
+        # 2. Sunita Devi (PAT-2026-082 / SCR-2026-0992) -> Patient: Sunita Devi (+91 94123 88990), Screener: Sarita Devi
+        res_shivpuri = client.get("/api/reports/SCR-2026-0992/whatsapp/status")
+        self.assertEqual(res_shivpuri.status_code, 200)
+        data_s = res_shivpuri.json()
+        self.assertEqual(data_s["patient_name"], "Sunita Devi")
+        self.assertEqual(data_s["recipient_phone"], "+919412388990")
+        self.assertEqual(data_s["health_worker_name"], "Sarita Devi (Vision Tech)")
+        self.assertNotEqual(data_s["recipient_phone"], "+919876543210")
+        self.assertNotEqual(data_s["recipient_phone"], "+917378216613")
+
+        # 3. Balwinder Singh (PAT-2026-083 / SCR-2026-0850) -> Patient: Balwinder Singh (+91 97890 12345), Screener: Sunil Gowda
+        res_kolar = client.get("/api/reports/SCR-2026-0850/whatsapp/status")
+        self.assertEqual(res_kolar.status_code, 200)
+        data_k = res_kolar.json()
+        self.assertEqual(data_k["patient_name"], "Balwinder Singh")
+        self.assertEqual(data_k["recipient_phone"], "+919789012345")
+        self.assertEqual(data_k["health_worker_name"], "Sunil Gowda (Vision Tech)")
+        self.assertNotEqual(data_k["recipient_phone"], "+919876543210")
+        print("[TEST 21] Authoritative WhatsApp patient recipient data mapping verified across distinct patients.")
 
     def test_22_unassigned_screening_blocks_whatsapp_dispatch(self):
-        """22. Safety Gate: Unassigned health worker or missing mobile blocks WhatsApp dispatch and never substitutes demo recipient."""
+        """22. Safety Gate: Unassigned patient or missing mobile blocks WhatsApp dispatch and never substitutes health worker."""
         res_unknown = client.get("/api/reports/SCR-UNKNOWN-VILLAGE-999/whatsapp/status")
         self.assertEqual(res_unknown.status_code, 200)
         data_u = res_unknown.json()
         self.assertFalse(data_u["can_send"])
         self.assertIsNone(data_u["recipient_phone"])
-        self.assertIsNone(data_u["health_worker_name"])
-        self.assertEqual(data_u["block_reason"], "Health worker mobile number not available/verified.")
-        print("[TEST 22] Safety gate for unassigned screening correctly blocks dispatch and displays verification error.")
-
+        self.assertEqual(data_u["block_reason"], "Patient mobile number not available/verified.")
+        print("[TEST 22] Safety gate for unassigned patient correctly blocks dispatch with 'Patient mobile number not available/verified.'.")
 
 if __name__ == "__main__":
     unittest.main()
