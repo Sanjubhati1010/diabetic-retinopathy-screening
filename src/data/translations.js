@@ -213,12 +213,20 @@ export const translations = {
     nextStepUnable: "AI cannot reliably assess this image. Please capture another image or request specialist review.",
     
     // DR Severity Levels
-    dr0: "No DR (DR 0)",
-    dr1: "Mild NPDR (DR 1)",
-    dr2: "Moderate NPDR (DR 2)",
-    dr3: "Severe NPDR (DR 3)",
-    dr4: "Proliferative DR (PDR 4)",
+    dr0: "DR 0 — No DR",
+    dr1: "DR 1 — Mild NPDR",
+    dr2: "DR 2 — Moderate NPDR",
+    dr3: "DR 3 — Severe NPDR",
+    dr4: "DR 4 — Proliferative DR",
     drUncertain: "AI model not connected yet",
+    imageQualityTitle: "3. Image Quality",
+    reportLesionNote: "Lesion-specific analysis unavailable. No dedicated lesion detection model is connected; Grad-CAM provides model-attention visualization only.",
+    ruralTeleNotice: "Tele-ophthalmology enables rural primary health centers and mobile screening camps to connect directly with regional eye specialists for secondary triage and clinical sign-off.",
+    viewPreviousScreenings: "View Previous Screenings (Comparison)",
+    dashReferrals: "Pending Referrals",
+    welcome: "Welcome to Rural DR Screening AI",
+    statusPendingSpecialistReview: "PENDING SPECIALIST REVIEW",
+    statusPendingDoctorReview: "PENDING DOCTOR REVIEW",
     
     // Phase 3: Explainable AI & Grad-CAM
     btnWhyThisPrediction: "Why did the AI make this prediction?",
@@ -877,12 +885,20 @@ export const translations = {
     nextStepUnable: "एआई इस छवि का विश्वसनीय मूल्यांकन नहीं कर सकता। कृपया पुनः फोटो लें या नेत्र विशेषज्ञ को दिखाएं।",
     
     // DR Severity Levels
-    dr0: "कोई डीआर नहीं (DR 0)",
-    dr1: "हल्की एनपीडीआर (DR 1)",
-    dr2: "मध्यम एनपीडीआर (DR 2)",
-    dr3: "गंभीर एनपीडीआर (DR 3)",
-    dr4: "प्रोलिफेरेटिव डीआर (PDR 4)",
-    drUncertain: "AI model not connected yet",
+    dr0: "DR 0 — कोई डीआर नहीं (No DR)",
+    dr1: "DR 1 — हल्का एनपीडीआर (Mild NPDR)",
+    dr2: "DR 2 — मध्यम एनपीडीआर (Moderate NPDR)",
+    dr3: "DR 3 — गंभीर एनपीडीआर (Severe NPDR)",
+    dr4: "DR 4 — प्रोलिफ़ेरेटिव डीआर (Proliferative DR)",
+    drUncertain: "एआई मॉडल अभी कनेक्ट नहीं है",
+    imageQualityTitle: "3. इमेज गुणवत्ता",
+    reportLesionNote: "घाव-विशिष्ट विश्लेषण अनुपलब्ध है। कोई समर्पित घाव पहचान मॉडल कनेक्ट नहीं है; Grad-CAM केवल मॉडल ध्यान दिखाता है।",
+    ruralTeleNotice: "टेली-नेत्र विज्ञान ग्रामीण प्राथमिक स्वास्थ्य केंद्रों और मोबाइल कैंपों को विशेषज्ञ डॉक्टर समीक्षा से जोड़ता है।",
+    viewPreviousScreenings: "पिछली स्क्रीनिंग देखें (तुलना)",
+    dashReferrals: "लंबित रेफरल",
+    welcome: "ग्रामीण डीआर स्क्रीनिंग एआई में आपका स्वागत है",
+    statusPendingSpecialistReview: "विशेषज्ञ समीक्षा लंबित",
+    statusPendingDoctorReview: "डॉक्टर समीक्षा लंबित",
     
     // Phase 3: Explainable AI & Grad-CAM
     btnWhyThisPrediction: "एआई ने यह भविष्यवाणी क्यों की?",

@@ -336,7 +336,7 @@ export const DashboardPage = () => {
       </div>
 
       {/* Main Grid: Recent Screenings & Upcoming Camps */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Recent Screenings Table (8 Cols) */}
         <div className="lg:col-span-8 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-card space-y-4">
           <div className="flex items-center justify-between">
@@ -385,20 +385,22 @@ export const DashboardPage = () => {
                         size="sm"
                       />
                     </td>
-                    <td className="py-3.5 px-3 text-right space-x-1.5">
-                      <Link
-                        to={`/screenings/${s.id}/xai`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] transition"
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        <span>Grad-CAM</span>
-                      </Link>
-                      <Link
-                        to={`/screenings/${s.id}/result`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] transition"
-                      >
-                        <span>Result</span>
-                      </Link>
+                    <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        <Link
+                          to={`/screenings/${s.id}/xai`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] transition"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>Grad-CAM</span>
+                        </Link>
+                        <Link
+                          to={`/screenings/${s.id}/result`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] transition"
+                        >
+                          <span>Result</span>
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -27,7 +27,7 @@ export const SeverityBadge = ({ severity, showIcon = true, size = 'md' }) => {
       case 'dr1':
         return {
           label: t('dr1'),
-          shortLabel: 'DR 1 (Mild)',
+          shortLabel: 'DR 1 (Mild NPDR)',
           bgColor: 'bg-blue-50 text-blue-700 border-blue-200',
           dotColor: 'bg-blue-500',
           icon: AlertCircle,
@@ -35,7 +35,7 @@ export const SeverityBadge = ({ severity, showIcon = true, size = 'md' }) => {
       case 'dr2':
         return {
           label: t('dr2'),
-          shortLabel: 'DR 2 (Moderate)',
+          shortLabel: 'DR 2 (Moderate NPDR)',
           bgColor: 'bg-amber-50 text-amber-700 border-amber-200',
           dotColor: 'bg-amber-500',
           icon: AlertTriangle,
@@ -43,7 +43,7 @@ export const SeverityBadge = ({ severity, showIcon = true, size = 'md' }) => {
       case 'dr3':
         return {
           label: t('dr3'),
-          shortLabel: 'DR 3 (Severe)',
+          shortLabel: 'DR 3 (Severe NPDR)',
           bgColor: 'bg-orange-50 text-orange-700 border-orange-200',
           dotColor: 'bg-orange-600',
           icon: AlertOctagon,
@@ -51,7 +51,7 @@ export const SeverityBadge = ({ severity, showIcon = true, size = 'md' }) => {
       case 'dr4':
         return {
           label: t('dr4'),
-          shortLabel: 'PDR 4 (Proliferative)',
+          shortLabel: 'DR 4 (Proliferative DR)',
           bgColor: 'bg-rose-50 text-rose-700 border-rose-200',
           dotColor: 'bg-rose-600',
           icon: AlertOctagon,
@@ -319,7 +319,7 @@ export const DoctorReviewStatusBadge = ({ status = 'PENDING DOCTOR REVIEW', size
   const normalized = (status || '').toUpperCase().trim();
 
   let config = {
-    label: t('statusPendingDoctorReview') || 'PENDING DOCTOR REVIEW',
+    label: t('statusPendingDoctorReview') || 'PENDING SPECIALIST REVIEW',
     bgColor: 'bg-amber-50 text-amber-800 border-amber-300',
     icon: Clock,
   };
@@ -330,17 +330,23 @@ export const DoctorReviewStatusBadge = ({ status = 'PENDING DOCTOR REVIEW', size
       bgColor: 'bg-emerald-50 text-emerald-800 border-emerald-300',
       icon: CheckCircle,
     };
-  } else if (normalized.includes('MODIFIED') || normalized.includes('REVIEWED')) {
-    config = {
-      label: t('statusDoctorReviewedModified') || 'DOCTOR REVIEWED / MODIFIED',
-      bgColor: 'bg-blue-50 text-blue-800 border-blue-300',
-      icon: UserCheck,
-    };
   } else if (normalized.includes('RECAPTURE') || normalized.includes('RE-CAPTURE')) {
     config = {
       label: t('statusImageRecaptureRequested') || 'IMAGE RE-CAPTURE REQUESTED',
       bgColor: 'bg-rose-50 text-rose-800 border-rose-300',
       icon: AlertTriangle,
+    };
+  } else if (normalized.includes('MODIFIED') || normalized.includes('OVERRID')) {
+    config = {
+      label: t('statusDoctorReviewedModified') || 'DOCTOR REVIEWED / MODIFIED',
+      bgColor: 'bg-blue-50 text-blue-800 border-blue-300',
+      icon: UserCheck,
+    };
+  } else if (normalized.includes('PENDING') || normalized.includes('SPECIALIST') || normalized.includes('DOCTOR REVIEW')) {
+    config = {
+      label: t('statusPendingDoctorReview') || 'PENDING SPECIALIST REVIEW',
+      bgColor: 'bg-amber-50 text-amber-800 border-amber-300',
+      icon: Clock,
     };
   } else if (normalized.includes('UNABLE')) {
     config = {

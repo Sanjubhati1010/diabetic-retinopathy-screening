@@ -204,22 +204,6 @@ export const AiAnalysisPage = () => {
     // Primary eye for overall stats (prefer worse eye, or available eye)
     const primaryRes = (odClass >= osClass && odRes) ? odRes : (osRes || odRes);
 
-    // Biological feature indicators
-    const biomarkersForGrade = {
-      0: [],
-      1: ['Microaneurysms (<5)'],
-      2: ['Dot/Blot Hemorrhages', 'Hard Exudates', 'Microaneurysms'],
-      3: ['Extensive Intraretinal Hemorrhages (4 quadrants)', 'Venous Beading (2 quadrants)', 'IRMA (1 quadrant)'],
-      4: ['Neovascularization (NVD/NVE)', 'Preretinal/Vitreous Hemorrhage', 'Fibrovascular Proliferation'],
-    };
-
-    const combinedBiomarkers = Array.from(
-      new Set([
-        ...(odRes ? biomarkersForGrade[odRes.predicted_class] || [] : []),
-        ...(osRes ? biomarkersForGrade[osRes.predicted_class] || [] : []),
-      ])
-    );
-
     const totalInferenceTime = Number(
       ((odRes?.inference_time || 0) + (osRes?.inference_time || 0)).toFixed(4)
     );
@@ -243,7 +227,11 @@ export const AiAnalysisPage = () => {
       drSeverityOS: osSeverityKey,
       overallSeverity: overallSeverity,
       confidence: primaryRes?.confidence ?? 0,
+      confidenceOD: odRes?.confidence ?? null,
+      confidenceOS: osRes?.confidence ?? null,
       probabilities: primaryRes?.probabilities || null,
+      probabilitiesOD: odRes?.probabilities || null,
+      probabilitiesOS: osRes?.probabilities || null,
       safetyStatusOD: odRes?.safety_status || (odErrorState ? 'IMAGE_INVALID' : 'READY_FOR_AI'),
       safetyStatusOS: osRes?.safety_status || (osErrorState ? 'IMAGE_INVALID' : 'READY_FOR_AI'),
       screeningStatusOD: odRes?.screening_status || (odErrorState ? 'UNABLE TO ASSESS' : 'RELIABLE AI SCREENING'),
@@ -276,7 +264,7 @@ export const AiAnalysisPage = () => {
       disclaimer: primaryRes?.disclaimer,
       inferenceTime: totalInferenceTime,
       referralUrgency: overallUrgency,
-      biomarkers: combinedBiomarkers,
+      biomarkers: [],
       imageOD: activeScreening.imageOD || SAMPLE_FUNDUS_IMAGES.sample_od,
       imageOS: activeScreening.imageOS || SAMPLE_FUNDUS_IMAGES.sample_os,
       isRealPrediction: true,

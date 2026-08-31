@@ -25,6 +25,7 @@ import AppointmentsPage from './pages/AppointmentsPage';
 import AppointmentDetailsPage from './pages/AppointmentDetailsPage';
 import VideoConsultationPage from './pages/VideoConsultationPage';
 import { PriorityDashboardPage } from './pages/PriorityDashboardPage';
+import { SecurePatientReportPage } from './pages/SecurePatientReportPage';
 
 // Protected Route Component to require explicit login
 const ProtectedDashboardLayout = () => {
@@ -64,6 +65,9 @@ function AppRoutes() {
 
       {/* Optional public landing overview */}
       <Route path="/landing" element={<LandingPage />} />
+
+      {/* Phase 15: Public Secure Patient Report Access Link */}
+      <Route path="/patient-report/:token" element={<SecurePatientReportPage />} />
 
       {/* Authenticated Dashboard Pages wrapped in Protected Layout */}
       <Route element={<ProtectedDashboardLayout />}>

@@ -1039,13 +1039,13 @@ export function calculateLongitudinalComparison(current, previous) {
       ? previous.predicted_class
       : gradeMap[previous.overallSeverity] ?? null;
 
-  const nameMap = { 0: 'No DR', 1: 'Mild', 2: 'Moderate', 3: 'Severe', 4: 'Proliferative DR' };
+  const nameMap = { 0: 'No DR', 1: 'Mild NPDR', 2: 'Moderate NPDR', 3: 'Severe NPDR', 4: 'Proliferative DR' };
   const currName = current.className || current.class_name || (currGrade !== null ? nameMap[currGrade] : 'Unknown');
   const prevName = previous.className || previous.class_name || (prevGrade !== null ? nameMap[prevGrade] : 'Unknown');
 
   let status = 'UNCHANGED';
-  let summaryEn = `AI screening classification is unchanged (${currName}).`;
-  let summaryHi = `एआई स्क्रीनिंग वर्गीकरण अपरिवर्तित है (${currName})।`;
+  let summaryEn = 'AI screening classification is unchanged.';
+  let summaryHi = 'एआई स्क्रीनिंग वर्गीकरण अपरिवर्तित है।';
   let recEn = 'Doctor review is recommended to confirm stable retinal status.';
   let recHi = 'स्थिर रेटिना स्थिति की पुष्टि के लिए डॉक्टर की समीक्षा की सलाह दी जाती है।';
 
@@ -1079,7 +1079,7 @@ export function calculateLongitudinalComparison(current, previous) {
   const prevConf = previous.confidence;
   const confNote =
     currConf !== null && prevConf !== null && currConf !== undefined && prevConf !== undefined
-      ? `Previous AI Confidence: ${(prevConf * 100).toFixed(1)}%, Current AI Confidence: ${(currConf * 100).toFixed(1)}%. Confidence reflects single-image model probability and is not a measure of clinical change.`
+      ? `Previous AI Confidence: ${formatConfidence(prevConf)}, Current AI Confidence: ${formatConfidence(currConf)}. Confidence reflects single-image model probability and is not a measure of clinical change.`
       : 'AI model confidence recorded per screening visit.';
 
   return {
@@ -1629,6 +1629,90 @@ export async function retryEmailDelivery(screeningId, payload = {}) {
 }
 
 // =====================================================================
+// Phase 15: Demo SMS Patient Report Notification API Client Functions
+// =====================================================================
+
+/**
+ * Retrieves the current SMS patient notification status, doctor review gate check,
+ * masked patient recipient, duplicate status, and simulation history.
+ * GET /api/reports/{screening_id}/sms/status
+ */
+export async function getSmsNotificationStatus(screeningId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/sms/status`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch SMS notification status (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.warn(`Error getting SMS status for ${screeningId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Generates preview metadata for the doctor-reviewed patient SMS notification.
+ * POST /api/reports/{screening_id}/sms/preview
+ */
+export async function previewSmsNotification(screeningId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/sms/preview`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to generate SMS preview (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error generating SMS preview for ${screeningId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Simulates sending the patient report SMS notification.
+ * Status is strictly SIMULATED (no real SMS sent).
+ * POST /api/reports/{screening_id}/sms/simulate
+ */
+export async function simulateSmsNotification(screeningId, payload = {}) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/reports/${screeningId}/sms/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to simulate SMS notification (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error simulating SMS notification for ${screeningId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Secure public access endpoint for viewing a doctor-approved patient report via token.
+ * GET /api/patient-report/access/{token}
+ */
+export async function getSecurePatientReportByToken(token) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/patient-report/access/${encodeURIComponent(token)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to access secure report (${res.status})`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error(`Error loading secure patient report for token ${token}:`, error);
+    throw error;
+  }
+}
+
+// =====================================================================
 // Phase 13/14: Persistent Patient & Screening Relational Management API
 // =====================================================================
 
@@ -1832,7 +1916,7 @@ export async function getScreenings(patientId = null) {
  */
 export function calculateLocalPriority(screening, patient = null, previousScreening = null) {
   const predictedClass = screening.predictedClass ?? screening.predicted_class;
-  const className = screening.className || screening.class_name || (predictedClass === 0 ? 'No DR' : predictedClass === 1 ? 'Mild' : predictedClass === 2 ? 'Moderate' : predictedClass === 3 ? 'Severe' : predictedClass === 4 ? 'Proliferative DR' : 'Unknown');
+  const className = screening.className || screening.class_name || (predictedClass === 0 ? 'No DR' : predictedClass === 1 ? 'Mild NPDR' : predictedClass === 2 ? 'Moderate NPDR' : predictedClass === 3 ? 'Severe NPDR' : predictedClass === 4 ? 'Proliferative DR' : 'Unknown');
   const confidence = screening.confidence;
   const safetyStatus = screening.safetyStatus || screening.safety_status || 'READY_FOR_AI';
   const isRecapture = screening.doctorStatus === 'recapture_requested' || screening.reviewStatus === 'IMAGE RE-CAPTURE REQUESTED';
@@ -1847,7 +1931,7 @@ export function calculateLocalPriority(screening, patient = null, previousScreen
       dr_result: className,
       predicted_class: predictedClass,
       confidence: confidence,
-      confidence_percentage: confidence ? `${(confidence * 100).toFixed(1)}%` : 'N/A',
+      confidence_percentage: confidence ? formatConfidence(confidence) : 'N/A',
       confidence_status: 'UNAVAILABLE',
       priority_level: 'RECAPTURE_REQUIRED',
       priority_label: 'RE-CAPTURE REQUIRED',
@@ -1862,7 +1946,7 @@ export function calculateLocalPriority(screening, patient = null, previousScreen
       missing_factors: [],
       evidence_checklist: {
         current_dr: className,
-        ai_confidence: confidence ? `${(confidence * 100).toFixed(1)}%` : 'N/A',
+        ai_confidence: confidence ? formatConfidence(confidence) : 'N/A',
         previous_dr: 'N/A',
         longitudinal_change: 'BLOCKED',
         longitudinal_detail: 'Safety gate blocked',
@@ -2071,8 +2155,8 @@ export function calculateLocalPriority(screening, patient = null, previousScreen
     dr_result: className,
     predicted_class: predictedClass,
     confidence: confidence,
-    confidence_percentage: confidence ? `${(confidence * 100).toFixed(1)}%` : 'N/A',
-    confidence_status: confidence && confidence >= 0.85 ? 'HIGH' : 'MODERATE',
+    confidence_percentage: confidence ? formatConfidence(confidence) : 'N/A',
+    confidence_status: confidence && (confidence <= 1 ? confidence : confidence / 100) >= 0.85 ? 'HIGH' : 'MODERATE',
     priority_level: priorityLevel,
     priority_label: priorityLabel,
     priority_score: score,
@@ -2086,7 +2170,7 @@ export function calculateLocalPriority(screening, patient = null, previousScreen
     missing_factors: missingFactors,
     evidence_checklist: {
       current_dr: className,
-      ai_confidence: confidence ? `${(confidence * 100).toFixed(1)}%` : 'Not available',
+      ai_confidence: confidence ? formatConfidence(confidence) : 'Not available',
       previous_dr: prevName || 'None (Baseline)',
       longitudinal_change: longStatus,
       longitudinal_detail: longSummary,

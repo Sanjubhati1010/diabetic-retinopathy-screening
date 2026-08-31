@@ -331,7 +331,7 @@ def calculate_screening_priority(
         if prev_class is not None and predicted_class is not None:
             if predicted_class == prev_class:
                 longitudinal_status = "UNCHANGED"
-                longitudinal_summary = f"Screening classification unchanged ({class_name})."
+                longitudinal_summary = "Screening classification is unchanged."
                 detailed_reasons.append(f"Longitudinal history: Classification stable at {class_name} since previous visit.")
             elif predicted_class > prev_class:
                 longitudinal_status = "WORSENED"
@@ -339,13 +339,13 @@ def calculate_screening_priority(
                 if prev_class == 1 and predicted_class == 2:
                     # Mild -> Moderate
                     longitudinal_score = 2.0
-                    longitudinal_summary = "Screening classification increased from Mild to Moderate."
-                    detailed_reasons.append("⚠ Longitudinal alert: Classification worsened from Mild to Moderate (+2.0 points).")
+                    longitudinal_summary = "Screening classification increased from Mild NPDR to Moderate NPDR."
+                    detailed_reasons.append("⚠ Longitudinal alert: Classification worsened from Mild NPDR to Moderate NPDR (+2.0 points).")
                 elif prev_class == 2 and predicted_class in [3, 4]:
                     # Moderate -> Severe / Proliferative
                     longitudinal_score = 3.0
-                    longitudinal_summary = f"Screening classification worsened significantly from Moderate to {class_name}."
-                    detailed_reasons.append(f"⚠ Longitudinal alert: Significant classification worsening from Moderate to {class_name} (+3.0 points).")
+                    longitudinal_summary = f"Screening classification worsened significantly from Moderate NPDR to {class_name}."
+                    detailed_reasons.append(f"⚠ Longitudinal alert: Significant classification worsening from Moderate NPDR to {class_name} (+3.0 points).")
                 else:
                     longitudinal_score = 1.5 * delta
                     longitudinal_summary = f"Screening classification increased from {prev_name} to {class_name}."

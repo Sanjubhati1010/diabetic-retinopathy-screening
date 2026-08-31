@@ -92,6 +92,12 @@ from app.schemas import (
     PriorityQueueResponse,
     PriorityStatsResponse,
     PriorityDetailResponse,
+    SmsNotificationStatus,
+    SmsNotificationGenerateRequest,
+    SmsNotificationRecord,
+    SmsNotificationPreviewResponse,
+    SmsNotificationStatusResponse,
+    SecurePatientReportResponse,
 )
 from app.model_service import DRModelService
 from app.assistant_service import generate_assistant_reply
@@ -101,6 +107,8 @@ from app.longitudinal_service import longitudinal_service
 from app.appointment_service import appointment_service
 from app.pdf_service import pdf_service, verify_secure_pdf_token, generate_secure_pdf_token
 from app.whatsapp_service import whatsapp_service, normalize_phone_number
+from app.email_service import email_service
+from app.sms_service import sms_service, mask_mobile_number
 from app.priority_engine import (
     calculate_screening_priority,
     get_priority_queue,
@@ -1670,6 +1678,100 @@ async def retry_email_report_endpoint(screening_id: str, req: EmailRetryRequest,
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+# =====================================================================
+# Phase 15: Demo SMS Patient Report Notification Endpoints
+# =====================================================================
+
+@app.get(
+    "/api/reports/{screening_id}/sms/status",
+    response_model=SmsNotificationStatusResponse,
+    tags=["Phase 15: Demo SMS Notification"],
+    summary="Get SMS Patient Notification Status",
+)
+async def get_sms_status_endpoint(screening_id: str, db: Session = Depends(get_db)):
+    """
+    Returns the SMS notification readiness status, doctor approval gate evaluation,
+    masked patient recipient, duplicate status, and historical simulation log.
+    """
+    try:
+        return sms_service.get_sms_status(screening_id=screening_id, db=db)
+    except Exception as e:
+        logger.error(f"Error fetching SMS status for {screening_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.post(
+    "/api/reports/{screening_id}/sms/preview",
+    response_model=SmsNotificationPreviewResponse,
+    tags=["Phase 15: Demo SMS Notification"],
+    summary="Preview Patient SMS Notification",
+)
+async def preview_sms_endpoint(screening_id: str, db: Session = Depends(get_db)):
+    """
+    Generates preview metadata for the doctor-reviewed patient SMS notification,
+    including masked mobile recipient, formatted message text, and secure report link.
+    """
+    try:
+        return sms_service.get_sms_preview(screening_id=screening_id, db=db)
+    except Exception as e:
+        logger.error(f"Error generating SMS preview for {screening_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.post(
+    "/api/reports/{screening_id}/sms/simulate",
+    response_model=SmsNotificationRecord,
+    tags=["Phase 15: Demo SMS Notification"],
+    summary="Simulate Patient SMS Notification",
+)
+async def simulate_sms_endpoint(
+    screening_id: str,
+    req: Optional[SmsNotificationGenerateRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Simulates sending the patient report SMS notification.
+    Enforces Doctor Review Gate (ACCEPT/MODIFY only) and MySQL patient mobile resolution.
+    Does NOT send real SMS. Status is recorded as 'SIMULATED' in database.
+    """
+    try:
+        force_regen = req.force_regenerate if req else False
+        record = await sms_service.simulate_sms_notification(
+            screening_id=screening_id,
+            force_regenerate=force_regen,
+            db=db,
+        )
+        return record
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error simulating SMS for {screening_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get(
+    "/api/patient-report/access/{token}",
+    response_model=SecurePatientReportResponse,
+    tags=["Phase 15: Secure Patient Report"],
+    summary="Access Approved Patient Report via Secure Token",
+)
+async def get_secure_patient_report_endpoint(token: str, db: Session = Depends(get_db)):
+    """
+    Secure public access endpoint for viewing a doctor-approved patient report via token.
+    Validates token mapping and strictly blocks unapproved or invalid reports.
+    """
+    try:
+        return sms_service.verify_and_get_patient_report(token=token, db=db)
+    except ValueError as ve:
+        err_str = str(ve)
+        if "Forbidden" in err_str or "not doctor-approved" in err_str:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err_str)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_str)
+    except Exception as e:
+        logger.error(f"Error accessing patient report with token {token}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 

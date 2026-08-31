@@ -22,6 +22,8 @@ backend/__pycache__/
 backend/app/__pycache__/
 
 # Backend transient runtime uploads & generated results (preserving folder structure)
+backend/results/
+backend/uploads/ 
 backend/results/*.jpg
 backend/results/*.png
 backend/uploads/*.jpg

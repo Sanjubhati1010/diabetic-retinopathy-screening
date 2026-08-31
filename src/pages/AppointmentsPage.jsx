@@ -6,6 +6,7 @@ import {
   getDoctors,
   getDoctorAvailability,
   bookAppointment as apiBookAppointment,
+  formatConfidence,
 } from '../services/api';
 import {
   Calendar,
@@ -160,7 +161,7 @@ export default function AppointmentsPage() {
       patient_gender: patient.gender || 'unknown',
       village: patient.village || 'Rampur Gram Panchayat',
       screening_id: screening?.id || null,
-      screening_summary: screening ? `${screening.overallSeverity || screening.predicted_class_name || 'AI Screened'} (Confidence ${(screening.confidence ? screening.confidence * 100 : 85).toFixed(1)}%)` : null,
+      screening_summary: screening ? `${screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate NPDR')} (${formatConfidence(screening.confidence || 0.85)} Conf.)` : null,
       date: selectedDate,
       start_time: selectedTimeSlot,
       reason: consultReason.trim(),

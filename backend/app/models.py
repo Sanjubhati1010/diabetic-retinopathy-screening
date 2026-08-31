@@ -53,6 +53,7 @@ class PatientModel(Base):
 
     screenings = relationship("ScreeningModel", back_populates="patient", cascade="all, delete-orphan")
     appointments = relationship("AppointmentModel", back_populates="patient")
+    sms_notifications = relationship("SmsNotificationModel", back_populates="patient")
 
     @property
     def mobile(self) -> Optional[str]:
@@ -142,6 +143,7 @@ class ScreeningModel(Base):
     appointments = relationship("AppointmentModel", back_populates="screening")
     whatsapp_delivery = relationship("WhatsAppDeliveryModel", back_populates="screening", uselist=False, cascade="all, delete-orphan")
     email_delivery = relationship("EmailDeliveryModel", back_populates="screening", uselist=False, cascade="all, delete-orphan")
+    sms_notifications = relationship("SmsNotificationModel", back_populates="screening", cascade="all, delete-orphan")
     report = relationship("ReportModel", back_populates="screening", uselist=False, cascade="all, delete-orphan")
 
 
@@ -326,4 +328,29 @@ class EmailAuditEventModel(Base):
     timestamp = Column(String(64), nullable=False)
 
     delivery = relationship("EmailDeliveryModel", back_populates="audit_events")
+
+
+class SmsNotificationModel(Base):
+    __tablename__ = "sms_notifications"
+
+    id = Column(String(64), primary_key=True, index=True)  # e.g., SMS-2026-0001
+    notification_id = Column(String(64), unique=True, index=True, nullable=False)
+    patient_id = Column(String(64), ForeignKey("patients.id"), nullable=False, index=True)
+    screening_id = Column(String(64), ForeignKey("screenings.id"), nullable=False, index=True)
+    report_id = Column(String(64), nullable=True)
+    recipient_mobile_masked = Column(String(32), nullable=False)
+    recipient_mobile_raw = Column(String(32), nullable=True)
+    message_type = Column(String(64), default="Doctor-reviewed report")
+    message = Column(Text, nullable=False)
+    secure_report_token = Column(String(128), unique=True, index=True, nullable=False)
+    secure_report_url = Column(String(256), nullable=False)
+    status = Column(String(32), default="SIMULATED", index=True)  # Strictly "SIMULATED", NEVER fake "SENT"
+    is_simulated = Column(Boolean, default=True)
+    disclaimer = Column(String(256), default="This is a demonstration notification. No real SMS was sent.")
+    created_at = Column(String(64), nullable=False)
+    generated_at = Column(String(64), nullable=True)
+
+    patient = relationship("PatientModel", back_populates="sms_notifications")
+    screening = relationship("ScreeningModel", back_populates="sms_notifications")
+
 

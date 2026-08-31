@@ -7,6 +7,7 @@ import {
   getSignalingWsUrl,
   getAppointmentById,
   addDoctorConsultationNotes as apiAddNotes,
+  formatConfidence,
 } from '../services/api';
 import {
   Video,
@@ -440,10 +441,10 @@ export default function VideoConsultationPage() {
               <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
                 <span className="text-slate-400 block text-[11px]">AI Classification:</span>
                 <span className="text-white font-bold text-sm">
-                  {linkedScreening.overallSeverity || linkedScreening.predicted_class_name || 'Moderate NPDR'}
+                  {linkedScreening.className || (linkedScreening.overallSeverity ? t(linkedScreening.overallSeverity) : 'Moderate NPDR')}
                 </span>
                 <span className="text-slate-400 block mt-1">
-                  Confidence: <span className="font-mono text-slate-200">{(linkedScreening.confidence ? linkedScreening.confidence * 100 : 85.0).toFixed(1)}%</span>
+                  Confidence: <span className="font-mono text-slate-200">{formatConfidence(linkedScreening.confidence || 0.85)}</span>
                 </span>
               </div>
 

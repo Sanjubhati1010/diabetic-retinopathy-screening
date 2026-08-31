@@ -17,6 +17,7 @@ import { MetricCard } from '../components/common/MetricCard';
 import { ClinicalEvidenceCard } from '../components/evidence/ClinicalEvidenceCard';
 import { LongitudinalComparisonCard } from '../components/longitudinal/LongitudinalComparisonCard';
 import { PatientScreeningHistoryTimeline } from '../components/longitudinal/PatientScreeningHistoryTimeline';
+import { SmsNotificationCard } from '../components/common/SmsNotificationCard';
 import {
   Stethoscope,
   CheckCircle2,
@@ -40,14 +41,14 @@ import {
   GitCompare,
   Video,
 } from 'lucide-react';
-import { submitDoctorReview, getScreeningReview, getScreeningReviewHistory, getFullResultUrl } from '../services/api';
+import { submitDoctorReview, getScreeningReview, getScreeningReviewHistory, getFullResultUrl, formatConfidence } from '../services/api';
 import { getLightweightReview } from '../services/storage';
 
 const DR_OPTIONS = [
-  { value: 0, label: 'DR 0 — No Retinopathy', name: 'No DR' },
-  { value: 1, label: 'DR 1 — Mild NPDR', name: 'Mild' },
-  { value: 2, label: 'DR 2 — Moderate NPDR', name: 'Moderate' },
-  { value: 3, label: 'DR 3 — Severe NPDR', name: 'Severe' },
+  { value: 0, label: 'DR 0 — No DR', name: 'No DR' },
+  { value: 1, label: 'DR 1 — Mild NPDR', name: 'Mild NPDR' },
+  { value: 2, label: 'DR 2 — Moderate NPDR', name: 'Moderate NPDR' },
+  { value: 3, label: 'DR 3 — Severe NPDR', name: 'Severe NPDR' },
   { value: 4, label: 'DR 4 — Proliferative DR', name: 'Proliferative DR' },
 ];
 
@@ -241,7 +242,7 @@ const DoctorDashboardContent = () => {
   };
 
   const currentStatus = reviewState?.review_status || selectedScreening.reviewStatus || (selectedScreening.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : selectedScreening.doctorStatus === 'recapture_requested' ? 'IMAGE RE-CAPTURE REQUESTED' : 'PENDING DOCTOR REVIEW');
-  const originalAiDisplay = reviewState?.original_ai_result || selectedScreening.className || t(selectedScreening.overallSeverity) || 'Moderate';
+  const originalAiDisplay = reviewState?.original_ai_result || selectedScreening.className || (selectedScreening.overallSeverity ? t(selectedScreening.overallSeverity) : 'Moderate NPDR');
   const doctorReviewedDisplay = reviewState?.doctor_reviewed_result || selectedScreening.doctorReviewedResult || (selectedScreening.doctorStatus === 'verified' ? originalAiDisplay : 'Pending Specialist Review');
 
   const pendingCount = screenings.filter((s) => s.doctorStatus === 'pending' && s.reviewStatus !== 'AI RESULT ACCEPTED' && s.reviewStatus !== 'DOCTOR REVIEWED / MODIFIED' && s.reviewStatus !== 'IMAGE RE-CAPTURE REQUESTED').length;
@@ -388,6 +389,13 @@ const DoctorDashboardContent = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to={`/screenings/${selectedScreening.id}/report`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold transition shadow-xs"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Open Patient Report</span>
+              </Link>
               <DoctorReviewStatusBadge status={currentStatus} size="sm" />
               <RiskBadge risk={selectedScreening.riskCategory || 'MODERATE'} size="sm" />
               <ReferralBadge priority={selectedScreening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED'} size="sm" />
@@ -474,7 +482,7 @@ const DoctorDashboardContent = () => {
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-extrabold text-slate-900">{originalAiDisplay}</h4>
                 <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                  {selectedScreening.confidence ? `${(selectedScreening.confidence * 100).toFixed(1)}% Conf.` : '85.0% Conf.'}
+                  {selectedScreening.confidence ? `${formatConfidence(selectedScreening.confidence)} Conf.` : '85.00% Conf.'}
                 </span>
               </div>
               <p className="text-[10px] text-slate-500">Immutable screening inference baseline</p>
@@ -510,23 +518,31 @@ const DoctorDashboardContent = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
               {/* 1. Classification */}
               <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">1. AI Classification</span>
-                <p className="font-extrabold text-white">{originalAiDisplay}</p>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">1. AI Classification ({selectedEye})</span>
+                <p className="font-extrabold text-white">
+                  {selectedEye === 'OD'
+                    ? (selectedScreening.drSeverityOD ? t(selectedScreening.drSeverityOD) : originalAiDisplay)
+                    : (selectedScreening.drSeverityOS ? t(selectedScreening.drSeverityOS) : originalAiDisplay)}
+                </p>
                 <p className="text-[10px] text-teal-400 font-mono">
-                  {selectedScreening.confidence ? `${(selectedScreening.confidence * 100).toFixed(1)}% Conf.` : '85.0%'}
+                  {formatConfidence(
+                    selectedEye === 'OD'
+                      ? (selectedScreening.rightEyeAnalysis?.confidence ?? selectedScreening.confidenceOD ?? selectedScreening.confidence)
+                      : (selectedScreening.leftEyeAnalysis?.confidence ?? selectedScreening.confidenceOS ?? (selectedScreening.drSeverityOS === selectedScreening.drSeverityOD ? selectedScreening.confidence : null))
+                  )}
                 </p>
               </div>
 
               {/* 2. Lesion Analysis */}
               <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 space-y-1">
                 <span className="text-[10px] text-slate-400 font-bold uppercase block">2. Lesion Evidence</span>
-                <p className="font-extrabold text-amber-400">Unavailable</p>
-                <p className="text-[10px] text-slate-400">No fake counts</p>
+                <p className="font-extrabold text-amber-400">Unavailable (Standby)</p>
+                <p className="text-[10px] text-slate-400">Standby capability</p>
               </div>
 
               {/* 3. Grad-CAM */}
               <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">3. Model Attention</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">3. Model Attention ({selectedEye})</span>
                 <p className="font-extrabold text-purple-400">Grad-CAM (40%)</p>
                 <p className="text-[10px] text-slate-400">Active saliency</p>
               </div>
@@ -555,8 +571,16 @@ const DoctorDashboardContent = () => {
                 ? getFullResultUrl(selectedScreening.heatmapOD || selectedScreening.gradCamOD || selectedScreening.gradCamUrl)
                 : getFullResultUrl(selectedScreening.heatmapOS || selectedScreening.gradCamOS || selectedScreening.gradCamUrl)
             }
-            confidence={selectedScreening.confidence}
-            severity={selectedScreening.overallSeverity}
+            confidence={
+              selectedEye === 'OD'
+                ? (selectedScreening.rightEyeAnalysis?.confidence ?? selectedScreening.confidenceOD ?? selectedScreening.confidence)
+                : (selectedScreening.leftEyeAnalysis?.confidence ?? selectedScreening.confidenceOS ?? (selectedScreening.drSeverityOS === selectedScreening.drSeverityOD ? selectedScreening.confidence : null))
+            }
+            severity={
+              selectedEye === 'OD'
+                ? (selectedScreening.drSeverityOD || selectedScreening.overallSeverity)
+                : (selectedScreening.drSeverityOS || selectedScreening.overallSeverity)
+            }
             selectedEye={selectedEye}
             onEyeChange={setSelectedEye}
             showControls={true}
@@ -619,6 +643,16 @@ const DoctorDashboardContent = () => {
               </button>
             </div>
           </div>
+
+          {/* Phase 15: Demo SMS Patient Report Notification Card */}
+          <SmsNotificationCard
+            screeningId={selectedScreening.id}
+            doctorReviewStatus={currentStatus}
+            patient={patient}
+            onNotificationSimulated={(rec) => {
+              showToast(`Patient SMS simulated successfully (${rec.notification_id})`);
+            }}
+          />
 
           {/* Chronological Review Audit Trail Timeline */}
           <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-card space-y-3">

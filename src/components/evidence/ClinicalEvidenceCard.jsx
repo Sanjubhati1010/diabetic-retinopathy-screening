@@ -46,7 +46,7 @@ export const ClinicalEvidenceCard = ({
     ? screening.rightEyeAnalysis || screening.aiResultOD || (screening.selectedEyeForAnalysis === 'OD' ? screening.aiResult : null)
     : screening.leftEyeAnalysis || screening.aiResultOS || (screening.selectedEyeForAnalysis === 'OS' ? screening.aiResult : null);
 
-  const rawConfidence = analysis?.confidence ?? screening.confidence;
+  const rawConfidence = analysis?.confidence ?? (isOD ? (screening.confidenceOD ?? screening.confidence) : (screening.confidenceOS ?? (screening.drSeverityOS === screening.drSeverityOD ? screening.confidence : null)));
   const confidenceVal = rawConfidence !== null && rawConfidence !== undefined
     ? (rawConfidence <= 1.0 ? rawConfidence : rawConfidence / 100.0)
     : null;
@@ -78,18 +78,23 @@ export const ClinicalEvidenceCard = ({
   const confTier = getConfidenceTier(confidenceVal);
 
   const severityKey = isOD
-    ? screening.drSeverityOD || 'drUncertain'
-    : screening.drSeverityOS || 'drUncertain';
+    ? screening.drSeverityOD || (analysis?.predicted_class !== undefined ? (analysis.predicted_class === 0 ? 'dr0' : analysis.predicted_class === 1 ? 'dr1' : analysis.predicted_class === 2 ? 'dr2' : analysis.predicted_class === 3 ? 'dr3' : 'dr4') : screening.overallSeverity || 'drUncertain')
+    : screening.drSeverityOS || (analysis?.predicted_class !== undefined ? (analysis.predicted_class === 0 ? 'dr0' : analysis.predicted_class === 1 ? 'dr1' : analysis.predicted_class === 2 ? 'dr2' : analysis.predicted_class === 3 ? 'dr3' : 'dr4') : screening.overallSeverity || 'drUncertain');
 
-  const validation = isOD ? screening.odValidation : screening.osValidation;
-  const qualityGrade = validation?.quality_grade || (validation?.can_proceed ? 'good' : 'unknown');
-  const isQualityWarning = qualityGrade === 'warning' || qualityGrade === 'insufficient';
-
-  const safetyStatus = analysis?.safety_status || (isOD ? screening.safetyStatusOD : screening.safetyStatusOS) || 'READY_FOR_AI';
+  const safetyStatus = analysis?.safety_status || (isOD ? screening.safetyStatusOD : screening.safetyStatusOS) || screening.safetyStatus || 'READY_FOR_AI';
   const isSafetyPassed = safetyStatus === 'READY_FOR_AI';
 
-  const riskCategory = analysis?.risk_category || screening.riskCategory || 'MODERATE';
-  const referralPriority = analysis?.referral_priority || screening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED';
+  const validation = isOD ? screening.odValidation : screening.osValidation;
+  const qualityGrade = validation?.quality_grade || (
+    isSafetyPassed ? 'good' :
+    safetyStatus === 'IMAGE_QUALITY_INSUFFICIENT' ? 'insufficient' :
+    safetyStatus === 'IMAGE_INVALID' ? 'invalid' :
+    validation?.can_proceed ? 'good' : 'good'
+  );
+  const isQualityWarning = qualityGrade === 'warning' || qualityGrade === 'insufficient';
+
+  const riskCategory = analysis?.risk_category || (isOD ? screening.riskCategoryOD : screening.riskCategoryOS) || screening.riskCategory || 'MODERATE';
+  const referralPriority = analysis?.referral_priority || (isOD ? screening.referralPriorityOD : screening.referralPriorityOS) || screening.referralPriority || 'EYE SPECIALIST REVIEW RECOMMENDED';
 
   const reviewStatus = screening.reviewStatus || (screening.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW');
 
@@ -111,7 +116,7 @@ export const ClinicalEvidenceCard = ({
             <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
               <span>{t('clinicalEvidenceTitle') || 'AI Clinical Evidence'}</span>
               <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider">
-                {selectedEye} Eye
+                {selectedEye} Eye ({isOD ? 'Right Eye' : 'Left Eye'})
               </span>
             </h3>
             <p className="text-xs text-slate-500 font-medium">
@@ -130,7 +135,7 @@ export const ClinicalEvidenceCard = ({
         {/* 1. AI Classification */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            {t('aiPredictionLabel') || '1. AI Classification'}
+            1. AI Classification ({selectedEye} Eye)
           </span>
           <div className="flex items-center gap-2">
             <SeverityBadge severity={severityKey} size="sm" />
@@ -140,7 +145,7 @@ export const ClinicalEvidenceCard = ({
         {/* 2. Model Confidence with Qualitative Tier */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            {t('modelConfidenceLabel') || '2. Model Confidence'}
+            2. Model Confidence ({selectedEye} Eye)
           </span>
           <div className="flex items-center gap-2">
             <span className="text-sm font-extrabold font-mono text-slate-900">
@@ -155,7 +160,7 @@ export const ClinicalEvidenceCard = ({
         {/* 3. Image Quality Gate */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            {t('imageQualityTitle') || '3. Image Quality'}
+            3. Image Quality ({selectedEye} Eye)
           </span>
           <div className="flex items-center gap-1.5">
             <span className={`w-2.5 h-2.5 rounded-full ${
@@ -170,7 +175,7 @@ export const ClinicalEvidenceCard = ({
         {/* 4. AI Safety Gate */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            {t('safetyStatusLabel') || '4. AI Safety Gate'}
+            4. AI Safety Gate ({selectedEye} Eye)
           </span>
           <SafetyBadge status={safetyStatus} size="sm" />
         </div>
@@ -178,7 +183,7 @@ export const ClinicalEvidenceCard = ({
         {/* 5. Explainability (Grad-CAM) */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            5. Explainability
+            5. Explainability ({selectedEye} Eye)
           </span>
           <div className="flex items-center gap-1.5">
             <Sparkles className={`w-3.5 h-3.5 ${gradCamAvailable ? 'text-purple-600' : 'text-slate-400'}`} />
@@ -191,7 +196,7 @@ export const ClinicalEvidenceCard = ({
         {/* 6. Screening Risk */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            {t('screeningRiskLabel') || '6. Screening Risk'}
+            6. Screening Risk ({selectedEye} Eye)
           </span>
           <RiskBadge risk={riskCategory} size="sm" />
         </div>
@@ -199,7 +204,7 @@ export const ClinicalEvidenceCard = ({
         {/* 7. Referral Recommendation */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5 sm:col-span-2">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-            {t('referralPriorityLabel') || '7. Recommended Action'}
+            7. Recommended Action ({selectedEye} Eye)
           </span>
           <ReferralBadge priority={referralPriority} size="sm" />
         </div>

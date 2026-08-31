@@ -24,9 +24,9 @@ logger = logging.getLogger("dr_backend.review_service")
 # Supported DR ICDR Classes
 DR_CLASS_MAP = {
     0: "No DR",
-    1: "Mild",
-    2: "Moderate",
-    3: "Severe",
+    1: "Mild NPDR",
+    2: "Moderate NPDR",
+    3: "Severe NPDR",
     4: "Proliferative DR",
 }
 
@@ -46,7 +46,7 @@ def verify_doctor_role(role: Optional[str]) -> bool:
     return True
 
 
-def ensure_screening_record_in_db(screening_id: str, db: Session, default_result: str = "Moderate", default_confidence: float = 0.85):
+def ensure_screening_record_in_db(screening_id: str, db: Session, default_result: str = "Moderate NPDR", default_confidence: float = 0.85):
     """Ensures a screening record and associated patient exist in database to satisfy foreign keys."""
     try:
         scr = db.query(ScreeningModel).filter(ScreeningModel.id == screening_id).first()
@@ -184,10 +184,10 @@ def process_doctor_review(
             raise ValueError("A review reason/comment is required when modifying the AI screening result.")
 
         # Determine reviewed class name
-        if request.reviewed_class is not None and request.reviewed_class in DR_CLASS_MAP:
-            doctor_reviewed_result = DR_CLASS_MAP[request.reviewed_class]
-        elif request.reviewed_class_name and request.reviewed_class_name.strip():
+        if request.reviewed_class_name and request.reviewed_class_name.strip():
             doctor_reviewed_result = request.reviewed_class_name.strip()
+        elif request.reviewed_class is not None and request.reviewed_class in DR_CLASS_MAP:
+            doctor_reviewed_result = DR_CLASS_MAP[request.reviewed_class]
         else:
             raise ValueError("A valid reviewed classification (0 to 4 or standard class name) must be provided.")
 

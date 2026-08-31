@@ -18,9 +18,9 @@ logger = logging.getLogger("dr_backend.longitudinal_service")
 # Class ID to Name mapping
 DR_CLASS_NAMES = {
     0: "No DR",
-    1: "Mild",
-    2: "Moderate",
-    3: "Severe",
+    1: "Mild NPDR",
+    2: "Moderate NPDR",
+    3: "Severe NPDR",
     4: "Proliferative DR",
 }
 
@@ -52,7 +52,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "screening_date": "2026-08-22 10:45 AM",
         "timestamp_iso": "2026-08-22T10:45:00Z",
         "predicted_class": 2,
-        "class_name": "Moderate",
+        "class_name": "Moderate NPDR",
         "confidence": 0.85,
         "dr_severity_od": "dr2",
         "dr_severity_os": "dr1",
@@ -63,7 +63,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "referral_priority": "EYE SPECIALIST REVIEW RECOMMENDED",
         "doctor_status": "verified",
         "review_status": "AI RESULT ACCEPTED",
-        "doctor_reviewed_result": "Moderate",
+        "doctor_reviewed_result": "Moderate NPDR",
         "reviewer_name": "Dr. Arvind Swaminathan, MS",
         "image_od": "/samples/eyes.png",
         "image_os": "/samples/eyes_os.png",
@@ -80,7 +80,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "screening_date": "2026-06-12 11:15 AM",
         "timestamp_iso": "2026-06-12T11:15:00Z",
         "predicted_class": 1,
-        "class_name": "Mild",
+        "class_name": "Mild NPDR",
         "confidence": 0.78,
         "dr_severity_od": "dr1",
         "dr_severity_os": "dr0",
@@ -91,7 +91,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "referral_priority": "ROUTINE FOLLOW-UP",
         "doctor_status": "verified",
         "review_status": "AI RESULT ACCEPTED",
-        "doctor_reviewed_result": "Mild",
+        "doctor_reviewed_result": "Mild NPDR",
         "reviewer_name": "Dr. Arvind Swaminathan, MS",
         "image_od": "/samples/eyes.png",
         "image_os": "/samples/eyes_os.png",
@@ -108,7 +108,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "screening_date": "2026-03-20 09:30 AM",
         "timestamp_iso": "2026-03-20T09:30:00Z",
         "predicted_class": 1,
-        "class_name": "Mild",
+        "class_name": "Mild NPDR",
         "confidence": 0.82,
         "dr_severity_od": "dr1",
         "dr_severity_os": "dr0",
@@ -119,7 +119,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "referral_priority": "ROUTINE FOLLOW-UP",
         "doctor_status": "verified",
         "review_status": "AI RESULT ACCEPTED",
-        "doctor_reviewed_result": "Mild",
+        "doctor_reviewed_result": "Mild NPDR",
         "reviewer_name": "Dr. Arvind Swaminathan, MS",
         "image_od": "/samples/eyes.png",
         "image_os": "/samples/eyes_os.png",
@@ -137,7 +137,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "screening_date": "2026-08-22 02:30 PM",
         "timestamp_iso": "2026-08-22T14:30:00Z",
         "predicted_class": 3,
-        "class_name": "Severe",
+        "class_name": "Severe NPDR",
         "confidence": 0.89,
         "dr_severity_od": "dr3",
         "dr_severity_os": "dr2",
@@ -148,7 +148,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "referral_priority": "PRIORITY SPECIALIST REVIEW",
         "doctor_status": "verified",
         "review_status": "AI RESULT ACCEPTED",
-        "doctor_reviewed_result": "Severe",
+        "doctor_reviewed_result": "Severe NPDR",
         "reviewer_name": "Dr. Arvind Swaminathan, MS",
         "image_od": "/samples/eyes.png",
         "image_os": "/samples/eyes_os.png",
@@ -165,7 +165,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "screening_date": "2026-05-10 10:00 AM",
         "timestamp_iso": "2026-05-10T10:00:00Z",
         "predicted_class": 2,
-        "class_name": "Moderate",
+        "class_name": "Moderate NPDR",
         "confidence": 0.82,
         "dr_severity_od": "dr2",
         "dr_severity_os": "dr1",
@@ -176,7 +176,7 @@ MOCK_CANONICAL_SCREENINGS: List[Dict[str, Any]] = [
         "referral_priority": "EYE SPECIALIST REVIEW RECOMMENDED",
         "doctor_status": "verified",
         "review_status": "AI RESULT ACCEPTED",
-        "doctor_reviewed_result": "Moderate",
+        "doctor_reviewed_result": "Moderate NPDR",
         "reviewer_name": "Dr. Arvind Swaminathan, MS",
         "image_od": "/samples/eyes.png",
         "image_os": "/samples/eyes_os.png",
@@ -538,8 +538,8 @@ class LongitudinalService:
             rec_hi = "मरीज के नेत्र स्वास्थ्य का आकलन करने के लिए डॉक्टर की समीक्षा की सलाह दी जाती है।"
         elif curr_class == prev_class:
             status = "UNCHANGED"
-            summary_en = f"AI screening classification is unchanged ({curr_name})."
-            summary_hi = f"एआई स्क्रीनिंग वर्गीकरण अपरिवर्तित है ({curr_name})।"
+            summary_en = "AI screening classification is unchanged."
+            summary_hi = "एआई स्क्रीनिंग वर्गीकरण अपरिवर्तित है।"
             rec_en = "Doctor review is recommended to confirm stable retinal status."
             rec_hi = "स्थिर रेटिना स्थिति की पुष्टि के लिए डॉक्टर की समीक्षा की सलाह दी जाती है।"
         elif curr_class > prev_class:
@@ -559,7 +559,7 @@ class LongitudinalService:
         prev_conf = previous_screening.get("confidence")
 
         conf_note = (
-            f"Previous AI Confidence: {prev_conf * 100:.1f}%, Current AI Confidence: {curr_conf * 100:.1f}%. "
+            f"Previous AI Confidence: {prev_conf * 100:.2f}%, Current AI Confidence: {curr_conf * 100:.2f}%. "
             "Confidence reflects single-image model probability and is not a measure of clinical change."
             if (curr_conf is not None and prev_conf is not None)
             else "AI model confidence recorded per screening visit."

@@ -479,7 +479,7 @@ class TestPhase13DatabasePersistence(unittest.TestCase):
     def test_14_longitudinal_comparison_in_db(self):
         comp = longitudinal_service.compare_screenings("SCR-2026-0991", "SCR-2026-0740", db=self.db)
         self.assertEqual(comp["classification_change_status"], "CLASSIFICATION INCREASED")
-        self.assertIn("Mild to Moderate", comp["classification_change_summary"])
+        self.assertIn("Mild NPDR to Moderate NPDR", comp["classification_change_summary"])
         print("[TEST 14] Longitudinal database multi-visit comparison verified.")
 
     # 15. Cross-patient comparison security block
@@ -570,7 +570,7 @@ class TestPhase13DatabasePersistence(unittest.TestCase):
 
     # 19. Doctor availability slot generation against DB appointments
     def test_19_doctor_availability_slot_calculation(self):
-        avail = appointment_service.get_doctor_availability("DOC-SWAMINATHAN", "2026-08-28", db=self.db)
+        avail = appointment_service.get_doctor_availability("DOC-SWAMINATHAN", "2026-09-01", db=self.db)
         self.assertIn("slots", avail)
         self.assertEqual(avail["doctor_id"], "DOC-SWAMINATHAN")
         self.assertEqual(avail["working_hours"], "09:00 - 17:00")

@@ -95,15 +95,6 @@ export const ScreeningResultPage = () => {
     };
   }
 
-  if (!screening.isRealPrediction && !screening.gradCamUrl && latestRealScreening) {
-    screening = {
-      ...latestRealScreening,
-      id: screening.id || id || latestRealScreening.id,
-      patientId: screening.patientId || latestRealScreening.patientId,
-      patientName: screening.patientName || latestRealScreening.patientName,
-    };
-  }
-
   const [teleModalOpen, setTeleModalOpen] = useState(false);
   const [teleSent, setTeleSent] = useState(false);
   const [selectedExplainEye, setSelectedExplainEye] = useState('OD');
@@ -261,35 +252,35 @@ export const ScreeningResultPage = () => {
     switch (severity) {
       case 'dr0':
         return {
-          title: 'Routine Annual Screening',
+          title: 'DR 0 — No DR',
           action: 'Annual Community Rescreening',
           desc: 'No diabetic retinopathy lesions detected. Counsel patient on glycemic control, blood pressure maintenance, and annual fundus check.',
           badge: 'Low Risk',
         };
       case 'dr1':
         return {
-          title: 'Mild Non-Proliferative DR',
+          title: 'DR 1 — Mild NPDR',
           action: 'Follow-up in 6 to 12 Months',
           desc: 'Microaneurysms detected. Rescreen within 6-12 months. Advise strict HbA1c and lipid control at primary health center.',
           badge: 'Routine Review',
         };
       case 'dr2':
         return {
-          title: 'Moderate Non-Proliferative DR',
+          title: 'DR 2 — Moderate NPDR',
           action: 'Ophthalmologist Referral within 1 Month',
           desc: 'Hemorrhages and exudates present. Schedule comprehensive dilated slit-lamp and OCT exam at District Eye Hospital.',
           badge: 'Semi-Urgent',
         };
       case 'dr3':
         return {
-          title: 'Severe Non-Proliferative DR',
+          title: 'DR 3 — Severe NPDR',
           action: 'Prompt Specialist Review within 1-2 Weeks',
           desc: 'High risk of conversion to proliferative retinopathy. Prioritize for urgent tertiary tele-ophthalmology assessment.',
           badge: 'High Priority',
         };
       case 'dr4':
         return {
-          title: 'Proliferative Diabetic Retinopathy (PDR)',
+          title: 'DR 4 — Proliferative DR',
           action: 'Immediate Vitreoretinal Consult (24-48 Hours)',
           desc: 'Active neovascularization detected. Immediate laser photocoagulation or anti-VEGF therapy review required.',
           badge: 'Critical Alert',
@@ -561,10 +552,15 @@ export const ScreeningResultPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           {/* Main Grade & Probabilities Box (7 cols) */}
           <div className="md:col-span-7 p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                {t('overallAssessment')}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  {t('overallAssessment')}
+                </span>
+                <span className="text-[10px] font-bold text-slate-600 bg-slate-200/70 px-2.5 py-0.5 rounded-full border border-slate-300/60">
+                  Bilateral Assessment (Worst-Eye: {twoEyeSummary.highestRiskEye})
+                </span>
+              </div>
               <span className="text-xs font-extrabold text-brand-700 bg-brand-50 px-2.5 py-1 rounded-lg border border-brand-200">
                 {isReal ? 'Model: EfficientNet-B0 (PyTorch)' : 'Model: Standby Mode'}
               </span>
@@ -610,11 +606,11 @@ export const ScreeningResultPage = () => {
                     const isPredicted =
                       (screening.className &&
                         screening.className.toLowerCase() === className.toLowerCase()) ||
-                      (className === 'No DR' && screening.overallSeverity === 'dr0') ||
-                      (className === 'Mild' && screening.overallSeverity === 'dr1') ||
-                      (className === 'Moderate' && screening.overallSeverity === 'dr2') ||
-                      (className === 'Severe' && screening.overallSeverity === 'dr3') ||
-                      (className === 'Proliferative DR' && screening.overallSeverity === 'dr4');
+                      ((className === 'No DR' || className === 'DR 0') && screening.overallSeverity === 'dr0') ||
+                      ((className === 'Mild' || className === 'Mild NPDR' || className === 'DR 1') && screening.overallSeverity === 'dr1') ||
+                      ((className === 'Moderate' || className === 'Moderate NPDR' || className === 'DR 2') && screening.overallSeverity === 'dr2') ||
+                      ((className === 'Severe' || className === 'Severe NPDR' || className === 'DR 3') && screening.overallSeverity === 'dr3') ||
+                      ((className === 'Proliferative DR' || className === 'DR 4') && screening.overallSeverity === 'dr4');
 
                     return (
                       <div key={className} className="space-y-0.5">
@@ -797,7 +793,7 @@ export const ScreeningResultPage = () => {
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              {t('aiPredictionLabel')}
+              AI Classification ({selectedExplainEye} Eye)
             </span>
             <div className="flex items-center gap-2">
               <SeverityBadge severity={activeSeverity} size="md" />
@@ -806,7 +802,7 @@ export const ScreeningResultPage = () => {
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              {t('modelConfidenceLabel')}
+              Model Confidence ({selectedExplainEye} Eye)
             </span>
             <span className={`text-base font-extrabold font-mono ${
               activeMetrics.isLowConfidence ? 'text-amber-700' : 'text-emerald-700'
@@ -817,14 +813,14 @@ export const ScreeningResultPage = () => {
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              {t('screeningRiskLabel')}
+              Screening Risk ({selectedExplainEye} Eye)
             </span>
             <RiskBadge risk={(selectedExplainEye === 'OD' ? odRiskEval : osRiskEval).riskCategory} size="sm" />
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              {t('screeningStatusLabel')}
+              Safety Gate ({selectedExplainEye} Eye)
             </span>
             <ScreeningStatusBadge status={activeMetrics.screeningStatus} size="sm" />
           </div>

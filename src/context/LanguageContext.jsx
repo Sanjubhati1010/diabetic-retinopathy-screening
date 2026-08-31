@@ -19,15 +19,19 @@ export const LanguageProvider = ({ children }) => {
   };
 
   const t = (key, fallback = '') => {
+    if (!key) return fallback || '';
     const currentDict = translations[language] || translations.en;
-    if (currentDict && currentDict[key]) {
+    if (currentDict && currentDict[key] !== undefined && currentDict[key] !== null) {
       return currentDict[key];
     }
     const fallbackDict = translations.en;
-    if (fallbackDict && fallbackDict[key]) {
+    if (fallbackDict && fallbackDict[key] !== undefined && fallbackDict[key] !== null) {
       return fallbackDict[key];
     }
-    return fallback || key;
+    if (fallback !== '' && fallback !== null && fallback !== undefined) {
+      return fallback;
+    }
+    return key;
   };
 
   return (

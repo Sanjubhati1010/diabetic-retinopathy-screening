@@ -12,11 +12,11 @@ export const BiomarkerTags = ({ biomarkers = [], activeBiomarker, onSelectBiomar
   if (!biomarkers || biomarkers.length === 0) {
     return (
       <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-500 font-medium">
-        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <Info className="w-4 h-4 text-purple-600 shrink-0" />
         <span>
           {language === 'hi'
-            ? 'कोई असामान्य रेटिना ध्यान केंद्र चिन्हित नहीं है।'
-            : 'No abnormal attention clusters detected.'}
+            ? 'कोई समर्पित घाव पहचान मॉडल कनेक्ट नहीं है। Grad-CAM केवल मॉडल ध्यान दिखाता है।'
+            : 'No dedicated lesion detection model connected. Grad-CAM provides model-attention visualization only; it does not confirm individual lesions.'}
         </span>
       </div>
     );
@@ -39,7 +39,7 @@ export const BiomarkerTags = ({ biomarkers = [], activeBiomarker, onSelectBiomar
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white animate-ping' : 'bg-purple-500'}`} />
-              <span>{bm}</span>
+              <span>{bm} (Standby)</span>
             </button>
           );
         })}
@@ -49,7 +49,7 @@ export const BiomarkerTags = ({ biomarkers = [], activeBiomarker, onSelectBiomar
         <Info className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
         <p className="leading-normal">
           {t('aiAttentionDisclaimer') ||
-            'These regions represent model attention and should not be interpreted as confirmed lesions.'}
+            'Grad-CAM provides model-attention visualization only; it does not confirm individual lesions.'}
         </p>
       </div>
     </div>

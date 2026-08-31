@@ -83,12 +83,12 @@ def test_phase10_longitudinal_suite():
     # TEST 3: Classification Increased (Mild -> Moderate)
     # ---------------------------------------------------------
     print("\n[TEST 3] Testing Classification Increased (SCR-2026-0740 [Mild] -> SCR-2026-0991 [Moderate])...")
-    curr_scr = longitudinal_service.get_screening("SCR-2026-0991") # Moderate (Class 2)
-    prev_scr = longitudinal_service.get_screening("SCR-2026-0740") # Mild (Class 1)
+    curr_scr = longitudinal_service.get_screening("SCR-2026-0991") # Moderate NPDR (Class 2)
+    prev_scr = longitudinal_service.get_screening("SCR-2026-0740") # Mild NPDR (Class 1)
     comp_inc = longitudinal_service.compare_screenings(current_screening=curr_scr, previous_screening=prev_scr)
     
     assert comp_inc["classification_change_status"] == "CLASSIFICATION INCREASED"
-    assert "increased from Mild to Moderate" in comp_inc["classification_change_summary"]
+    assert "increased from Mild NPDR to Moderate NPDR" in comp_inc["classification_change_summary"]
     assert "Doctor review is recommended" in comp_inc["clinical_recommendation"]
     assert "disease progression" not in comp_inc["classification_change_summary"].lower()
     print(" - Summary:", comp_inc["classification_change_summary"])
@@ -98,12 +98,12 @@ def test_phase10_longitudinal_suite():
     # TEST 4: Same DR Classification (Unchanged: Mild -> Mild)
     # ---------------------------------------------------------
     print("\n[TEST 4] Testing Unchanged Classification (SCR-2026-0410 [Mild] -> SCR-2026-0740 [Mild])...")
-    curr_same = longitudinal_service.get_screening("SCR-2026-0740") # Mild (Class 1)
-    prev_same = longitudinal_service.get_screening("SCR-2026-0410") # Mild (Class 1)
+    curr_same = longitudinal_service.get_screening("SCR-2026-0740") # Mild NPDR (Class 1)
+    prev_same = longitudinal_service.get_screening("SCR-2026-0410") # Mild NPDR (Class 1)
     comp_same = longitudinal_service.compare_screenings(current_screening=curr_same, previous_screening=prev_same)
     
     assert comp_same["classification_change_status"] == "UNCHANGED"
-    assert "unchanged (Mild)" in comp_same["classification_change_summary"]
+    assert comp_same["classification_change_summary"] == "AI screening classification is unchanged."
     print(" - Summary:", comp_same["classification_change_summary"])
     print(" [OK] Identical classifications correctly evaluated as 'UNCHANGED'.")
 
@@ -111,12 +111,12 @@ def test_phase10_longitudinal_suite():
     # TEST 5: Lower Classification (Classification Decreased / Improved)
     # ---------------------------------------------------------
     print("\n[TEST 5] Testing Classification Decreased (Moderate -> Mild)...")
-    synthetic_prev = dict(curr_scr, predicted_class=2, class_name="Moderate")
-    synthetic_curr = dict(prev_scr, predicted_class=1, class_name="Mild")
+    synthetic_prev = dict(curr_scr, predicted_class=2, class_name="Moderate NPDR")
+    synthetic_curr = dict(prev_scr, predicted_class=1, class_name="Mild NPDR")
     comp_dec = longitudinal_service.compare_screenings(current_screening=synthetic_curr, previous_screening=synthetic_prev)
     
     assert comp_dec["classification_change_status"] == "CLASSIFICATION DECREASED"
-    assert "decreased from Moderate to Mild" in comp_dec["classification_change_summary"]
+    assert "decreased from Moderate NPDR to Mild NPDR" in comp_dec["classification_change_summary"]
     print(" - Summary:", comp_dec["classification_change_summary"])
     print(" [OK] Lower classification correctly evaluated as 'CLASSIFICATION DECREASED'.")
 
@@ -127,7 +127,7 @@ def test_phase10_longitudinal_suite():
     conf_comp = comp_inc["confidence_comparison"]
     assert conf_comp["current_confidence"] == 0.85
     assert conf_comp["previous_confidence"] == 0.78
-    assert "Previous AI Confidence: 78.0%, Current AI Confidence: 85.0%" in conf_comp["note"]
+    assert "Previous AI Confidence: 78.00%, Current AI Confidence: 85.00%" in conf_comp["note"]
     print(" - Confidence Note:", conf_comp["note"])
     print(" [OK] Confidences preserved separately without fake improvement math.")
 
@@ -245,13 +245,13 @@ def test_phase10_longitudinal_suite():
     # ---------------------------------------------------------
     print("\n[TEST 16] Testing AI Assistant: 'What changed from the previous screening?' (English)...")
     mock_context_long = {
-        "prediction": "Moderate DR",
-        "previous_prediction": "Mild DR",
-        "classification_change_summary": "AI screening classification increased from Mild to Moderate.",
+        "prediction": "Moderate NPDR",
+        "previous_prediction": "Mild NPDR",
+        "classification_change_summary": "AI screening classification increased from Mild NPDR to Moderate NPDR.",
         "safety_status": "READY_FOR_AI",
     }
     reply_changed = generate_assistant_reply("What changed from the previous screening?", language="en", screening_context=mock_context_long)
-    assert "increased from Mild to Moderate" in reply_changed["reply"]
+    assert "increased from Mild NPDR to Moderate NPDR" in reply_changed["reply"]
     assert "Doctor review is recommended" in reply_changed["reply"]
     print(" - Reply:", reply_changed["reply"][:140], "...")
     print(" [OK] Assistant faithfully explained change using actual screening context.")

@@ -45,26 +45,26 @@ export const DualEvidenceViewer = ({
     ? screening.rightEyeAnalysis || screening.aiResultOD || (screening.selectedEyeForAnalysis === 'OD' ? screening.aiResult : null)
     : screening.leftEyeAnalysis || screening.aiResultOS || (screening.selectedEyeForAnalysis === 'OS' ? screening.aiResult : null);
 
-  const rawConfidence = analysis?.confidence ?? screening.confidence;
+  const rawConfidence = analysis?.confidence ?? (isOD ? (screening.confidenceOD ?? screening.confidence) : (screening.confidenceOS ?? (screening.drSeverityOS === screening.drSeverityOD ? screening.confidence : null)));
   const confidenceVal = rawConfidence !== null && rawConfidence !== undefined
     ? (rawConfidence <= 1.0 ? rawConfidence : rawConfidence / 100.0)
     : null;
 
   const severityKey = isOD
-    ? screening.drSeverityOD || 'drUncertain'
-    : screening.drSeverityOS || 'drUncertain';
+    ? screening.drSeverityOD || (analysis?.predicted_class !== undefined ? (analysis.predicted_class === 0 ? 'dr0' : analysis.predicted_class === 1 ? 'dr1' : analysis.predicted_class === 2 ? 'dr2' : analysis.predicted_class === 3 ? 'dr3' : 'dr4') : screening.overallSeverity || 'drUncertain')
+    : screening.drSeverityOS || (analysis?.predicted_class !== undefined ? (analysis.predicted_class === 0 ? 'dr0' : analysis.predicted_class === 1 ? 'dr1' : analysis.predicted_class === 2 ? 'dr2' : analysis.predicted_class === 3 ? 'dr3' : 'dr4') : screening.overallSeverity || 'drUncertain');
 
   const currentOriginal = isOD ? screening.imageOD : screening.imageOS;
   const gradcamImageUrl = isOD
-    ? getFullResultUrl(screening.gradCamOD || screening.gradCamUrl)
-    : getFullResultUrl(screening.gradCamOS || screening.gradCamUrl);
+    ? getFullResultUrl(screening.gradCamOD || analysis?.gradcam_url || screening.gradCamUrl)
+    : getFullResultUrl(screening.gradCamOS || analysis?.gradcam_url || screening.gradCamUrl);
   const heatmapImageUrl = isOD
-    ? getFullResultUrl(screening.heatmapOD || screening.gradCamOD || screening.gradCamUrl)
-    : getFullResultUrl(screening.heatmapOS || screening.gradCamOS || screening.gradCamUrl);
+    ? getFullResultUrl(screening.heatmapOD || analysis?.heatmap_url || screening.gradCamOD || screening.gradCamUrl)
+    : getFullResultUrl(screening.heatmapOS || analysis?.heatmap_url || screening.gradCamOS || screening.gradCamUrl);
 
   const reviewStatus = screening.reviewStatus || (screening.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW');
 
-  const supportedLesionCategories = [
+  const plannedLesionCategories = [
     'Microaneurysms',
     'Hemorrhages',
     'Hard Exudates',
@@ -84,7 +84,7 @@ export const DualEvidenceViewer = ({
               <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                 <span>{t('dualEvidenceTitle') || 'Dual-Evidence Analysis'}</span>
                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider">
-                  {selectedEye} Eye
+                  {selectedEye} Eye ({isOD ? 'Right Eye' : 'Left Eye'})
                 </span>
               </h3>
               <p className="text-xs text-slate-500 font-medium">
@@ -133,7 +133,7 @@ export const DualEvidenceViewer = ({
             <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
               <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                 <Activity className="w-4 h-4 text-brand-600" />
-                <span>{t('drClassificationTitle') || '1. DR Classification'}</span>
+                <span>1. DR Classification ({selectedEye} Eye)</span>
               </span>
               <span className="text-[10px] font-mono font-bold bg-brand-50 text-brand-700 px-2 py-0.5 rounded border border-brand-200">
                 EfficientNet-B0
@@ -142,14 +142,14 @@ export const DualEvidenceViewer = ({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-medium">Predicted Grade:</span>
+                <span className="text-xs text-slate-500 font-medium">{selectedEye} Predicted Grade:</span>
                 <SeverityBadge severity={severityKey} size="sm" />
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-medium">Model Confidence:</span>
+                <span className="text-xs text-slate-500 font-medium">{selectedEye} Model Confidence:</span>
                 <span className="text-xs font-extrabold font-mono text-slate-900">
-                  {confidenceVal !== null ? formatConfidence(confidenceVal) : '85.0%'}
+                  {confidenceVal !== null ? formatConfidence(confidenceVal) : 'N/A'}
                 </span>
               </div>
             </div>
@@ -157,7 +157,7 @@ export const DualEvidenceViewer = ({
             <div className="p-3 rounded-xl bg-white border border-slate-200 text-[11px] text-slate-600 leading-relaxed space-y-1">
               <span className="font-bold text-slate-800 block">Whole-Image Statistical Agreement:</span>
               <p>
-                Represents model classification agreement across global fundus feature vectors.
+                Represents model classification agreement across global fundus feature vectors for the {selectedEye} ({isOD ? 'Right' : 'Left'}) eye.
               </p>
             </div>
           </div>
@@ -173,10 +173,10 @@ export const DualEvidenceViewer = ({
             <div className="flex items-center justify-between pb-2 border-b border-amber-200">
               <span className="text-xs font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
                 <Eye className="w-4 h-4 text-amber-600" />
-                <span>{t('lesionEvidenceTitle') || '2. Lesion Evidence'}</span>
+                <span>2. Lesion Evidence</span>
               </span>
               <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-300">
-                Unavailable
+                Unavailable (Standby)
               </span>
             </div>
 
@@ -187,16 +187,16 @@ export const DualEvidenceViewer = ({
               </div>
               <p className="text-[11px] text-slate-600 leading-relaxed">
                 {t('lesionModelNotConnected') ||
-                  'No dedicated lesion detection model is currently connected. Grad-CAM model attention is active.'}
+                  'No dedicated lesion detection model is currently connected. Grad-CAM provides model-attention visualization only; it does not confirm individual lesions.'}
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Supported Architecture Categories:
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                PLANNED / SUPPORTED LESION CATEGORIES:
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {supportedLesionCategories.map((cat, idx) => (
+                {plannedLesionCategories.map((cat, idx) => (
                   <span
                     key={idx}
                     className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-600"
@@ -219,7 +219,7 @@ export const DualEvidenceViewer = ({
             <div className="flex items-center justify-between pb-2 border-b border-purple-200">
               <span className="text-xs font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-purple-600" />
-                <span>{t('gradcamAttentionTitle') || '3. Grad-CAM Model Attention'}</span>
+                <span>3. Grad-CAM Model Attention ({selectedEye} Eye)</span>
               </span>
               <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded border border-purple-300">
                 Active (40% Default)
@@ -232,8 +232,7 @@ export const DualEvidenceViewer = ({
                 <span>{t('whyAiFocusedHere') || 'Why did the AI focus here?'}</span>
               </div>
               <p className="text-[11px] text-slate-600 leading-relaxed">
-                {t('gradcamEvidenceExplain') ||
-                  'Highlighted regions represent areas that contributed to the model prediction. These are model attention regions and are not independent lesion diagnoses.'}
+                Highlighted regions indicate image areas that contributed to the model prediction. Grad-CAM provides model-attention visualization only; it does not confirm individual lesions.
               </p>
             </div>
           </div>
@@ -267,7 +266,7 @@ export const DualEvidenceViewer = ({
         <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between">
           <span className="text-xs font-extrabold uppercase tracking-wider flex items-center gap-2">
             <FileCheck className="w-4 h-4 text-teal-400" />
-            <span>{t('evidenceComparisonTitle') || 'Clinical Evidence Source Comparison'}</span>
+            <span>Clinical Evidence Source Comparison ({selectedEye} Eye)</span>
           </span>
           <span className="text-[10px] text-slate-300 font-mono">4 Independent Modalities</span>
         </div>
@@ -287,13 +286,13 @@ export const DualEvidenceViewer = ({
               <tr className="hover:bg-slate-50/70 transition">
                 <td className="p-3 font-bold text-slate-900 flex items-center gap-1.5">
                   <Activity className="w-3.5 h-3.5 text-brand-600" />
-                  <span>DR Classification</span>
+                  <span>DR Classification ({selectedEye} Eye)</span>
                 </td>
                 <td className="p-3 text-slate-500">EfficientNet-B0 Whole-Image Classifier</td>
                 <td className="p-3">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    <span>Active ({confidenceVal !== null ? formatConfidence(confidenceVal) : '85.0%'})</span>
+                    <span>Active ({confidenceVal !== null ? formatConfidence(confidenceVal) : 'N/A'})</span>
                   </span>
                 </td>
                 <td className="p-3 font-bold text-slate-900">{t(severityKey) || 'Moderate NPDR'}</td>
@@ -321,7 +320,7 @@ export const DualEvidenceViewer = ({
               <tr className="hover:bg-slate-50/70 transition">
                 <td className="p-3 font-bold text-slate-900 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Grad-CAM Attention</span>
+                  <span>Grad-CAM Attention ({selectedEye} Eye)</span>
                 </td>
                 <td className="p-3 text-slate-500">Layer Gradients Attention Saliency Mapping</td>
                 <td className="p-3">
@@ -330,7 +329,7 @@ export const DualEvidenceViewer = ({
                     <span>Available (40% Opacity)</span>
                   </span>
                 </td>
-                <td className="p-3 text-slate-600">Model attention visual overlay on retinal vessels</td>
+                <td className="p-3 text-slate-600">Model attention visual overlay on retinal vessels; does not confirm clinical lesions.</td>
               </tr>
 
               {/* Row 4: Doctor Review */}

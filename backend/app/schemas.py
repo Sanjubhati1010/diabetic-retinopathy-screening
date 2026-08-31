@@ -925,6 +925,111 @@ class PriorityDetailResponse(BaseModel):
     priority_item: PriorityQueueItem = Field(..., description="Complete priority item with explanation and audit")
 
 
+# =====================================================================
+# Phase 15: Demo SMS Patient Report Notification Schemas
+# =====================================================================
+
+class SmsNotificationStatus(str, Enum):
+    READY_TO_NOTIFY = "READY TO NOTIFY"
+    SIMULATED = "SIMULATED"
+    PENDING_DOCTOR_REVIEW = "PENDING DOCTOR REVIEW"
+    REJECTED_BLOCKED = "REJECTED / BLOCKED"
+    MOBILE_NOT_AVAILABLE = "MOBILE NOT AVAILABLE"
+    NOT_REQUESTED = "NOT REQUESTED"
+
+
+class SmsNotificationGenerateRequest(BaseModel):
+    screening_id: Optional[str] = Field(default=None, description="Screening identifier")
+    force_regenerate: bool = Field(default=False, description="Force generate a new notification if one already exists")
+
+
+class SmsNotificationRecord(BaseModel):
+    notification_id: str = Field(..., description="Unique message ID e.g. SMS-2026-0001")
+    patient_id: str = Field(..., description="Patient identifier from MySQL")
+    patient_name: Optional[str] = Field(default=None, description="Patient name")
+    screening_id: str = Field(..., description="Screening identifier")
+    report_id: Optional[str] = Field(default=None, description="Report identifier")
+    recipient_mobile_masked: str = Field(..., description="Masked patient mobile number e.g. 98******54")
+    message_type: str = Field(default="Doctor-reviewed report", description="Message category")
+    message: str = Field(..., description="Complete SMS notification message")
+    secure_report_token: str = Field(..., description="Cryptographically secure report access token")
+    secure_report_url: str = Field(..., description="Secure report link")
+    status: str = Field(default="SIMULATED", description="Status is strictly SIMULATED (never fake SENT)")
+    created_at: str = Field(..., description="ISO 8601 creation timestamp")
+    generated_at: Optional[str] = Field(default=None, description="Timestamp of generation")
+    is_simulated: bool = Field(default=True, description="Always true for demo notifications")
+    disclaimer: str = Field(
+        default="This is a demonstration notification. No real SMS was sent.",
+        description="Demo disclaimer"
+    )
+
+
+class SmsNotificationPreviewResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    patient_id: str = Field(..., description="Patient identifier")
+    patient_name: str = Field(..., description="Patient name")
+    recipient_mobile_masked: str = Field(..., description="Masked patient mobile number")
+    message_type: str = Field(default="Doctor-reviewed report", description="Message type")
+    message_preview: str = Field(..., description="Formatted SMS message text")
+    secure_report_token: str = Field(..., description="Secure report token")
+    secure_report_url: str = Field(..., description="Secure report access link")
+    doctor_review_status: str = Field(..., description="Current doctor review status")
+    can_notify: bool = Field(..., description="Whether doctor review approval permits notification")
+    block_reason: Optional[str] = Field(default=None, description="Reason if notification is blocked")
+    has_existing_notification: bool = Field(default=False, description="Whether notification was already generated")
+    existing_notification_id: Optional[str] = Field(default=None, description="Existing notification ID if present")
+    disclaimer: str = Field(
+        default="This is a demonstration notification. No real SMS was sent.",
+        description="Demo disclaimer"
+    )
+
+
+class SmsNotificationStatusResponse(BaseModel):
+    screening_id: str = Field(..., description="Screening identifier")
+    status: str = Field(..., description="Current SMS notification status")
+    recipient_mobile_masked: Optional[str] = Field(default=None, description="Masked patient recipient mobile")
+    patient_id: Optional[str] = Field(default=None, description="Patient identifier")
+    patient_name: Optional[str] = Field(default=None, description="Patient name")
+    message_type: str = Field(default="Doctor-reviewed report", description="Message type")
+    doctor_review_status: str = Field(..., description="Doctor review status")
+    can_notify: bool = Field(..., description="Whether doctor review approval and patient mobile permit notification")
+    block_reason: Optional[str] = Field(default=None, description="Reason if notification is blocked")
+    is_simulated: bool = Field(default=True, description="Demonstration flag")
+    has_existing_notification: bool = Field(default=False, description="Whether notification has already been generated")
+    notification_record: Optional[SmsNotificationRecord] = Field(default=None, description="Latest simulated notification record")
+    notification_history: List[SmsNotificationRecord] = Field(default_factory=list, description="Historical notification log")
+    disclaimer: str = Field(
+        default="This is a demonstration notification. No real SMS was sent.",
+        description="Demo disclaimer"
+    )
+
+
+class SecurePatientReportResponse(BaseModel):
+    token: str = Field(..., description="Secure access token")
+    is_valid: bool = Field(default=True, description="Whether token and approval gate are valid")
+    screening_id: str = Field(..., description="Screening identifier")
+    patient_id: str = Field(..., description="Patient identifier")
+    patient_name: str = Field(..., description="Patient name")
+    age: Optional[int] = Field(default=None, description="Patient age")
+    gender: Optional[str] = Field(default=None, description="Patient gender")
+    village: Optional[str] = Field(default=None, description="Village")
+    screening_date: str = Field(..., description="Date of screening")
+    doctor_status: str = Field(..., description="Doctor review status")
+    review_status: str = Field(..., description="Doctor review status label")
+    doctor_name: Optional[str] = Field(default=None, description="Reviewing doctor name")
+    doctor_title: Optional[str] = Field(default=None, description="Doctor professional title")
+    doctor_notes: Optional[str] = Field(default=None, description="Doctor clinical remarks")
+    final_dr_result: str = Field(..., description="Final doctor-reviewed DR classification")
+    overall_severity: str = Field(..., description="Severity category")
+    confidence_percentage: Optional[str] = Field(default=None, description="Model confidence percentage")
+    referral_priority: str = Field(..., description="Referral priority tier")
+    recommendation: Optional[str] = Field(default=None, description="Clinical action recommendation")
+    pdf_download_url: Optional[str] = Field(default=None, description="Secure PDF download URL")
+    generated_at: str = Field(..., description="Report generation timestamp")
+    is_verified: bool = Field(default=True, description="Whether human-in-the-loop verified")
+
+
+
 
 
 

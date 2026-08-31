@@ -45,6 +45,7 @@ import {
   Mail,
 } from 'lucide-react';
 import { DemoDisclaimer } from '../components/common/DemoDisclaimer';
+import { SmsNotificationCard } from '../components/common/SmsNotificationCard';
 import { SAMPLE_FUNDUS_IMAGES, SAMPLE_GRADCAM_HEATMAPS } from '../data/mockData';
 import {
   getScreeningReview,
@@ -840,6 +841,15 @@ const PatientReportContent = () => {
         )}
       </div>
 
+      {/* Phase 15 Demo SMS Patient Report Notification Card */}
+      <div className="no-print">
+        <SmsNotificationCard
+          screeningId={screening.id}
+          doctorReviewStatus={reviewStatus}
+          patient={patient}
+        />
+      </div>
+
       {/* Email Delivery Confirmation Modal */}
       {isEmailModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm no-print animate-fade-in">
@@ -1085,7 +1095,7 @@ const PatientReportContent = () => {
               </div>
 
               <div className="text-sm font-extrabold text-slate-950">
-                {storedReview?.original_ai_result || screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate DR')}
+                {storedReview?.original_ai_result || screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate NPDR')}
               </div>
 
               {isRecaptureRequested ? (
@@ -1114,7 +1124,7 @@ const PatientReportContent = () => {
                   : isAccepted
                   ? 'Reviewed / Accepted'
                   : isModified
-                  ? `Reviewed / Modified (${storedReview?.doctor_reviewed_result || 'Mild'})`
+                  ? `Reviewed / Modified (${storedReview?.doctor_reviewed_result || 'Mild NPDR'})`
                   : 'Pending Specialist Review'}
               </div>
 
@@ -1135,16 +1145,18 @@ const PatientReportContent = () => {
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
                   <span className="text-slate-400 block text-[10px]">AI Prediction:</span>
-                  <span className="font-bold text-slate-800">{screening.className || 'Moderate DR'}</span>
+                  <span className="font-bold text-slate-800">{screening.drSeverityOD ? t(screening.drSeverityOD) : (screening.className || 'Moderate NPDR')}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Confidence:</span>
-                  <span className="font-bold text-slate-800">{formatConfidence(screening.confidence || 0.85)}</span>
+                  <span className="font-bold text-slate-800">
+                    {formatConfidence(screening.rightEyeAnalysis?.confidence ?? screening.confidenceOD ?? screening.confidence ?? 0.85)}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Image Quality:</span>
                   <span className={`font-bold ${isRecaptureRequested ? 'text-amber-700' : 'text-emerald-700'}`}>
-                    {isRecaptureRequested ? 'Needs Re-capture' : 'Good (Sharpness: 103.8)'}
+                    {isRecaptureRequested ? 'Needs Re-capture' : 'Good (Quality Gate Cleared)'}
                   </span>
                 </div>
                 <div>
@@ -1159,11 +1171,11 @@ const PatientReportContent = () => {
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Risk Category:</span>
-                  <span className="font-bold text-amber-700">{isRecaptureRequested ? 'REVIEW REQUIRED' : 'MODERATE'}</span>
+                  <span className="font-bold text-amber-700">{isRecaptureRequested ? 'REVIEW REQUIRED' : (screening.riskCategoryOD || screening.riskCategory || 'MODERATE')}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Explainability:</span>
-                  <span className="font-bold text-teal-700">Grad-CAM (40%)</span>
+                  <span className="font-bold text-teal-700">{screening.gradCamOD || screening.gradCamUrl ? 'Grad-CAM Available (40%)' : 'Unavailable'}</span>
                 </div>
               </div>
             </div>
@@ -1177,15 +1189,17 @@ const PatientReportContent = () => {
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
                   <span className="text-slate-400 block text-[10px]">AI Prediction:</span>
-                  <span className="font-bold text-slate-800">{screening.className || 'Mild DR'}</span>
+                  <span className="font-bold text-slate-800">{screening.drSeverityOS ? t(screening.drSeverityOS) : (screening.className || 'Mild NPDR')}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Confidence:</span>
-                  <span className="font-bold text-slate-800">{formatConfidence(screening.confidence || 0.82)}</span>
+                  <span className="font-bold text-slate-800">
+                    {formatConfidence(screening.leftEyeAnalysis?.confidence ?? screening.confidenceOS ?? (screening.drSeverityOS === screening.drSeverityOD ? screening.confidence : null) ?? 0.82)}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Image Quality:</span>
-                  <span className="font-bold text-emerald-700">Good (Sharpness: 98.4)</span>
+                  <span className="font-bold text-emerald-700">Good (Quality Gate Cleared)</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Safety Status:</span>
@@ -1197,11 +1211,11 @@ const PatientReportContent = () => {
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Risk Category:</span>
-                  <span className="font-bold text-amber-700">MODERATE</span>
+                  <span className="font-bold text-amber-700">{screening.riskCategoryOS || 'MODERATE'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Explainability:</span>
-                  <span className="font-bold text-teal-700">Grad-CAM (40%)</span>
+                  <span className="font-bold text-teal-700">{screening.gradCamOS || screening.gradCamUrl ? 'Grad-CAM Available (40%)' : 'Unavailable'}</span>
                 </div>
               </div>
             </div>
@@ -1270,11 +1284,11 @@ const PatientReportContent = () => {
             <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-950 space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-[11px] text-amber-900">
                 <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>{t('lesionEvidenceTitle') || 'Lesion Evidence'} (Phase 9)</span>
+                <span>{t('lesionEvidenceTitle') || 'Lesion Evidence'}</span>
               </div>
               <p className="text-[10.5px] leading-relaxed text-slate-700">
                 {t('reportLesionNote') ||
-                  'Lesion-specific analysis was not available for this screening.'}
+                  'No lesion-specific evidence available from the current model.'}
               </p>
             </div>
           </div>
@@ -1317,7 +1331,7 @@ const PatientReportContent = () => {
                         </div>
                         <div className="flex items-center justify-between pt-0.5">
                           <span className="text-slate-500">DR Grade:</span>
-                          <span className="font-extrabold text-slate-900">{previousScreening.className || previousScreening.overallSeverity}</span>
+                          <span className="font-extrabold text-slate-900">{previousScreening.className || (previousScreening.overallSeverity ? t(previousScreening.overallSeverity) : 'Mild NPDR')}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500">Doctor Status:</span>
@@ -1336,7 +1350,7 @@ const PatientReportContent = () => {
                         </div>
                         <div className="flex items-center justify-between pt-0.5">
                           <span className="text-slate-500">DR Grade:</span>
-                          <span className="font-extrabold text-slate-900">{screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate DR')}</span>
+                          <span className="font-extrabold text-slate-900">{screening.className || (screening.overallSeverity ? t(screening.overallSeverity) : 'Moderate NPDR')}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500">Doctor Status:</span>

@@ -219,7 +219,7 @@ export const LongitudinalComparisonCard = ({
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">AI Classification:</span>
                 <span className="font-extrabold text-slate-900">
-                  {activePrevious.className || activePrevious.overallSeverity || 'Mild DR'}
+                  {activePrevious.className || (activePrevious.overallSeverity ? t(activePrevious.overallSeverity) : 'Mild NPDR')}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -231,7 +231,7 @@ export const LongitudinalComparisonCard = ({
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Doctor Review:</span>
                 <DoctorReviewStatusBadge
-                  status={activePrevious.reviewStatus || (activePrevious.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING DOCTOR REVIEW')}
+                  status={activePrevious.reviewStatus || (activePrevious.doctorStatus === 'verified' ? 'AI RESULT ACCEPTED' : 'PENDING SPECIALIST REVIEW')}
                   size="sm"
                 />
               </div>
@@ -263,7 +263,7 @@ export const LongitudinalComparisonCard = ({
             <div className="flex items-center justify-between">
               <span className="text-slate-500">AI Classification:</span>
               <span className="font-extrabold text-slate-900">
-                {currentScreening?.className || currentScreening?.overallSeverity || 'Moderate DR'}
+                {currentScreening?.className || (currentScreening?.overallSeverity ? t(currentScreening.overallSeverity) : 'Moderate NPDR')}
               </span>
             </div>
             <div className="flex items-center justify-between">

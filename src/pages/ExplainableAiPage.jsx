@@ -81,15 +81,6 @@ export const ExplainableAiPage = () => {
     };
   }
 
-  if (screening && !screening.isRealPrediction && !screening.gradCamUrl && latestRealScreening) {
-    screening = {
-      ...latestRealScreening,
-      id: screening.id || id || latestRealScreening.id,
-      patientId: screening.patientId || latestRealScreening.patientId,
-      patientName: screening.patientName || latestRealScreening.patientName,
-    };
-  }
-
   const [selectedEye, setSelectedEye] = useState(
     activeScreening.selectedEyeForAnalysis || 'OD'
   );
@@ -123,15 +114,19 @@ export const ExplainableAiPage = () => {
   const gradcamImageUrl = getFullResultUrl(rawGradCamPath);
   const heatmapImageUrl = getFullResultUrl(rawHeatmapPath) || gradcamImageUrl;
 
-  const isEyeAnalyzed = Boolean(currentAnalysis && gradcamImageUrl);
+  const isEyeAnalyzed = Boolean(currentAnalysis && (gradcamImageUrl || currentAnalysis.confidence !== undefined));
   const isReal = Boolean(rightEyeAnalysis || leftEyeAnalysis || screening.isRealPrediction);
 
   const currentSeverity = isOD
-    ? screening.drSeverityOD || (rightEyeAnalysis ? getSeverityKeyFromClass(rightEyeAnalysis.predicted_class) : 'drUncertain')
-    : screening.drSeverityOS || (leftEyeAnalysis ? getSeverityKeyFromClass(leftEyeAnalysis.predicted_class) : 'drUncertain');
+    ? screening.drSeverityOD || (rightEyeAnalysis?.predicted_class !== undefined ? getSeverityKeyFromClass(rightEyeAnalysis.predicted_class) : screening.overallSeverity || 'drUncertain')
+    : screening.drSeverityOS || (leftEyeAnalysis?.predicted_class !== undefined ? getSeverityKeyFromClass(leftEyeAnalysis.predicted_class) : screening.overallSeverity || 'drUncertain');
 
-  const currentConfidence = currentAnalysis?.confidence ?? (isEyeAnalyzed ? screening.confidence : null);
-  const currentClassName = currentAnalysis?.class_name || (isEyeAnalyzed ? screening.className : 'Not Analyzed');
+  const rawCurrentConfidence = currentAnalysis?.confidence ?? (isOD ? (screening.confidenceOD ?? screening.confidence) : (screening.confidenceOS ?? (screening.drSeverityOS === screening.drSeverityOD ? screening.confidence : null)));
+  const currentConfidence = rawCurrentConfidence !== null && rawCurrentConfidence !== undefined
+    ? (rawCurrentConfidence <= 1.0 ? rawCurrentConfidence : rawCurrentConfidence / 100.0)
+    : null;
+
+  const currentClassName = currentAnalysis?.class_name || (currentSeverity && currentSeverity !== 'drUncertain' ? t(currentSeverity) : (isEyeAnalyzed ? screening.className : 'Not Analyzed'));
 
   const safetyStatus = currentAnalysis?.safety_status || (isOD ? screening.safetyStatusOD : screening.safetyStatusOS) || 'READY_FOR_AI';
   const safetyBlocked = safetyStatus !== 'READY_FOR_AI';

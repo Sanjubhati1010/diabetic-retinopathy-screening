@@ -249,7 +249,7 @@ def run_priority_engine_tests():
     res10 = calculate_screening_priority(curr_mod, pat_normal, previous_screening=prev_mild)
     assert res10["longitudinal_change_status"] == "WORSENED"
     assert res10["priority_level"] == PRIORITY_P1  # Moderate + Worsening escalates to P1 URGENT
-    assert "increased from Mild to Moderate" in res10["longitudinal_summary"]
+    assert "increased from Mild NPDR to Moderate NPDR" in res10["longitudinal_summary"]
     print(f" [OK] Worsened screening (Mild -> Moderate) escalated to {res10['priority_label']}.")
 
     # -------------------------------------------------------------
