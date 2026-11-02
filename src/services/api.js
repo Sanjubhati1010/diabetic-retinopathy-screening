@@ -883,7 +883,9 @@ export async function getScreeningReviewHistory(screeningId) {
  */
 export async function getLesionAnalysis(screeningId, eye = 'OD') {
   try {
-    const res = await fetch(`${API_BASE_URL}/screenings/${screeningId}/lesions?eye=${eye}`);
+    const res = await fetch(
+  `${API_BASE_URL}/api/screenings/${screeningId}/lesions?eye=${eye}`
+);
     if (res.ok) {
       return await res.json();
     }
